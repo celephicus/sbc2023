@@ -10,19 +10,33 @@ static char buf[20];
 static char* bufp;
 #define BUF_END (&buf[sizeof(buf)])
 
+void setupRelay() {
+  pinMode(GPIO_PIN_RSEL, OUTPUT);
+  digitalWrite(GPIO_PIN_RSEL, 1);   // Set inactive.
+  pinMode(GPIO_PIN_RDAT, OUTPUT);
+  pinMode(GPIO_PIN_RCLK, OUTPUT);
+}
+void writeRelay(uint8_t v) {
+  digitalWrite(GPIO_PIN_RSEL, 0);
+  shiftOut(GPIO_PIN_RDAT, GPIO_PIN_RCLK, MSBFIRST , v);
+  digitalWrite(GPIO_PIN_RSEL, 1);
+}
+
 static bool console_cmds_user(char* cmd) {
   switch (console_hash(cmd)) {
     case /** RECV **/ 0XD8E7:
-      consolePrint(CONSOLE_PRINT_STR, (console_cell_t)buf); bufp = buf;
+      consolePrint(CONSOLE_PRINT_STR, (console_cell_t)buf); 
+      bufp = buf;
       break;
     case /** SEND **/ 0X76F9:
       RS485.beginTransmission();
       RS485.print((const char*)console_u_pop());
       RS485.endTransmission();
       break;
-    case /** NEGATE **/ 0X7A79: console_unop(-); break;
-    case /** # **/ 0XB586: console_raise(CONSOLE_RC_STATUS_IGNORE_TO_EOL); break;
+    case /** RLY **/ 0X07A2: writeRelay(console_u_pop()); break;
     case /** LED **/ 0XDC88: digitalWrite(LED_BUILTIN, !!console_u_pop()); break;
+    case /** PMODE **/ 0X48D6: uint8_t m = console_u_pop(); pinMode(console_u_pop(), m); break;
+    case /** PIN **/ 0X1012: uint8_t v = console_u_pop(); digitalWrite(console_u_pop(), v); break;
     default: return false;
   }
   return true;
@@ -37,7 +51,7 @@ void setup() {
   RS485.setPins(GPIO_PIN_RS485_TXD, GPIO_PIN_RS485_TX_EN, -1);
   bufp = buf;
   FConsole.begin(console_cmds_user, consSerial);
-
+  setupRelay();
   // Signon message, note two newlines to leave a gap from any preceding output on the terminal.
   // Also note no following newline as the console prints one at startup, then a prompt.
   consolePrint(CONSOLE_PRINT_STR_P, (console_cell_t)PSTR(CONSOLE_OUTPUT_NEWLINE_STR CONSOLE_OUTPUT_NEWLINE_STR "Arduino Console Example"));
