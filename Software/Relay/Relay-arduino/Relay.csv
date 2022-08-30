@@ -1,0 +1,33 @@
+#,,,,,,,,,
+,,,,,,,,,
+#Arduino Pin,Signal,Function,Description,Category,Arduino Pin No.,Processor Pin No.,Processor Port,Processor Alternate Function,Comment
+D1/TXD,RS485_TXD,TXD,RS485 TX,RS485 Bus,J7/12,31,PD1,TXD/PCINT17,Bootloader
+D0/RXI,RS485_RXD,RXD,RS485 RX,RS485 Bus,J7/11,30,PD0,RXD/PCINT16,Bootloader
+D2,ATN,output,Pulse high to signal ATN low on bus.,RS485 Bus,J7/8,32,PD2,INT0/PCINT18,
+D3,WDOG,output,Falling edge pats output relay watchdog. ,Relay Driver,J7/7,1,PD3,PCINT19/OC2B/INT1,PWM
+D4,RCLK,output,Relay driver serial clock,Relay Driver,J7/6,2,PD4,PCINT20/XCK/T0,
+D5,RDAT,output,Relay driver serial data,Relay Driver,J7/5,9,PD5,PCINT21/OC0B/T1,PWM
+D6,RSEL,"output, active=low",Relay driver select,Relay Driver,J7/4,10,PD6,PCINT22/OC0A/AIN0,PWM
+D7,CONS_TX,output,console serial data out,Console,J7/3,11,PD7,PCINT23/AIN1,
+D8,CONS_RX,input,console serial data in,Console,J7/2,12,PB0,PCINT0/CLKO/ICP1,
+D9,,,,,J7/1,13,PB1,PCINT1/OC1A,PWM
+D10,SSEL,output,SPI slave select to Adaptor,Personality Board,J6/12,14,PB2,PCINT2/SS/OC1B,PWM
+D11/MOSI,MOSI,MOSI,SPI to Adaptor,Personality Board,J6/11,15,PB3,PCINT3/OC2A/MOSI,PWM
+D12/MISO,MISO,MISO,SPI to Adaptor,Personality Board,J6/10,16,PB4,PCINT4/MISO,
+D13/SCK,SCK,SCK,SPI to Adaptor,Personality Board,J6/9,17,PB5,SCK/PCINT5,LED returned to GND.
+A0,RS485_TX_EN,output,Enable RS485 xmitter,RS485 Bus,J6/8,23,PC0,ADC0/PCINT8,
+A1,LED,output,Blinky LED,Misc,J6/7,24,PC1,ADC1/PCINT9,
+A2,SPARE_1,output,Spare to adaptor board,Personality Board,J6/6,25,PC2,ADC2/PCINT10,
+A3,SPARE_2,output,Spare to adaptor board,Personality Board,J6/5,26,PC3,ADC3/PCINT11,
+A4,SDA,SDA,I2C to Adaptor,Personality Board,,27,PC4,ADC4/SDA/PCINT12,
+A5,SCL,SCL,I2C to Adaptor,Personality Board,,28,PC5,ADC5/SCL/PCINT13,
+A6,MON_12V_IN,ADC6,Monitor volts input,ADC,,19,ADC6,ADC6,Analogue input only.
+A7,MON_12V_BUS,ADC7,Monitor volts on bus,ADC,,22,ADC7,ADC7,Analogue input only.
+RST,,,,,"J7/10, J6/3",29,PC6,RESET/PCINT14,
+GND,,,,,"J7/9, J6/2","3, 5, 21",GND,,
+VCC,,,,,J6/4,"4, 6",VCC,,
+RAW,,,,,J6/1,,,,Max 12V.
+,,,,,,7,PB6,PCINT6/XTAL1/TOSC1,Resonator
+,,,,,,8,PB7,PCINT7/XTAL2/TOSC2,Resonator
+,,,,,,18,AVCC,AVCC,
+,,,,,,20,AREF,AREF,
