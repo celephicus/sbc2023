@@ -1,8 +1,9 @@
 #include <SoftwareSerial.h>
-#include <ArduinoRS485.h>
+#include <Wire.h>
 #include <SPI.h>
-#include "SparkFun_ADXL345.h"         // SparkFun ADXL345 Library
+#include <ArduinoRS485.h>
 
+#include "SparkFun_ADXL345.h"         // SparkFun ADXL345 Library
 #include "console.h"
 #include "console-internals.h"
 #include "fconsole.h"
