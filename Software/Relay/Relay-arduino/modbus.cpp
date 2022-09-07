@@ -2,7 +2,7 @@
 #include "modbus.h"
 
 #define RESP_SIZE 20
-#define TIMEOUT 500
+#define TIMEOUT 100
 
 typedef struct {
 	uint8_t tx_en;
@@ -11,7 +11,6 @@ typedef struct {
 	bool waiting; 
 	uint16_t start_time;
 	char response[RESP_SIZE];
-	char* rp;
 } modbus_context_t;
 static modbus_context_t f_ctx;
 
@@ -21,9 +20,9 @@ static void abort_wait();
 static void abort_wait() {
 	while(f_ctx.sRs485->available() > 0) 
 		(void)f_ctx.sRs485->read();
-	digitalWrite(13, 0);
+	digitalWrite(9, 0);
 	f_ctx.waiting = false;
-	f_ctx.rp = f_ctx.response;
+	f_ctx.response[0] = 0;
 }
 
 void modbusInit(Stream& rs485, uint8_t tx_en, modbus_response_cb cb) {
@@ -32,7 +31,7 @@ void modbusInit(Stream& rs485, uint8_t tx_en, modbus_response_cb cb) {
 	f_ctx.cb_resp = cb;
 	digitalWrite(f_ctx.tx_en, LOW);
 	pinMode(f_ctx.tx_en, OUTPUT);
-	pinMode(13, OUTPUT);
+	pinMode(9, OUTPUT);
 	abort_wait();
 }
 
@@ -44,12 +43,12 @@ void modbusSendRaw(uint8_t* buf, uint8_t sz) {
 }
 
 void modbusSend(uint8_t* buf, uint8_t sz) {
-	abort_wait();
 	appendCRC(buf, sz);
 	while (modbusIsBusy())
-		/* Spin wait. */ ;
+		modbusService();
+	abort_wait();
 	modbusSendRaw(buf, sz + 2);
-	digitalWrite(13, 1);
+	digitalWrite(9, 1);
 	f_ctx.waiting = true;
 	f_ctx.start_time = (uint16_t)millis();
 }
@@ -98,16 +97,15 @@ const char* modbusGetResponse() { return f_ctx.response; }
 void modbusService() {
 	if (f_ctx.waiting) {
 		if ((uint16_t)millis() - f_ctx.start_time > TIMEOUT) {
-			digitalWrite(13, 0);
+			digitalWrite(9, 0);
 			f_ctx.waiting = false;
-			*f_ctx.rp = '\0';
 			f_ctx.cb_resp();
 		}
 		else {
 			if (f_ctx.sRs485->available() > 0) {
 				char c = f_ctx.sRs485->read();
-				if (f_ctx.rp - f_ctx.response < (RESP_SIZE - 1))
-					*f_ctx.rp++ = c;
+				if (f_ctx.response[0] < (RESP_SIZE - 2))
+					f_ctx.response[1 + f_ctx.response[0]++] = c;
 			}
 		}
 	}

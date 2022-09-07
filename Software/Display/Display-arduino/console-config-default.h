@@ -9,10 +9,17 @@
 typedef int32_t  console_cell_t;
 typedef uint32_t console_ucell_t;
 
-#ifdef AVR
-#include <avr/pgmspace.h>
+// We must have macros PSTR that places a const string into const memory.
+// And READ_FUNC_PTR that deferences a pointer to a function in Flash
+#if defined(AVR)
+ #include <avr/pgmspace.h>	// Takes care of PSTR().
+ #define CONSOLE_READ_FUNC_PTR(x_) pgm_read_word(x_)		// 16 bit target.
+#elif defined(ESP32 )
+ #include <pgmspace.h>	// Takes care of PSTR().
+ #define CONSOLE_READ_FUNC_PTR(x_) pgm_read_dword(x_)		// 32 bit target.
 #else
-#include <pgmspace.h>
+ #define PSTR(str_) (str_)
+ #define CONSOLE_READ_FUNC_PTR(x_) (*(x_))					// Generic target. 
 #endif
 
 // For unit test we want printf format for signed cell.

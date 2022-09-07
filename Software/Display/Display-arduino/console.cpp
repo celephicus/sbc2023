@@ -16,6 +16,9 @@ STATIC_ASSERT(sizeof(console_cell_t) == sizeof(console_ucell_t));
 STATIC_ASSERT(utilsIsTypeSigned(console_cell_t));
 STATIC_ASSERT(!utilsIsTypeSigned(console_ucell_t));
 
+// We must be able to fit a pointer into a cell.
+STATIC_ASSERT(sizeof(void*) == sizeof(console_ucell_t));
+
 // Unused static functions are OK. The linker will remove them.
 #pragma GCC diagnostic ignored "-Wunused-function"
 
@@ -241,12 +244,6 @@ void consolePrint(uint8_t opt, console_cell_t x) {
 }
 #endif
 
-#ifdef AVR
-#define READ_FUNC_PTR(x_) pgm_read_word(x_)
-#else
-#define READ_FUNC_PTR(x_) pgm_read_dword(x_)
-#endif
-
 // Execute a single command from a string
 static uint8_t execute(char* cmd) {
 	// Establish a point where raise will go to when raise() is called.
@@ -257,7 +254,7 @@ static uint8_t execute(char* cmd) {
 	// Try all recognisers in turn until one works.
 	const console_recogniser_func* rp = g_console_ctx.recognisers;
 	console_recogniser_func r;
-	while (NULL != (r = (console_recogniser_func)READ_FUNC_PTR(rp++))) {
+	while (NULL != (r = (console_recogniser_func)CONSOLE_READ_FUNC_PTR(rp++))) {
 		if (r(cmd))											// Call recogniser function.
 			return CONSOLE_RC_OK;	 						// Recogniser succeeded.
 	}

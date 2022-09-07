@@ -10,8 +10,8 @@ void modbusSend(uint8_t* buf, uint8_t sz);
 void modbusHregWrite(uint8_t id, uint16_t address, uint16_t value);
 
 enum {
-	MODBUS_RELAY_BOARD_CMD_OPEN = 1,
-	MODBUS_RELAY_BOARD_CMD_CLOSE,
+	MODBUS_RELAY_BOARD_CMD_CLOSE = 1,
+	MODBUS_RELAY_BOARD_CMD_OPEN,
 	MODBUS_RELAY_BOARD_CMD_TOGGLE,
 	MODBUS_RELAY_BOARD_CMD_LATCH,
 	MODBUS_RELAY_BOARD_CMD_MOMENTARY,
@@ -22,5 +22,6 @@ void modbusRelayBoardWrite(uint8_t id, uint8_t rly, uint8_t state, uint8_t delay
 bool modbusIsBusy();
 
 void modbusService();
+const char* modbusGetResponse();
 
 #endif	// MODBUS_H__

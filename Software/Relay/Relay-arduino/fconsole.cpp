@@ -30,6 +30,9 @@ void consolePrint(uint8_t opt, console_cell_t x) {
 			case CONSOLE_PRINT_STR:			FConsole.s_stream->print((const char*)x); break;
 			case CONSOLE_PRINT_STR_P:		FConsole.s_stream->print((const __FlashStringHelper*)x); break;
 			case CONSOLE_PRINT_CHAR:		FConsole.s_stream->print((char)x); break;
+      case CONSOLE_PRINT_HEX_CHAR: FConsole.s_stream->print((console_ucell_t)((x&0xf0)>>4), HEX);
+                                  FConsole.s_stream->print((console_ucell_t)(x&0xf), HEX);
+                                  break;
 		}
 		if (!(opt & CONSOLE_PRINT_NO_SEP))	FConsole.s_stream->print(' ');			// Print a space.
 	}

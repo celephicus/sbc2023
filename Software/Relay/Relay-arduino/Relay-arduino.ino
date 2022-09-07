@@ -1,7 +1,6 @@
 #include <SoftwareSerial.h>
 #include <Wire.h>
 #include <SPI.h>
-#include <ArduinoRS485.h>
 
 #include "SparkFun_ADXL345.h"         // SparkFun ADXL345 Library
 #include "console.h"
@@ -9,6 +8,7 @@
 #include "fconsole.h"
 #include "gpio.h"
 #include "ADXL345.h"
+#include "modbus.h"
 
 ADXL345 adxl = ADXL345(10);           // USE FOR SPI COMMUNICATION, ADXL345(CS_PIN);
 void setup_accel(){
@@ -57,6 +57,25 @@ void setup_accel(){
 //attachInterrupt(digitalPinToInterrupt(interruptPin), ADXL_ISR, RISING);   // Attach Interrupt
 }
 
+static int16_t axz, ayz, azz;
+static bool do_zero;
+static int32_t ax, ay, az;   
+static uint16_t counts;
+
+void serviceAccel() {
+	if (adxl.getInterruptSource() & 0x80) {
+		counts += 1;
+		digitalWrite(GPIO_PIN_SPARE_1, counts%2);
+		int x, y, z;
+		adxl.readAccel(&x, &y, &z);      
+		if (do_zero) {
+			do_zero = false;
+			axz = x; ayz = y; azz = z;
+		}
+		ax += (int16_t)x - axz; ay += (int16_t)y - ayz; az += (int16_t)z - azz;
+	}
+}
+	
 void setupRelay() {
   pinMode(GPIO_PIN_RSEL, OUTPUT);
   digitalWrite(GPIO_PIN_RSEL, 1);   // Set inactive.
@@ -73,68 +92,48 @@ static uint16_t wdog_period = 100;
 static uint16_t autosend_period;
 static uint16_t accel_period;
 
-// Setup for Modbus.ino
-byte frameLength = 8;
-byte modbusFrame[8];
-unsigned char modbusRxFrame[8];
-byte crcFrame[2];
-unsigned char DataOK; // used to process Modbus ACK
-#define LEDR 13
-
-#define MODBUS
-
-#ifdef MODBUS
-void setup_rs485() {
-	Serial.begin(9600);
-	pinMode(GPIO_PIN_RS485_TX_EN, OUTPUT);  // Bug??
-}
-void send_modbus(uint8_t rly_n, uint8_t state, uint8_t delay=0) {
-	modbusFrame[0] = 0x01;  //slave ID
-  modbusFrame[1] = 0x06;  //function
-  modbusFrame[2] = 0x00;  //Channel MSB(relay) always 0x00 for 8 way relay module
-  modbusFrame[3] = rly_n;  //Channel LSB(relay) 0x01 - 0x08
-  modbusFrame[4] = state;  //data - command
-  modbusFrame[5] = delay;  //data - delay time
-	SendModBus();
-}
-#else
-static char buf[20];
-static char* bufp;
-#define BUF_END (&buf[sizeof(buf)])
-
-void setup_rs485() {
-	RS485.begin(9600);
-	RS485.setPins(GPIO_PIN_RS485_TXD, GPIO_PIN_RS485_TX_EN, -1);
-	pinMode(GPIO_PIN_RS485_TX_EN, OUTPUT);  // Bug??
-	bufp = buf;
-}
-static void send_bus(const char* msg) {
-  RS485.beginTransmission();
-  RS485.print(msg);
-  RS485.endTransmission();
-}
-#endif
-
 SoftwareSerial consSerial(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); // RX, TX
 
-static int xz, yz, zz;
-bool do_zero;
+#define BED_FWD() do { modbusRelayBoardWrite(1, 3, MODBUS_RELAY_BOARD_CMD_CLOSE); modbusRelayBoardWrite(1, 4, MODBUS_RELAY_BOARD_CMD_CLOSE); } while (0)
+#define BED_REV() do { modbusRelayBoardWrite(1, 3, MODBUS_RELAY_BOARD_CMD_CLOSE); modbusRelayBoardWrite(1, 4, MODBUS_RELAY_BOARD_CMD_OPEN); } while (0) 
+#define BED_STOP() do { modbusRelayBoardWrite(1, 3, MODBUS_RELAY_BOARD_CMD_OPEN); modbusRelayBoardWrite(1, 4, MODBUS_RELAY_BOARD_CMD_OPEN); } while (0)
+
+static int angle_target;
+#define DEADBAND 5
 
 static bool console_cmds_user(char* cmd) {
   switch (console_hash(cmd)) {
-#ifdef MODBUS
-    case /** SEND **/ 0X76F9: { 
-		uint8_t r = console_u_pop(); uint8_t d = console_u_pop(); send_modbus(r, console_u_pop(), d); } 
-	break;
-#else
-    case /** RECV **/ 0XD8E7:	
-      *bufp = 0;
-      consolePrint(CONSOLE_PRINT_STR, (console_cell_t)buf);
-      bufp = buf;
-      break;
-    case /** SEND **/ 0X76F9: send_bus((const char*)console_u_pop()); break;
-#endif
-    case /** AUTO **/ 0XB8EA: autosend_period = console_u_pop(); break;
+    case /** FWD **/ 0XB4D0: BED_FWD(); break;
+    case /** REV **/ 0X0684: BED_REV(); break;
+    case /** STOP **/ 0X3F5D: BED_STOP(); break;
+    case /** SEND-RAW **/ 0XF690: {
+        uint8_t* d = (uint8_t*)console_u_pop(); uint8_t sz = *d; modbusSendRaw(d + 1, sz);
+      } break;
+    case /** SEND **/ 0X76F9: {
+        uint8_t* d = (uint8_t*)console_u_pop(); uint8_t sz = *d; modbusSend(d + 1, sz);
+      } break;
+    case /** RELAY **/ 0X1DA6: { // (state relay slave -- )      
+        uint8_t slave_id = console_u_pop();
+        uint8_t rly = console_u_pop();
+        modbusRelayBoardWrite(slave_id, rly, console_u_pop());
+      } break;
+
+    case /** RECV **/ 0XD8E7: {
+		const char* p = modbusGetResponse();
+		uint8_t cnt = *p++;
+		while (cnt-- > 0)
+			consolePrint(CONSOLE_PRINT_HEX_CHAR, (console_cell_t)*p++);
+	} break;
+    case /** PIN **/ 0X1012: {
+        uint8_t pin = console_u_pop();
+        digitalWrite(pin, console_u_pop());
+      } break;
+    case /** PMODE **/ 0X48D6: {
+        uint8_t pin = console_u_pop();
+        pinMode(pin, console_u_pop());
+      } break;
+     
+	case /** AUTO **/ 0XB8EA: autosend_period = console_u_pop(); break;
     case /** ACCEL **/ 0X8FED: accel_period = console_u_pop(); break;
 	case /** ZERO **/ 0X39C7: do_zero = true; break;
 	case /** ?ACC **/ 0XF2FB: 
@@ -144,33 +143,31 @@ static bool console_cmds_user(char* cmd) {
       digitalWrite(10, HIGH);
 	  break;
     case /** RLY **/ 0X07A2: writeRelay(console_u_pop()); break;
-    case /** LED **/ 0XDC88: digitalWrite(LED_BUILTIN, !!console_u_pop()); break;
-    case /** PIN **/ 0X1012: {
-        uint8_t v = console_u_pop();
-        digitalWrite(console_u_pop(), v);
-      } break;
-    case /** PMODE **/ 0X48D6: {
-        uint8_t m = console_u_pop();
-        pinMode(console_u_pop(), m);
-      } break;
     case /** WDOG **/ 0X72DE: wdog_period = console_u_pop(); break;
+    case /** ANGLE **/ 0X2CE4: angle_target = console_u_pop(); break;
     default: return false;
   }
   return true;
 }
 
+bool modbus_atn;
+void modbus_cb() { modbus_atn = true; }
+
 void setup() {
+  Serial.begin(9600);
+  modbusInit(Serial, GPIO_PIN_RS485_TX_EN, modbus_cb);
+	BED_STOP();
   setup_accel();
   consSerial.begin(19200);
-  pinMode(LED_BUILTIN, OUTPUT);										// We will drive the LED.
-	setup_rs485();
   FConsole.begin(console_cmds_user, consSerial);
   setupRelay();
+  
   // Signon message, note two newlines to leave a gap from any preceding output on the terminal.
   // Also note no following newline as the console prints one at startup, then a prompt.
   consolePrint(CONSOLE_PRINT_STR_P,
                (console_cell_t)PSTR(CONSOLE_OUTPUT_NEWLINE_STR CONSOLE_OUTPUT_NEWLINE_STR "SBC2022 Relay"));
   pinMode(GPIO_PIN_WDOG, OUTPUT);
+  pinMode(GPIO_PIN_SPARE_1, OUTPUT);
   FConsole.prompt();
 }
 
@@ -183,13 +180,6 @@ float incline(float a, float b, float c) {
 	return 180.0*acos(a/sqrt(a*a+b*b+c*c))/M_PI;
 }
 void loop() {
-#ifndef MODBUS	
-	if (RS485.available()) {
-		char c = RS485.read();
-		if (bufp < (BUF_END - 2))
-		*bufp++ = c;
-	}
-#endif
 
 	if (wdog_period) {
 		runEvery(wdog_period) {
@@ -200,6 +190,7 @@ void loop() {
 	
 	if (autosend_period > 0) {
 		runEvery(autosend_period) {
+/*			
 #ifdef MODBUS
 			static uint8_t n;
 			send_modbus(n/2+1, n%2+1);
@@ -209,35 +200,43 @@ void loop() {
 			static char msg[2];
 			send_bus(msg);
 			msg[0]++;
-#endif	  
+#endif	 
+*/ 
 		}
 	}
   
+	serviceAccel();
 	if (accel_period > 0) {
 		runEvery(accel_period) {    
-			int x,y,z;   
-			adxl.readAccel(&x, &y, &z);         // Read the accelerometer values and store them in variables declared above x,y,z
-			if (do_zero) {
-				do_zero = false;
-				xz = x; yz = y; zz = z;
+			float x = (float)ax / float(counts);
+			float y = (float)ay / float(counts);
+			float z = (float)az / float(counts);
+			ax = ay = az = counts = 0;
+/*
+			consSerial.print(x); consSerial.print(", ");
+			consSerial.print(y); consSerial.print(", ");
+			consSerial.print(z); consSerial.print(" [");
+			consSerial.print(tilt(x, y, z)); consSerial.print(", ");
+			consSerial.print(tilt(y, z, x)); consSerial.print(", ");
+			consSerial.print(tilt(z, x, y)); consSerial.print("] ");
+			consSerial.print(incline(z, x, y)); consSerial.print("\n");
+			*/
+			int angle = (int)(0.5 + tilt(z, x, y) * 10);
+			int error = angle - angle_target;
+			consSerial.print(angle); consSerial.print(" (");
+			consSerial.print(error); consSerial.print(")\n");
+		
+			if (angle_target != 0) {
+				if (error < -DEADBAND)
+					BED_REV();
+				else if (error > +DEADBAND)
+					BED_FWD();
+				else
+					BED_STOP();
 			}
-			x -= xz; y -= yz; z -= zz;
-			consSerial.print(x);
-			consSerial.print(", ");
-			consSerial.print(y);
-			consSerial.print(", ");
-			consSerial.print(z); 
-			consSerial.print(" [");
-			consSerial.print(tilt(x, y, z));	
-			consSerial.print(", ");
-			consSerial.print(tilt(y, z, x));	
-			consSerial.print(", ");
-			consSerial.print(tilt(z, x, y));	
-			consSerial.print("] ");
-			consSerial.print(incline(z, x, y));	
-			consSerial.print("\n");
 		}
 	}
 	
     FConsole.service();
+	modbusService();
 }

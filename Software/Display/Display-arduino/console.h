@@ -40,6 +40,7 @@ enum {
 	CONSOLE_PRINT_STR,			// Print second arg as pointer to string in RAM, with trailing space.
 	CONSOLE_PRINT_STR_P,		// Print second arg as pointer to string in PROGMEM, with trailing space.
 	CONSOLE_PRINT_CHAR,			// Print second arg as char, with trailing space.
+  CONSOLE_PRINT_HEX_CHAR, // Print as 2 hex digits.
 	CONSOLE_PRINT_NO_SEP = 0x80	// AND with option to _NOT_ print a trailing space.
 };
 void consolePrint(uint8_t opt, console_cell_t x);
