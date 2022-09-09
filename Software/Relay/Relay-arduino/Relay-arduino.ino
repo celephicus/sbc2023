@@ -57,6 +57,37 @@ void setup_accel(){
 //attachInterrupt(digitalPinToInterrupt(interruptPin), ADXL_ISR, RISING);   // Attach Interrupt
 }
 
+// Handy function to go off every so often, controlled by a variable. Zero turns it off. Changing the period restarts the timer. 
+template <typename T>
+class Timer {
+	T m_period;
+	T m_then;
+public:
+	Timer(T period=0) : m_period(0) { setPeriod(period); }
+	
+	void setPeriod(T period) {
+		if (m_period != period) {
+			m_period = period;
+			m_then = (T)millis();
+		}
+	}
+		
+	bool service() {
+		if (m_period > 0) {
+			const T now = (T)millis();
+			if ((now - m_then) >= m_period) {
+				m_then = now;
+				return true;
+			}
+		}
+		return false;
+	}	
+};
+	
+static Timer<uint16_t> t_watchdog(60);
+static Timer<uint16_t> t_autosend(0);
+static Timer<uint16_t> t_accel(0);
+
 static int16_t axz, ayz, azz;
 static bool do_zero;
 static int32_t ax, ay, az;   
@@ -88,18 +119,32 @@ void writeRelay(uint8_t v) {
   digitalWrite(GPIO_PIN_RSEL, 1);
 }
 
-static uint16_t wdog_period = 100;
-static uint16_t autosend_period;
-static uint16_t accel_period;
-
 SoftwareSerial consSerial(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); // RX, TX
 
-#define BED_FWD() do { modbusRelayBoardWrite(1, 3, MODBUS_RELAY_BOARD_CMD_CLOSE); modbusRelayBoardWrite(1, 4, MODBUS_RELAY_BOARD_CMD_CLOSE); } while (0)
-#define BED_REV() do { modbusRelayBoardWrite(1, 3, MODBUS_RELAY_BOARD_CMD_CLOSE); modbusRelayBoardWrite(1, 4, MODBUS_RELAY_BOARD_CMD_OPEN); } while (0) 
+#define BED_FWD() do { modbusRelayBoardWrite(1, 4, MODBUS_RELAY_BOARD_CMD_CLOSE); modbusRelayBoardWrite(1, 3, MODBUS_RELAY_BOARD_CMD_CLOSE); } while (0)
+#define BED_REV() do { modbusRelayBoardWrite(1, 4, MODBUS_RELAY_BOARD_CMD_OPEN); modbusRelayBoardWrite(1, 3, MODBUS_RELAY_BOARD_CMD_CLOSE); } while (0) 
 #define BED_STOP() do { modbusRelayBoardWrite(1, 3, MODBUS_RELAY_BOARD_CMD_OPEN); modbusRelayBoardWrite(1, 4, MODBUS_RELAY_BOARD_CMD_OPEN); } while (0)
 
+enum { S_SLEW_DONE, S_SLEW_START, S_SLEW_UP, S_SLEW_DOWN, };
+static uint8_t slew;
 static int angle_target;
-#define DEADBAND 5
+static int deadband = 75;
+
+uint8_t modbus_response[RESP_SIZE];
+void modbus_cb(uint8_t evt) { 
+    consolePrint(CONSOLE_PRINT_STR, (console_cell_t)"RECV: "); 
+	consolePrint(CONSOLE_PRINT_UNSIGNED, (console_cell_t)evt);
+	consolePrint(CONSOLE_PRINT_STR, (console_cell_t)": ");
+	if (modbusGetResponse(modbus_response)) {
+		const uint8_t* p = modbus_response;
+		uint8_t cnt = *p++;
+		while (cnt-- > 0)
+			consolePrint(CONSOLE_PRINT_HEX_CHAR, (console_cell_t)*p++);
+	} 
+	else 
+		consolePrint(CONSOLE_PRINT_STR, (console_cell_t)"<none>");
+	consolePrint(CONSOLE_PRINT_NEWLINE, 0);
+}
 
 static bool console_cmds_user(char* cmd) {
   switch (console_hash(cmd)) {
@@ -118,12 +163,6 @@ static bool console_cmds_user(char* cmd) {
         modbusRelayBoardWrite(slave_id, rly, console_u_pop());
       } break;
 
-    case /** RECV **/ 0XD8E7: {
-		const char* p = modbusGetResponse();
-		uint8_t cnt = *p++;
-		while (cnt-- > 0)
-			consolePrint(CONSOLE_PRINT_HEX_CHAR, (console_cell_t)*p++);
-	} break;
     case /** PIN **/ 0X1012: {
         uint8_t pin = console_u_pop();
         digitalWrite(pin, console_u_pop());
@@ -133,8 +172,8 @@ static bool console_cmds_user(char* cmd) {
         pinMode(pin, console_u_pop());
       } break;
      
-	case /** AUTO **/ 0XB8EA: autosend_period = console_u_pop(); break;
-    case /** ACCEL **/ 0X8FED: accel_period = console_u_pop(); break;
+	case /** AUTO **/ 0XB8EA: t_autosend.setPeriod((uint16_t)console_u_pop()); break;
+    case /** ACCEL **/ 0X8FED: t_accel.setPeriod((uint16_t)console_u_pop()); break;
 	case /** ZERO **/ 0X39C7: do_zero = true; break;
 	case /** ?ACC **/ 0XF2FB: 
 	  digitalWrite(10, LOW);
@@ -143,15 +182,13 @@ static bool console_cmds_user(char* cmd) {
       digitalWrite(10, HIGH);
 	  break;
     case /** RLY **/ 0X07A2: writeRelay(console_u_pop()); break;
-    case /** WDOG **/ 0X72DE: wdog_period = console_u_pop(); break;
-    case /** ANGLE **/ 0X2CE4: angle_target = console_u_pop(); break;
+    case /** WDOG **/ 0X72DE: t_watchdog.setPeriod((uint16_t)console_u_pop()); break;
+    case /** ANGLE **/ 0X2CE4: angle_target = console_u_pop(); slew = S_SLEW_START; break;
+    case /** DEADBAND **/ 0X1A28: deadband = console_u_pop(); break;
     default: return false;
   }
   return true;
 }
-
-bool modbus_atn;
-void modbus_cb() { modbus_atn = true; }
 
 void setup() {
   Serial.begin(9600);
@@ -171,7 +208,7 @@ void setup() {
   FConsole.prompt();
 }
 
-#define runEvery(t_) for (static uint16_t then; ((uint16_t)millis() - then) >= (uint16_t)(t_); then += (uint16_t)(t_))
+#define ELEMENT_COUNT(x_) (sizeof(x_) / sizeof(x_[0]))
 
 float tilt(float a, float b, float c) {
 	return 360.0 / M_PI * atan2(a, sqrt(b*b + c*c));
@@ -179,17 +216,15 @@ float tilt(float a, float b, float c) {
 float incline(float a, float b, float c) {
 	return 180.0*acos(a/sqrt(a*a+b*b+c*c))/M_PI;
 }
+
 void loop() {
 
-	if (wdog_period) {
-		runEvery(wdog_period) {
-			static bool f;
-			digitalWrite(GPIO_PIN_WDOG, f ^= 1);
-		}
+	if (t_watchdog.service()) {
+		static bool f;
+		digitalWrite(GPIO_PIN_WDOG, f ^= 1);
 	}
 	
-	if (autosend_period > 0) {
-		runEvery(autosend_period) {
+	if (t_autosend.service()) {
 /*			
 #ifdef MODBUS
 			static uint8_t n;
@@ -202,37 +237,63 @@ void loop() {
 			msg[0]++;
 #endif	 
 */ 
-		}
 	}
   
-	serviceAccel();
-	if (accel_period > 0) {
-		runEvery(accel_period) {    
-			float x = (float)ax / float(counts);
-			float y = (float)ay / float(counts);
-			float z = (float)az / float(counts);
-			ax = ay = az = counts = 0;
-/*
-			consSerial.print(x); consSerial.print(", ");
-			consSerial.print(y); consSerial.print(", ");
-			consSerial.print(z); consSerial.print(" [");
-			consSerial.print(tilt(x, y, z)); consSerial.print(", ");
-			consSerial.print(tilt(y, z, x)); consSerial.print(", ");
-			consSerial.print(tilt(z, x, y)); consSerial.print("] ");
-			consSerial.print(incline(z, x, y)); consSerial.print("\n");
-			*/
-			int angle = (int)(0.5 + tilt(z, x, y) * 10);
-			int error = angle - angle_target;
-			consSerial.print(angle); consSerial.print(" (");
-			consSerial.print(error); consSerial.print(")\n");
+	serviceAccel();	// Accumulate readings from accelerometers.
+	if (t_accel.service()) {
 		
-			if (angle_target != 0) {
-				if (error < -DEADBAND)
-					BED_REV();
-				else if (error > +DEADBAND)
-					BED_FWD();
-				else
-					BED_STOP();
+		// Compute averages.
+		float x = (float)ax / float(counts);
+		float y = (float)ay / float(counts);
+		float z = (float)az / float(counts);
+		ax = ay = az = counts = 0;
+		
+		// Compute a bunch of angles, choose the best one. 
+		enum { V_X, V_Y, V_Z, V_TILT_X, V_TILT_Y, V_TILT_Z, V_INCLINE_X, V_INCLINE_Y, V_INCLINE_Z };
+		float vals[] = {
+			x, 					y,	 				z,
+			tilt(x, y, z), 		tilt(y, z, x), 		tilt(z, x, y),
+			incline(x, y, z), 	incline(y, z, x), 	incline(z, x, y),
+		};
+		/*
+		consSerial.print("[");
+		uint8_t i;
+		for (i = 0; i < ELEMENT_COUNT(vals)-1; i += 1) {
+			consSerial.print(vals[i]); consSerial.print(", ");
+		}
+		consSerial.print(vals[i]);
+		consSerial.print("]\n");
+		*/
+		int angle = (int)(0.5 + vals[V_TILT_X] * 100.0);
+		int error = angle - angle_target;
+		consSerial.print(slew); consSerial.print(" ");
+		consSerial.print(angle); consSerial.print(" (");
+		consSerial.print(error); consSerial.print(")\n");
+	
+		if (S_SLEW_START == slew) {
+			if (error < -deadband) {
+				BED_REV();
+				slew = S_SLEW_UP;
+			}
+			else if (error > +deadband) {
+				BED_FWD();
+				slew = S_SLEW_DOWN;
+			}
+			else {
+				BED_STOP();
+				slew = S_SLEW_DONE;
+			}
+		}
+		else if (S_SLEW_UP == slew) {
+			if (error >= -deadband) {
+				BED_STOP();
+				slew = S_SLEW_DONE;
+			}
+		}
+		else if (S_SLEW_DOWN == slew) {
+			if (error <= +deadband) {
+				BED_STOP();
+				slew = S_SLEW_DONE;
 			}
 		}
 	}

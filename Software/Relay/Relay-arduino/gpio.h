@@ -26,6 +26,7 @@ enum {
 	GPIO_PIN_SCK = 13,             /* SPI to Adaptor */
 	GPIO_PIN_SPARE_1 = A2,          /* Spare to adaptor board */
 	GPIO_PIN_SPARE_2 = A3,          /* Spare to adaptor board */
+	GPIO_PIN_SPARE_3 = 9,          /* Spare to adaptor board */
 	GPIO_PIN_SDA = A4,              /* I2C to Adaptor */
 	GPIO_PIN_SCL = A5,              /* I2C to Adaptor */
 
