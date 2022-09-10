@@ -34,11 +34,12 @@ GPIO_DECLARE_PIN_ACCESS_FUNCS(Spare3, B, 1)
 typedef struct {
 	uint8_t tx_en;
 	Stream* sRs485;
+	uint8_t slave_id;
 	modbus_response_cb cb_resp;
 	uint8_t expected_response_byte_size; 
 	uint16_t start_time;
-	char response[RESP_SIZE];
-	char request[RESP_SIZE];
+	uint8_t response[RESP_SIZE];
+	uint8_t request[RESP_SIZE];
 	uint16_t rx_timestamp_micros;
 } modbus_context_t;
 static modbus_context_t f_ctx;
@@ -73,27 +74,12 @@ static bool is_rx_frame_timeout() {
 }
 
 static void set_master_wait(uint8_t bytes);
-static uint8_t get_response_bytesize(uint8_t* frame);
+static uint8_t get_response_bytesize();
 static void restart_rx_frame_timer();
 static void stop_rx_frame_timeout();
 static bool is_rx_frame_timeout();
-static bool verify_response();
+static uint8_t verify_response();
 static void appendCRC(uint8_t* buf, uint8_t sz);
-
-enum {
-	MODBUS_FC_READ_COILS                = 0x01,
-	MODBUS_FC_READ_DISCRETE_INPUTS      = 0x02,
-	MODBUS_FC_READ_HOLDING_REGISTERS    = 0x03,
-	MODBUS_FC_READ_INPUT_REGISTERS      = 0x04,
-	MODBUS_FC_WRITE_SINGLE_COIL         = 0x05,
-	MODBUS_FC_WRITE_SINGLE_REGISTER     = 0x06,
-	MODBUS_FC_READ_EXCEPTION_STATUS     = 0x07,
-	MODBUS_FC_WRITE_MULTIPLE_COILS      = 0x0F,
-	MODBUS_FC_WRITE_MULTIPLE_REGISTERS  = 0x10,
-	MODBUS_FC_REPORT_SLAVE_ID           = 0x11,
-	MODBUS_FC_MASK_WRITE_REGISTER       = 0x16,
-	MODBUS_FC_WRITE_AND_READ_REGISTERS  = 0x17,
-};
 
 void modbusInit(Stream& rs485, uint8_t tx_en, modbus_response_cb cb) {
 	f_ctx.tx_en = tx_en;
@@ -101,15 +87,14 @@ void modbusInit(Stream& rs485, uint8_t tx_en, modbus_response_cb cb) {
 	f_ctx.cb_resp = cb;
 	digitalWrite(f_ctx.tx_en, LOW);
 	pinMode(f_ctx.tx_en, OUTPUT);
-	pinMode(GPIO_PIN_SPARE_1, OUTPUT);
-	pinMode(GPIO_PIN_SPARE_2, OUTPUT);
-	pinMode(GPIO_PIN_SPARE_3, OUTPUT);
 	while(f_ctx.sRs485->available() > 0) 
 		(void)f_ctx.sRs485->read();
 	set_master_wait(0);
-	f_ctx.response[0] = 0;
+	f_ctx.response[MODBUS_RESP_IDX_SIZE] = 0;
 	stop_rx_frame_timeout();
 }
+void modbusSetSlaveId(uint8_t id) { f_ctx.slave_id = id; }
+uint8_t modbusGetSlaveId() { return f_ctx.slave_id; }
 
 void modbusSendRaw(uint8_t* buf, uint8_t sz) {
 	digitalWrite(f_ctx.tx_en, HIGH);
@@ -118,14 +103,18 @@ void modbusSendRaw(uint8_t* buf, uint8_t sz) {
 	digitalWrite(f_ctx.tx_en, LOW);
 }
 
-void modbusSend(uint8_t* frame, uint8_t sz) {
-	appendCRC(frame, sz);
+void modbusMasterSend(uint8_t* frame, uint8_t sz) {
+	modbusSlaveSend(frame, sz);
 	memcpy(f_ctx.request, frame, sz + 2);
+	set_master_wait(get_response_bytesize());
+	f_ctx.start_time = (uint16_t)millis();
+}
+void modbusSlaveSend(uint8_t* frame, uint8_t sz) {
+	// TODO: keep master busy for interframe time after tx done. 
+	appendCRC(frame, sz);
 	while (modbusIsBusy())
 		modbusService();
 	modbusSendRaw(frame, sz + 2);
-	set_master_wait(get_response_bytesize(frame));
-	f_ctx.start_time = (uint16_t)millis();
 }
 
 // Helpers to send actual frames.
@@ -146,7 +135,7 @@ void modbusHregWrite(uint8_t id, uint16_t address, uint16_t value) {
 		0,									// CRC.
 		0,									// CRC.
 	};
-	modbusSend(frame, sizeof(frame) - 2);
+	modbusMasterSend(frame, sizeof(frame) - 2);
 }
 
 bool modbusIsBusy() {
@@ -154,14 +143,16 @@ bool modbusIsBusy() {
 }
 
 bool modbusGetResponse(uint8_t* buf) {
-	if (f_ctx.response[0] > 0) {
-		memcpy(buf, f_ctx.response, f_ctx.response[0] + 1); // Extra byte for size at start. 
-		f_ctx.response[0] = 0;
+	if (f_ctx.response[MODBUS_RESP_IDX_SIZE] > 0) {
+		memcpy(buf, f_ctx.response, f_ctx.response[MODBUS_RESP_IDX_SIZE] + 1); // Extra byte for size at start. 
+		f_ctx.response[MODBUS_RESP_IDX_SIZE] = 0;
 		return true;
 	}
 	return false;
 }
 
+#include <SoftwareSerial.h>
+extern SoftwareSerial consSerial;
 void modbusService() {
 	// Master may be waiting for a reply from a slave. On timeout, flag timeout to callback.
 	if (is_master_waiting_response()) {
@@ -174,42 +165,58 @@ void modbusService() {
 	// Service RX timer, timeout with data is a frame.
 	if (is_rx_frame_timeout()) {
 		//gpioSpare2Write(1);
-		if (f_ctx.response[0] > 0) {		// Do we have data, might well get spurious timeouts.
+		if (f_ctx.response[MODBUS_RESP_IDX_SIZE] > 0) {		// Do we have data, might well get spurious timeouts.
 			if (is_master_waiting_response()) {		// Master waiting for response.
-				const bool valid = verify_response(); 				// Decide if response is valid...
+				const uint8_t valid = verify_response(); 				// Decide if response is valid...
+				consSerial.print("<"); consSerial.print(valid); consSerial.print(">");
 				set_master_wait(0);
-				f_ctx.cb_resp(valid ? MODBUS_CB_EVT_SLAVE_RESPONSE : MODBUS_CB_EVT_CORRUPT_SLAVE_RESPONSE);
+				f_ctx.cb_resp((0 == valid) ? MODBUS_CB_EVT_SLAVE_RESPONSE : MODBUS_CB_EVT_CORRUPT_SLAVE_RESPONSE);
 			}
-			else {								// Master NOT waiting, must be a request form someone. 
-				f_ctx.cb_resp(MODBUS_CB_EVT_REQUEST);
+			else {								// Master NOT waiting, must be a request from someone, only flag if it is addressed to us. 
+				if (f_ctx.response[MODBUS_RESP_IDX_SLAVE_ID] == modbusGetSlaveId())
+					f_ctx.cb_resp(MODBUS_CB_EVT_REQUEST);
+				else
+					f_ctx.cb_resp(MODBUS_CB_EVT_REQUEST_OTHER);
 			}
 		}
 	}
 	
 	// Receive packet.
 	if (f_ctx.sRs485->available() > 0) {
-		const char c = f_ctx.sRs485->read();
+		const uint8_t c = f_ctx.sRs485->read();
 		restart_rx_frame_timer();
-		if (f_ctx.response[0] < (RESP_SIZE - 2)) 
-			f_ctx.response[1 + f_ctx.response[0]++] = c;
+		if (f_ctx.response[MODBUS_RESP_IDX_SIZE] < (RESP_SIZE - 2)) 
+			f_ctx.response[1 + f_ctx.response[MODBUS_RESP_IDX_SIZE]++] = c;
 	}
 	gpioSpare2Write(0);
 }
 
-static uint8_t get_response_bytesize(uint8_t* frame) {
-	switch (frame[1]) {
-	case MODBUS_FC_WRITE_SINGLE_REGISTER: return 8;
-	default: return 0;
+static uint8_t get_response_bytesize() {
+	switch (f_ctx.request[MODBUS_REQ_IDX_FUNCTION]) {
+		case MODBUS_FC_WRITE_SINGLE_REGISTER: // REQ: FC=6 addr:16 value:16 -- RESP: FC=6 addr:16 value:16
+			return 8;
+		case MODBUS_FC_READ_HOLDING_REGISTERS: // REQ: FC=3 addr:16 count:16(max 125) RESP: FC=3 byte-count value-0:16, ...
+			return 5 + MODBUS_U16_GET(f_ctx.request, MODBUS_REQ_IDX_DATA+2) * 2;
+		default: return 0;
 	}
 }
-static bool verify_response() {	
-	if (f_ctx.expected_response_byte_size != f_ctx.response[0])
-		return false;
-	switch ( f_ctx.response[2]) {
+
+static uint8_t verify_response() {	
+	if (f_ctx.expected_response_byte_size != f_ctx.response[MODBUS_RESP_IDX_SIZE])		// Wrong response length.
+		return 1;
+	if (f_ctx.response[MODBUS_RESP_IDX_SLAVE_ID] != f_ctx.request[MODBUS_REQ_IDX_SLAVE_ID])						// Wrong slave id.
+		return 2;
+	if (f_ctx.response[MODBUS_RESP_IDX_FUNCTION] != f_ctx.request[MODBUS_REQ_IDX_FUNCTION])						// Wrong Function code.
+		return 3;
+	switch ( f_ctx.response[MODBUS_RESP_IDX_FUNCTION]) {
 		case MODBUS_FC_WRITE_SINGLE_REGISTER:
-			return (0 == memcmp(f_ctx.request, &f_ctx.response[1], f_ctx.expected_response_byte_size));
+			return (0 == memcmp(f_ctx.request, &f_ctx.response[MODBUS_RESP_IDX_SLAVE_ID], f_ctx.expected_response_byte_size)) ? 0 : 10;
+		case MODBUS_FC_READ_HOLDING_REGISTERS: // REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
+			if (f_ctx.response[MODBUS_RESP_IDX_DATA] != 2 * MODBUS_U16_GET(f_ctx.request, MODBUS_REQ_IDX_DATA+2))	// Wrong count.
+				return 20;
+			return 0;
 		default:
-			return false;
+			return 255;
 	}
 }
 

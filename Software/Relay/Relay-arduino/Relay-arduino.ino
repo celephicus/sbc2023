@@ -130,6 +130,19 @@ static uint8_t slew;
 static int angle_target;
 static int deadband = 75;
 
+static bool led_state;
+static uint16_t tilt_angle;
+static uint16_t tilt_sample = 1234;
+static uint16_t read_holding_register(uint16_t address) { 
+	switch (address) {
+		case 100: return led_state;
+		case 101: return tilt_angle;
+		case 102: return tilt_sample;
+		default: return -1;
+	}
+}
+static void write_holding_register(uint16_t address, uint16_t v) { if (100 == address) digitalWrite(GPIO_PIN_LED, led_state = !!v); }
+
 uint8_t modbus_response[RESP_SIZE];
 void modbus_cb(uint8_t evt) { 
     consolePrint(CONSOLE_PRINT_STR, (console_cell_t)"RECV: "); 
@@ -144,10 +157,34 @@ void modbus_cb(uint8_t evt) {
 	else 
 		consolePrint(CONSOLE_PRINT_STR, (console_cell_t)"<none>");
 	consolePrint(CONSOLE_PRINT_NEWLINE, 0);
+	
+	if (MODBUS_CB_EVT_REQUEST == evt) {	// Only respond if we get a request. This will have our slave ID.
+		switch(modbus_response[MODBUS_RESP_IDX_FUNCTION]) {
+			case MODBUS_FC_WRITE_SINGLE_REGISTER: {	// REQ: [FC=6 addr:16 value:16] -- RESP: [FC=6 addr:16 value:16]
+				modbusSlaveSend(&modbus_response[MODBUS_RESP_IDX_SLAVE_ID], modbus_response[MODBUS_RESP_IDX_SIZE] - 2);	// Less 2 for CRC as send appends it. 
+				const uint16_t address = MODBUS_U16_GET(modbus_response, MODBUS_RESP_IDX_DATA);
+				const uint16_t value   = MODBUS_U16_GET(modbus_response, MODBUS_RESP_IDX_DATA + 2);
+				write_holding_register(address, value);
+			} break;
+			case MODBUS_FC_READ_HOLDING_REGISTERS: { // REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
+				const uint16_t address = MODBUS_U16_GET(modbus_response, MODBUS_RESP_IDX_DATA);
+				const uint16_t count   = MODBUS_U16_GET(modbus_response, MODBUS_RESP_IDX_DATA + 2);
+				
+				// Overwrite to send response.
+				modbus_response[MODBUS_RESP_IDX_DATA] = count * 2;
+				for (uint8_t i = 0; i < count; i += 1)
+					MODBUS_U16_SET(modbus_response, MODBUS_RESP_IDX_DATA + 1 + i * 2, read_holding_register(address+i));
+				modbusSlaveSend(&modbus_response[MODBUS_RESP_IDX_SLAVE_ID], count * 2 + 3);
+			} break;
+			default:
+				break;
+		}
+	}
 }
 
 static bool console_cmds_user(char* cmd) {
   switch (console_hash(cmd)) {
+    case /** SLAVE **/ 0X1568: modbusSetSlaveId(console_u_pop()); break;
     case /** FWD **/ 0XB4D0: BED_FWD(); break;
     case /** REV **/ 0X0684: BED_REV(); break;
     case /** STOP **/ 0X3F5D: BED_STOP(); break;
@@ -155,7 +192,7 @@ static bool console_cmds_user(char* cmd) {
         uint8_t* d = (uint8_t*)console_u_pop(); uint8_t sz = *d; modbusSendRaw(d + 1, sz);
       } break;
     case /** SEND **/ 0X76F9: {
-        uint8_t* d = (uint8_t*)console_u_pop(); uint8_t sz = *d; modbusSend(d + 1, sz);
+        uint8_t* d = (uint8_t*)console_u_pop(); uint8_t sz = *d; modbusMasterSend(d + 1, sz);
       } break;
     case /** RELAY **/ 0X1DA6: { // (state relay slave -- )      
         uint8_t slave_id = console_u_pop();
@@ -163,6 +200,7 @@ static bool console_cmds_user(char* cmd) {
         modbusRelayBoardWrite(slave_id, rly, console_u_pop());
       } break;
 
+    case /** LED **/ 0XDC88: digitalWrite(GPIO_PIN_LED, led_state = !!console_u_pop()); break;
     case /** PIN **/ 0X1012: {
         uint8_t pin = console_u_pop();
         digitalWrite(pin, console_u_pop());
@@ -204,7 +242,10 @@ void setup() {
   consolePrint(CONSOLE_PRINT_STR_P,
                (console_cell_t)PSTR(CONSOLE_OUTPUT_NEWLINE_STR CONSOLE_OUTPUT_NEWLINE_STR "SBC2022 Relay"));
   pinMode(GPIO_PIN_WDOG, OUTPUT);
+  pinMode(GPIO_PIN_LED, OUTPUT);
   pinMode(GPIO_PIN_SPARE_1, OUTPUT);
+  pinMode(GPIO_PIN_SPARE_2, OUTPUT);
+  pinMode(GPIO_PIN_SPARE_3, OUTPUT);
   FConsole.prompt();
 }
 
@@ -265,6 +306,8 @@ void loop() {
 		consSerial.print("]\n");
 		*/
 		int angle = (int)(0.5 + vals[V_TILT_X] * 100.0);
+		tilt_angle = (uint16_t)angle;
+		tilt_sample += 1;
 		int error = angle - angle_target;
 		consSerial.print(slew); consSerial.print(" ");
 		consSerial.print(angle); consSerial.print(" (");
