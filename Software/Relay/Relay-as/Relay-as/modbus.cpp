@@ -31,21 +31,6 @@ GPIO_DECLARE_PIN_ACCESS_FUNCS(Spare1, C, 2)
 GPIO_DECLARE_PIN_ACCESS_FUNCS(Spare2, C, 3)
 GPIO_DECLARE_PIN_ACCESS_FUNCS(Spare3, B, 1)
 
-// A little class to hold a buffer for chars from a device. It cannot overflow, and can be tested for overflow, and return the current size of the content.
-class Buffer {
-	uint8_t* m_buf;
-	uint8_t* m_p;
-	uint8_t* m_end;
-public:
-	Buffer(uint8_t sz) { m_buf = new uint8_t[sz]; m_end = m_buf + sz; reset(); }
-	~Buffer() { free(m_buf); }
-	void reset() {  m_p = m_end; }
-	void add(uint8_t c) { if (!overflow()) *m_p++ = c; }
-	bool overflow() const { return m_p == m_end; }
-	uint8_t size() const { return m_buf - m_p; }
-	operator const uint8_t*() const { return m_buf; }
-};
-
 typedef struct {
 	uint8_t tx_en;
 	Stream* sRs485;
