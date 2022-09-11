@@ -6,15 +6,9 @@ typedef void (*modbus_response_cb)(uint8_t evt);
 #define RESP_SIZE 20
 
 enum {
-	MODBUS_REQ_IDX_SLAVE_ID,
-	MODBUS_REQ_IDX_FUNCTION,
-	MODBUS_REQ_IDX_DATA,
-};
-enum {
-	MODBUS_RESP_IDX_SIZE,
-	MODBUS_RESP_IDX_SLAVE_ID,
-	MODBUS_RESP_IDX_FUNCTION,
-	MODBUS_RESP_IDX_DATA,
+	MODBUS_FRAME_IDX_SLAVE_ID,
+	MODBUS_FRAME_IDX_FUNCTION,
+	MODBUS_FRAME_IDX_DATA,
 };
 
 enum {
@@ -64,9 +58,10 @@ void modbusRelayBoardWrite(uint8_t id, uint8_t rly, uint8_t state, uint8_t delay
 bool modbusIsBusy();
 
 void modbusService();
-bool modbusGetResponse(uint8_t* buf);
+bool modbusGetResponse(uint8_t* len, uint8_t* buf);
 
-#define MODBUS_U16_GET(fr_, offs_) ( ((uint16_t)fr_[offs_] << 8) | (uint16_t)fr_[offs_+1] )
-#define MODBUS_U16_SET(fr_, offs_, val_) do { fr_[offs_] = (uint8_t)((val_) >> 8); fr_[offs_+1] = (uint8_t)(val_); } while (0)
-
+// Setters/getters for modbus 16 bit format.
+static inline uint16_t modbusGetU16(const uint8_t* v)  { return ((uint16_t)v[0] << 8) | (uint16_t)(v[1]); }
+static inline void modbusSetU16(uint8_t* v, uint16_t x)  { v[0] = (uint8_t)(x >> 8); v[1] = (uint8_t)x; }
+	
 #endif	// MODBUS_H__

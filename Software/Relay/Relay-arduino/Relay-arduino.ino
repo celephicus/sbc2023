@@ -137,21 +137,22 @@ static uint16_t read_holding_register(uint16_t address) {
 	switch (address) {
 		case 100: return led_state;
 		case 101: return tilt_angle;
-		case 102: return tilt_sample;
+		case 102: { int n = tilt_sample; tilt_sample = 0; return (uint16_t)n; }
 		default: return -1;
 	}
 }
 static void write_holding_register(uint16_t address, uint16_t v) { if (100 == address) digitalWrite(GPIO_PIN_LED, led_state = !!v); }
 
-uint8_t modbus_response[RESP_SIZE];
 void modbus_cb(uint8_t evt) { 
+	uint8_t frame[RESP_SIZE];
+	uint8_t frame_len;
+
     consolePrint(CONSOLE_PRINT_STR, (console_cell_t)"RECV: "); 
 	consolePrint(CONSOLE_PRINT_UNSIGNED, (console_cell_t)evt);
 	consolePrint(CONSOLE_PRINT_STR, (console_cell_t)": ");
-	if (modbusGetResponse(modbus_response)) {
-		const uint8_t* p = modbus_response;
-		uint8_t cnt = *p++;
-		while (cnt-- > 0)
+	if (modbusGetResponse(&frame_len, frame)) {
+		const uint8_t* p = frame;
+		while (frame_len-- > 0)
 			consolePrint(CONSOLE_PRINT_HEX_CHAR, (console_cell_t)*p++);
 	} 
 	else 
@@ -159,22 +160,25 @@ void modbus_cb(uint8_t evt) {
 	consolePrint(CONSOLE_PRINT_NEWLINE, 0);
 	
 	if (MODBUS_CB_EVT_REQUEST == evt) {	// Only respond if we get a request. This will have our slave ID.
-		switch(modbus_response[MODBUS_RESP_IDX_FUNCTION]) {
+		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
 			case MODBUS_FC_WRITE_SINGLE_REGISTER: {	// REQ: [FC=6 addr:16 value:16] -- RESP: [FC=6 addr:16 value:16]
-				modbusSlaveSend(&modbus_response[MODBUS_RESP_IDX_SLAVE_ID], modbus_response[MODBUS_RESP_IDX_SIZE] - 2);	// Less 2 for CRC as send appends it. 
-				const uint16_t address = MODBUS_U16_GET(modbus_response, MODBUS_RESP_IDX_DATA);
-				const uint16_t value   = MODBUS_U16_GET(modbus_response, MODBUS_RESP_IDX_DATA + 2);
+				modbusSlaveSend(&frame[MODBUS_FRAME_IDX_SLAVE_ID], frame_len - 2);	// Less 2 for CRC as send appends it. 
+				const uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
+				const uint16_t value   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
 				write_holding_register(address, value);
 			} break;
 			case MODBUS_FC_READ_HOLDING_REGISTERS: { // REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
-				const uint16_t address = MODBUS_U16_GET(modbus_response, MODBUS_RESP_IDX_DATA);
-				const uint16_t count   = MODBUS_U16_GET(modbus_response, MODBUS_RESP_IDX_DATA + 2);
+				const uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
+				const uint16_t count   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
 				
 				// Overwrite to send response.
-				modbus_response[MODBUS_RESP_IDX_DATA] = count * 2;
+				uint8_t response[RESP_SIZE];
+				response[MODBUS_FRAME_IDX_SLAVE_ID] = frame[MODBUS_FRAME_IDX_SLAVE_ID];
+				response[MODBUS_FRAME_IDX_FUNCTION] = frame[MODBUS_FRAME_IDX_FUNCTION];
+				response[MODBUS_FRAME_IDX_DATA + 0] = count * 2;
 				for (uint8_t i = 0; i < count; i += 1)
-					MODBUS_U16_SET(modbus_response, MODBUS_RESP_IDX_DATA + 1 + i * 2, read_holding_register(address+i));
-				modbusSlaveSend(&modbus_response[MODBUS_RESP_IDX_SLAVE_ID], count * 2 + 3);
+					modbusSetU16(&response[MODBUS_FRAME_IDX_DATA + 1 + i * 2], read_holding_register(address+i));
+				modbusSlaveSend(&response[MODBUS_FRAME_IDX_SLAVE_ID], count * 2 + 3);
 			} break;
 			default:
 				break;

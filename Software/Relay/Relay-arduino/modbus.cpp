@@ -32,18 +32,38 @@ GPIO_DECLARE_PIN_ACCESS_FUNCS(Spare2, C, 3)
 GPIO_DECLARE_PIN_ACCESS_FUNCS(Spare3, B, 1)
 
 // A little class to hold a buffer for chars from a device. It cannot overflow, and can be tested for overflow, and return the current size of the content.
+// Example: size = 5: m_buf=10 [xxxxx], m_end=14, m_p = 10.
+// Add 5 chars:       m_buf=10 [abcd], m_end=14, m_p = 14. No overflow.
+// Add char:
 class Buffer {
-	uint8_t* m_buf;
-	uint8_t* m_p;
-	uint8_t* m_end;
+	uint8_t* _buf;
+	uint8_t* _end;
+	uint8_t* _p;
+	bool _overflow;
 public:
-	Buffer(uint8_t sz) { m_buf = new uint8_t[sz]; m_end = m_buf + sz; reset(); }
-	~Buffer() { free(m_buf); }
-	void reset() {  m_p = m_end; }
-	void add(uint8_t c) { if (!overflow()) *m_p++ = c; }
-	bool overflow() const { return m_p == m_end; }
-	uint8_t size() const { return m_buf - m_p; }
-	operator const uint8_t*() const { return m_buf; }
+	Buffer() {};
+	void begin(uint8_t sz) {
+		 _buf = new uint8_t[sz];
+		 _end = _buf + sz;
+		reset(); 
+	}
+	~Buffer() { 
+		delete(_buf); 
+	}
+	void reset() {  
+		_p = _buf; 
+		_overflow = false;
+	}
+	void add(uint8_t c) { 
+		if (free() > 0)
+			*_p++ = c;
+		else
+			_overflow = true;		// Signal overflow.
+}
+	bool overflow() const { return _overflow; }
+	uint8_t len() const { return _p - _buf; }
+	uint8_t free() const { return _end - _p; }
+	operator const uint8_t*() const { return (const uint8_t*)_buf; }
 };
 
 typedef struct {
@@ -53,7 +73,7 @@ typedef struct {
 	modbus_response_cb cb_resp;
 	uint8_t expected_response_byte_size; 
 	uint16_t start_time;
-	uint8_t response[RESP_SIZE];
+	Buffer buf_resp;
 	uint8_t request[RESP_SIZE];
 	uint16_t rx_timestamp_micros;
 } modbus_context_t;
@@ -104,8 +124,8 @@ void modbusInit(Stream& rs485, uint8_t tx_en, modbus_response_cb cb) {
 	pinMode(f_ctx.tx_en, OUTPUT);
 	while(f_ctx.sRs485->available() > 0) 
 		(void)f_ctx.sRs485->read();
+	f_ctx.buf_resp.begin(RESP_SIZE);
 	set_master_wait(0);
-	f_ctx.response[MODBUS_RESP_IDX_SIZE] = 0;
 	stop_rx_frame_timeout();
 }
 void modbusSetSlaveId(uint8_t id) { f_ctx.slave_id = id; }
@@ -157,10 +177,10 @@ bool modbusIsBusy() {
 	return f_ctx.expected_response_byte_size > 0;
 }
 
-bool modbusGetResponse(uint8_t* buf) {
-	if (f_ctx.response[MODBUS_RESP_IDX_SIZE] > 0) {
-		memcpy(buf, f_ctx.response, f_ctx.response[MODBUS_RESP_IDX_SIZE] + 1); // Extra byte for size at start. 
-		f_ctx.response[MODBUS_RESP_IDX_SIZE] = 0;
+bool modbusGetResponse(uint8_t* len, uint8_t* buf) {
+	if (f_ctx.buf_resp.len() > 0) {
+		memcpy(buf, f_ctx.buf_resp, *len = f_ctx.buf_resp.len());
+		f_ctx.buf_resp.reset();
 		return true;
 	}
 	return false;
@@ -180,7 +200,7 @@ void modbusService() {
 	// Service RX timer, timeout with data is a frame.
 	if (is_rx_frame_timeout()) {
 		//gpioSpare2Write(1);
-		if (f_ctx.response[MODBUS_RESP_IDX_SIZE] > 0) {		// Do we have data, might well get spurious timeouts.
+		if (f_ctx.buf_resp.len() > 0) {		// Do we have data, might well get spurious timeouts.
 			if (is_master_waiting_response()) {		// Master waiting for response.
 				const uint8_t valid = verify_response(); 				// Decide if response is valid...
 				consSerial.print("<"); consSerial.print(valid); consSerial.print(">");
@@ -188,7 +208,7 @@ void modbusService() {
 				f_ctx.cb_resp((0 == valid) ? MODBUS_CB_EVT_SLAVE_RESPONSE : MODBUS_CB_EVT_CORRUPT_SLAVE_RESPONSE);
 			}
 			else {								// Master NOT waiting, must be a request from someone, only flag if it is addressed to us. 
-				if (f_ctx.response[MODBUS_RESP_IDX_SLAVE_ID] == modbusGetSlaveId())
+				if (f_ctx.buf_resp[MODBUS_FRAME_IDX_SLAVE_ID] == modbusGetSlaveId())
 					f_ctx.cb_resp(MODBUS_CB_EVT_REQUEST);
 				else
 					f_ctx.cb_resp(MODBUS_CB_EVT_REQUEST_OTHER);
@@ -200,34 +220,33 @@ void modbusService() {
 	if (f_ctx.sRs485->available() > 0) {
 		const uint8_t c = f_ctx.sRs485->read();
 		restart_rx_frame_timer();
-		if (f_ctx.response[MODBUS_RESP_IDX_SIZE] < (RESP_SIZE - 2)) 
-			f_ctx.response[1 + f_ctx.response[MODBUS_RESP_IDX_SIZE]++] = c;
+		f_ctx.buf_resp.add(c);
 	}
 	gpioSpare2Write(0);
 }
 
 static uint8_t get_response_bytesize() {
-	switch (f_ctx.request[MODBUS_REQ_IDX_FUNCTION]) {
+	switch (f_ctx.request[MODBUS_FRAME_IDX_FUNCTION]) {
 		case MODBUS_FC_WRITE_SINGLE_REGISTER: // REQ: FC=6 addr:16 value:16 -- RESP: FC=6 addr:16 value:16
 			return 8;
 		case MODBUS_FC_READ_HOLDING_REGISTERS: // REQ: FC=3 addr:16 count:16(max 125) RESP: FC=3 byte-count value-0:16, ...
-			return 5 + MODBUS_U16_GET(f_ctx.request, MODBUS_REQ_IDX_DATA+2) * 2;
+			return 5 + modbusGetU16(&f_ctx.request[MODBUS_FRAME_IDX_DATA+2]) * 2;
 		default: return 0;
 	}
 }
 
 static uint8_t verify_response() {	
-	if (f_ctx.expected_response_byte_size != f_ctx.response[MODBUS_RESP_IDX_SIZE])		// Wrong response length.
+	if (f_ctx.expected_response_byte_size != f_ctx.buf_resp.len())		// Wrong response length.
 		return 1;
-	if (f_ctx.response[MODBUS_RESP_IDX_SLAVE_ID] != f_ctx.request[MODBUS_REQ_IDX_SLAVE_ID])						// Wrong slave id.
+	if (f_ctx.buf_resp[MODBUS_FRAME_IDX_SLAVE_ID] != f_ctx.request[MODBUS_FRAME_IDX_SLAVE_ID])						// Wrong slave id.
 		return 2;
-	if (f_ctx.response[MODBUS_RESP_IDX_FUNCTION] != f_ctx.request[MODBUS_REQ_IDX_FUNCTION])						// Wrong Function code.
+	if (f_ctx.buf_resp[MODBUS_FRAME_IDX_FUNCTION] != f_ctx.request[MODBUS_FRAME_IDX_FUNCTION])						// Wrong Function code.
 		return 3;
-	switch ( f_ctx.response[MODBUS_RESP_IDX_FUNCTION]) {
+	switch ( f_ctx.buf_resp[MODBUS_FRAME_IDX_FUNCTION]) {
 		case MODBUS_FC_WRITE_SINGLE_REGISTER:
-			return (0 == memcmp(f_ctx.request, &f_ctx.response[MODBUS_RESP_IDX_SLAVE_ID], f_ctx.expected_response_byte_size)) ? 0 : 10;
+			return (0 == memcmp(f_ctx.request, &f_ctx.buf_resp, f_ctx.expected_response_byte_size)) ? 0 : 10;
 		case MODBUS_FC_READ_HOLDING_REGISTERS: // REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
-			if (f_ctx.response[MODBUS_RESP_IDX_DATA] != 2 * MODBUS_U16_GET(f_ctx.request, MODBUS_REQ_IDX_DATA+2))	// Wrong count.
+			if (f_ctx.buf_resp[MODBUS_FRAME_IDX_DATA] != 2 * modbusGetU16(&f_ctx.request[MODBUS_FRAME_IDX_DATA+2]))	// Wrong count.
 				return 20;
 			return 0;
 		default:
