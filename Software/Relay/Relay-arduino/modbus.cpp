@@ -1,35 +1,9 @@
 #include <Arduino.h>
 #include "modbus.h"
+#include "gpio.h"
 
 #define TIMEOUT 50
 #define RX_TIMEOUT_MICROS 4000
-
-#define CC(a, b) a##b
-#define C(a, b) CC(a, b)
-#define CC3(a, b, c) a##b##c
-#define C3(a, b, c) CC3(a, b, c)
-
-// Generate lots of inline functions to access a port pin.
-#define GPIO_DECLARE_PIN_ACCESS_FUNCS(name_, port_, bit_)                                                                                 \
- static inline void C3(gpio, name_, SetModeOutput)() { C(DDR, port_) |= _BV(bit_); }                                                    \
- static inline void C3(gpio, name_, SetModeInput)() { C(DDR, port_) &= ~_BV(bit_); }                                                    \
- static inline void C3(gpio, name_, SetMode)(bool fout) { if (fout) C(DDR, port_) |= _BV(bit_); else C(DDR, port_) &= ~_BV(bit_);}        \
- static inline bool C3(gpio, name_, Read)() { return !!(C(PIN, port_) | _BV(bit_)); }                                                    \
- static inline void C3(gpio, name_, Toggle)() { C(PORT, port_) ^= _BV(bit_); }                                                            \
- static inline void C3(gpio, name_, Set)() { C(PORT, port_) |= _BV(bit_); }                                                                \
- static inline void C3(gpio, name_, Clear)() { C(PORT, port_) &= ~_BV(bit_); }                                                            \
- static inline void C3(gpio, name_, Write)(bool b) { if (b) C(PORT, port_) |= _BV(bit_); else C(PORT, port_) &= ~_BV(bit_); }            \
-
-enum {
-	GPIO_PIN_SPARE_1 = A2,     
-	GPIO_PIN_SPARE_2 = A3,      
-	GPIO_PIN_SPARE_3 = 9,       
-};
-
-// Now have to get ports/pins for these.
-GPIO_DECLARE_PIN_ACCESS_FUNCS(Spare1, C, 2)
-GPIO_DECLARE_PIN_ACCESS_FUNCS(Spare2, C, 3)
-GPIO_DECLARE_PIN_ACCESS_FUNCS(Spare3, B, 1)
 
 // A little class to hold a buffer for chars from a device. It cannot overflow, and can be tested for overflow, and return the current size of the content.
 // Example: size = 5: m_buf=10 [xxxxx], m_end=14, m_p = 10.
@@ -81,7 +55,7 @@ static modbus_context_t f_ctx;
 
 static void set_master_wait(uint8_t bytes) {
 	f_ctx.expected_response_byte_size = bytes;
-	gpioSpare3Write(bytes > 0);
+	gpioSPARE_3Write(bytes > 0);
 }
 static bool is_master_waiting_response() {
 	return (f_ctx.expected_response_byte_size > 0);
@@ -91,11 +65,11 @@ static void restart_rx_frame_timer() {
 	f_ctx.rx_timestamp_micros = (uint16_t)micros();
 	if (0 == f_ctx.rx_timestamp_micros)
 		f_ctx.rx_timestamp_micros = 1;
-	gpioSpare1Write(1);
+	gpioSPARE_1Write(1);
 }
 static void stop_rx_frame_timeout() { 
 	f_ctx.rx_timestamp_micros = 0; 
-	gpioSpare1Write(0);
+	gpioSPARE_1Write(0);
 }
 static bool is_rx_frame_timeout() { 
 	if (
@@ -193,25 +167,25 @@ void modbusService() {
 	if (is_master_waiting_response()) {
 		if ((uint16_t)millis() - f_ctx.start_time > TIMEOUT) {
 			set_master_wait(0);
-			f_ctx.cb_resp(MODBUS_CB_EVT_SLAVE_RESPONSE_TIMEOUT);
+			f_ctx.cb_resp(MODBUS_CB_EVT_RESP_NONE);
 		}
 	}
 	
 	// Service RX timer, timeout with data is a frame.
 	if (is_rx_frame_timeout()) {
-		//gpioSpare2Write(1);
+		//gpioSPARE_2Write(1);
 		if (f_ctx.buf_resp.len() > 0) {		// Do we have data, might well get spurious timeouts.
 			if (is_master_waiting_response()) {		// Master waiting for response.
 				const uint8_t valid = verify_response(); 				// Decide if response is valid...
 				consSerial.print("<"); consSerial.print(valid); consSerial.print(">");
 				set_master_wait(0);
-				f_ctx.cb_resp((0 == valid) ? MODBUS_CB_EVT_SLAVE_RESPONSE : MODBUS_CB_EVT_CORRUPT_SLAVE_RESPONSE);
+				f_ctx.cb_resp((0 == valid) ? MODBUS_CB_EVT_RESP : MODBUS_CB_EVT_RESP_BAD);
 			}
 			else {								// Master NOT waiting, must be a request from someone, only flag if it is addressed to us. 
 				if (f_ctx.buf_resp[MODBUS_FRAME_IDX_SLAVE_ID] == modbusGetSlaveId())
-					f_ctx.cb_resp(MODBUS_CB_EVT_REQUEST);
+					f_ctx.cb_resp(MODBUS_CB_EVT_REQ);
 				else
-					f_ctx.cb_resp(MODBUS_CB_EVT_REQUEST_OTHER);
+					f_ctx.cb_resp(MODBUS_CB_EVT_REQ_X);
 			}
 		}
 	}
@@ -222,7 +196,7 @@ void modbusService() {
 		restart_rx_frame_timer();
 		f_ctx.buf_resp.add(c);
 	}
-	gpioSpare2Write(0);
+	gpioSPARE_2Write(0);
 }
 
 static uint8_t get_response_bytesize() {
@@ -244,7 +218,7 @@ static uint8_t verify_response() {
 		return 3;
 	switch ( f_ctx.buf_resp[MODBUS_FRAME_IDX_FUNCTION]) {
 		case MODBUS_FC_WRITE_SINGLE_REGISTER:
-			return (0 == memcmp(f_ctx.request, &f_ctx.buf_resp, f_ctx.expected_response_byte_size)) ? 0 : 10;
+			return (0 == memcmp(f_ctx.request, f_ctx.buf_resp, f_ctx.expected_response_byte_size)) ? 0 : 10;
 		case MODBUS_FC_READ_HOLDING_REGISTERS: // REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
 			if (f_ctx.buf_resp[MODBUS_FRAME_IDX_DATA] != 2 * modbusGetU16(&f_ctx.request[MODBUS_FRAME_IDX_DATA+2]))	// Wrong count.
 				return 20;
@@ -272,3 +246,21 @@ static void appendCRC(uint8_t* buf, uint8_t sz) {
   buf[0] = (uint8_t)(crc & 0xFF);   //low byte
   buf[1] = (uint8_t)(crc >> 8);     // high byte
 }
+
+// Macro that expands to a "C" identifier for the description string. 
+#define MODBUS_CB_EVT_DEF_GEN_STR(_name, desc_) \
+	CB_EVT_DESC_##_name,
+
+// Macro that expands to a string DEFINITION of the description.
+#define MODBUS_CB_EVT_DEF_GEN_STR_DEF(_name, desc_) \
+	static const char CB_EVT_DESC_##_name[] PROGMEM = #_name;
+
+// Now can define function for string descriptions.
+const char* modbusGetCallbackEventDescription(uint8_t evt) {
+	MODBUS_CB_EVT_DEFS(MODBUS_CB_EVT_DEF_GEN_STR_DEF)		// Declarations of the index name strings.
+	static const char* const DESCS[COUNT_MODBUS_CB_EVT] PROGMEM = { // Declaration of the array of these strings.
+		MODBUS_CB_EVT_DEFS(MODBUS_CB_EVT_DEF_GEN_STR)
+	};
+	return (evt < COUNT_MODBUS_CB_EVT) ? (const char*)pgm_read_word(&DESCS[evt]) : PSTR("unknown");
+}
+

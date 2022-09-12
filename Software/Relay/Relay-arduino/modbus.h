@@ -11,13 +11,23 @@ enum {
 	MODBUS_FRAME_IDX_DATA,
 };
 
+// Event IDs sent as callback from driver. 
+#define MODBUS_CB_EVT_DEFS(gen_)															\
+	gen_(NONE,						"Null event, never sent.")								\
+	gen_(RESP,						"Master received correct response from slave.")			\
+	gen_(RESP_NONE,					"Master received no response from slave.")				\
+	gen_(RESP_BAD,					"Master received corrupt response from slave.")			\
+	gen_(REQ,						"Request for this slave.")								\
+	gen_(REQ_X,						"Request for another slave, not us.")					\
+
+// Macro that expands to an item declaration in an enum...
+#define MODBUS_CB_EVT_DEF_GEN_ENUM_IDX(name_, desc_) \
+MODBUS_CB_EVT_##name_,
+
+// Declare callback event IDs. 
 enum {
-	MODBUS_CB_EVT_NONE,
-	MODBUS_CB_EVT_SLAVE_RESPONSE,			// Master received correct response from slave. 
-	MODBUS_CB_EVT_SLAVE_RESPONSE_TIMEOUT,	// Master received no response from slave. 
-	MODBUS_CB_EVT_CORRUPT_SLAVE_RESPONSE,	// Master received corrupt response from slave. 
-	MODBUS_CB_EVT_REQUEST,					// Request for us.
-	MODBUS_CB_EVT_REQUEST_OTHER,			// Request for another slave, not us.
+    MODBUS_CB_EVT_DEFS(MODBUS_CB_EVT_DEF_GEN_ENUM_IDX)
+    COUNT_MODBUS_CB_EVT
 };
 
 enum {
@@ -64,4 +74,7 @@ bool modbusGetResponse(uint8_t* len, uint8_t* buf);
 static inline uint16_t modbusGetU16(const uint8_t* v)  { return ((uint16_t)v[0] << 8) | (uint16_t)(v[1]); }
 static inline void modbusSetU16(uint8_t* v, uint16_t x)  { v[0] = (uint8_t)(x >> 8); v[1] = (uint8_t)x; }
 	
+const char* modbusGetCallbackEventDescription(uint8_t evt);
+
 #endif	// MODBUS_H__
+

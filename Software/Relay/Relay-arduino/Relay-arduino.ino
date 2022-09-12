@@ -133,6 +133,8 @@ static int deadband = 75;
 static bool led_state;
 static uint16_t tilt_angle;
 static uint16_t tilt_sample = 1234;
+static uint8_t rem; 
+
 static uint16_t read_holding_register(uint16_t address) { 
 	switch (address) {
 		case 100: return led_state;
@@ -149,6 +151,8 @@ void modbus_cb(uint8_t evt) {
 
     consolePrint(CONSOLE_PRINT_STR, (console_cell_t)"RECV: "); 
 	consolePrint(CONSOLE_PRINT_UNSIGNED, (console_cell_t)evt);
+	consolePrint(CONSOLE_PRINT_STR, (console_cell_t)" ");
+	consolePrint(CONSOLE_PRINT_STR_P, (console_cell_t)modbusGetCallbackEventDescription(evt));
 	consolePrint(CONSOLE_PRINT_STR, (console_cell_t)": ");
 	if (modbusGetResponse(&frame_len, frame)) {
 		const uint8_t* p = frame;
@@ -159,7 +163,7 @@ void modbus_cb(uint8_t evt) {
 		consolePrint(CONSOLE_PRINT_STR, (console_cell_t)"<none>");
 	consolePrint(CONSOLE_PRINT_NEWLINE, 0);
 	
-	if (MODBUS_CB_EVT_REQUEST == evt) {	// Only respond if we get a request. This will have our slave ID.
+	if (MODBUS_CB_EVT_REQ == evt) {	// Only respond if we get a request. This will have our slave ID.
 		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
 			case MODBUS_FC_WRITE_SINGLE_REGISTER: {	// REQ: [FC=6 addr:16 value:16] -- RESP: [FC=6 addr:16 value:16]
 				modbusSlaveSend(&frame[MODBUS_FRAME_IDX_SLAVE_ID], frame_len - 2);	// Less 2 for CRC as send appends it. 
@@ -184,7 +188,17 @@ void modbus_cb(uint8_t evt) {
 				break;
 		}
 	}
+	if (MODBUS_CB_EVT_RESP == evt) {
+		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
+			case MODBUS_FC_READ_HOLDING_REGISTERS: { // REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
+				if (rem) 
+					tilt_angle = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 1]);
+				break;
+			}
+		}
+	}
 }
+
 
 static bool console_cmds_user(char* cmd) {
   switch (console_hash(cmd)) {
@@ -226,6 +240,7 @@ static bool console_cmds_user(char* cmd) {
     case /** RLY **/ 0X07A2: writeRelay(console_u_pop()); break;
     case /** WDOG **/ 0X72DE: t_watchdog.setPeriod((uint16_t)console_u_pop()); break;
     case /** ANGLE **/ 0X2CE4: angle_target = console_u_pop(); slew = S_SLEW_START; break;
+    case /** REM **/ 0X069F: rem = console_u_pop(); break;
     case /** DEADBAND **/ 0X1A28: deadband = console_u_pop(); break;
     default: return false;
   }
@@ -304,17 +319,22 @@ void loop() {
 		consSerial.print("[");
 		uint8_t i;
 		for (i = 0; i < ELEMENT_COUNT(vals)-1; i += 1) {
-			consSerial.print(vals[i]); consSerial.print(", ");
+			consSerial.print(vals[i]);rem consSerial.print(", ");
 		}
 		consSerial.print(vals[i]);
 		consSerial.print("]\n");
 		*/
-		int angle = (int)(0.5 + vals[V_TILT_X] * 100.0);
-		tilt_angle = (uint16_t)angle;
+		if (rem) {
+			uint8_t req[] = { 2, MODBUS_FC_READ_HOLDING_REGISTERS, 0, 101, 0, 1 };
+			modbusMasterSend(req, sizeof(req));
+		}
+		else
+			tilt_angle = (uint16_t)(int)(0.5 + vals[V_TILT_X] * 100.0);
+		
 		tilt_sample += 1;
-		int error = angle - angle_target;
+		int error = tilt_angle - angle_target;
 		consSerial.print(slew); consSerial.print(" ");
-		consSerial.print(angle); consSerial.print(" (");
+		consSerial.print(tilt_angle); consSerial.print(" (");
 		consSerial.print(error); consSerial.print(")\n");
 	
 		if (S_SLEW_START == slew) {
