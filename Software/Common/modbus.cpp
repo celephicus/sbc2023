@@ -2,43 +2,9 @@
 #include "modbus.h"
 #include "gpio.h"
 
+// TODO: Add timeout function with unit test. 
 #define TIMEOUT 50
 #define RX_TIMEOUT_MICROS 4000
-
-// A little class to hold a buffer for chars from a device. It cannot overflow, and can be tested for overflow, and return the current size of the content.
-// Example: size = 5: m_buf=10 [xxxxx], m_end=14, m_p = 10.
-// Add 5 chars:       m_buf=10 [abcd], m_end=14, m_p = 14. No overflow.
-// Add char:
-class Buffer {
-	uint8_t* _buf;
-	uint8_t* _end;
-	uint8_t* _p;
-	bool _overflow;
-public:
-	Buffer() {};
-	void begin(uint8_t sz) {
-		 _buf = new uint8_t[sz];
-		 _end = _buf + sz;
-		reset(); 
-	}
-	~Buffer() { 
-		delete(_buf); 
-	}
-	void reset() {  
-		_p = _buf; 
-		_overflow = false;
-	}
-	void add(uint8_t c) { 
-		if (free() > 0)
-			*_p++ = c;
-		else
-			_overflow = true;		// Signal overflow.
-}
-	bool overflow() const { return _overflow; }
-	uint8_t len() const { return _p - _buf; }
-	uint8_t free() const { return _end - _p; }
-	operator const uint8_t*() const { return (const uint8_t*)_buf; }
-};
 
 typedef struct {
 	uint8_t tx_en;
@@ -47,7 +13,7 @@ typedef struct {
 	modbus_response_cb cb_resp;
 	uint8_t expected_response_byte_size; 
 	uint16_t start_time;
-	Buffer buf_resp;
+	Buffer buf_resp[RESP_SIZE];
 	uint8_t request[RESP_SIZE];
 	uint16_t rx_timestamp_micros;
 } modbus_context_t;
@@ -96,9 +62,8 @@ void modbusInit(Stream& rs485, uint8_t tx_en, modbus_response_cb cb) {
 	f_ctx.cb_resp = cb;
 	digitalWrite(f_ctx.tx_en, LOW);
 	pinMode(f_ctx.tx_en, OUTPUT);
-	while(f_ctx.sRs485->available() > 0) 
+	while(f_ctx.sRs485->available() > 0) // Flush any received chars from buffer. 
 		(void)f_ctx.sRs485->read();
-	f_ctx.buf_resp.begin(RESP_SIZE);
 	set_master_wait(0);
 	stop_rx_frame_timeout();
 }
