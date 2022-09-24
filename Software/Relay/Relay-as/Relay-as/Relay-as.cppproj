@@ -31,19 +31,19 @@
     <ResetRule>0</ResetRule>
     <EraseKey />
     <AsfFrameworkConfig>
-      <framework-data xmlns="">
+      <framework-data>
         <options />
         <configurations />
         <files />
         <documentation help="" />
         <offline-documentation help="" />
         <dependencies>
-          <content-extension eid="atmel.asf" uuidref="Atmel.ASF" version="3.52.0" />
+          <content-extension eid="atmel.asf" uuidref="Atmel.ASF" version="3.42.0" />
         </dependencies>
       </framework-data>
     </AsfFrameworkConfig>
     <avrtool>com.atmel.avrdbg.tool.atmelice</avrtool>
-    <avrtoolserialnumber>J42700029128</avrtoolserialnumber>
+    <avrtoolserialnumber>J41800088132</avrtoolserialnumber>
     <avrdeviceexpectedsignature>0x1E950F</avrdeviceexpectedsignature>
     <com_atmel_avrdbg_tool_atmelice>
       <ToolOptions>
@@ -52,7 +52,7 @@
         <InterfaceName>debugWIRE</InterfaceName>
       </ToolOptions>
       <ToolType>com.atmel.avrdbg.tool.atmelice</ToolType>
-      <ToolNumber>J42700029128</ToolNumber>
+      <ToolNumber>J41800088132</ToolNumber>
       <ToolName>Atmel-ICE</ToolName>
     </com_atmel_avrdbg_tool_atmelice>
     <avrtoolinterface>debugWIRE</avrtoolinterface>
@@ -234,42 +234,6 @@
       <SubType>compile</SubType>
       <Link>ADXL345.h</Link>
     </Compile>
-    <Compile Include="..\..\Relay-arduino\console-config-default.h">
-      <SubType>compile</SubType>
-      <Link>console-config-default.h</Link>
-    </Compile>
-    <Compile Include="..\..\Relay-arduino\console-internals.h">
-      <SubType>compile</SubType>
-      <Link>console-internals.h</Link>
-    </Compile>
-    <Compile Include="..\..\Relay-arduino\console.cpp">
-      <SubType>compile</SubType>
-      <Link>console.cpp</Link>
-    </Compile>
-    <Compile Include="..\..\Relay-arduino\console.h">
-      <SubType>compile</SubType>
-      <Link>console.h</Link>
-    </Compile>
-    <Compile Include="..\..\Relay-arduino\fconsole.cpp">
-      <SubType>compile</SubType>
-      <Link>fconsole.cpp</Link>
-    </Compile>
-    <Compile Include="..\..\Relay-arduino\fconsole.h">
-      <SubType>compile</SubType>
-      <Link>fconsole.h</Link>
-    </Compile>
-    <Compile Include="..\..\Relay-arduino\gpio.h">
-      <SubType>compile</SubType>
-      <Link>gpio.h</Link>
-    </Compile>
-    <Compile Include="..\..\Relay-arduino\modbus.cpp">
-      <SubType>compile</SubType>
-      <Link>modbus.cpp</Link>
-    </Compile>
-    <Compile Include="..\..\Relay-arduino\modbus.h">
-      <SubType>compile</SubType>
-      <Link>modbus.h</Link>
-    </Compile>
     <Compile Include="..\..\Relay-arduino\SparkFun_ADXL345.cpp">
       <SubType>compile</SubType>
       <Link>SparkFun_ADXL345.cpp</Link>
@@ -277,6 +241,46 @@
     <Compile Include="..\..\Relay-arduino\SparkFun_ADXL345.h">
       <SubType>compile</SubType>
       <Link>SparkFun_ADXL345.h</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\Buffer.h">
+      <SubType>compile</SubType>
+      <Link>Common\Buffer.h</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\console-config-default.h">
+      <SubType>compile</SubType>
+      <Link>Common\console-config-default.h</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\console-internals.h">
+      <SubType>compile</SubType>
+      <Link>Common\console-internals.h</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\console.cpp">
+      <SubType>compile</SubType>
+      <Link>Common\console.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\console.h">
+      <SubType>compile</SubType>
+      <Link>Common\console.h</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\fconsole.cpp">
+      <SubType>compile</SubType>
+      <Link>Common\fconsole.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\fconsole.h">
+      <SubType>compile</SubType>
+      <Link>Common\fconsole.h</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\gpio.h">
+      <SubType>compile</SubType>
+      <Link>Common\gpio.h</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\modbus.cpp">
+      <SubType>compile</SubType>
+      <Link>Common\modbus.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\modbus.h">
+      <SubType>compile</SubType>
+      <Link>Common\modbus.h</Link>
     </Compile>
     <Compile Include="Sketch.cpp">
       <SubType>compile</SubType>
@@ -290,6 +294,9 @@
       <Project>f8e43aef-7026-42b8-8c72-71ed9d52e56c</Project>
       <Private>True</Private>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Common" />
   </ItemGroup>
   <Import Project="$(AVRSTUDIO_EXE_PATH)\\Vs\\Compiler.targets" />
 </Project>

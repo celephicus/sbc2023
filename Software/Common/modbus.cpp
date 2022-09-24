@@ -1,7 +1,8 @@
 #include <Arduino.h>
 #include "modbus.h"
-#include "gpio.h"
+#include "buffer.h"
 
+// TODO: Add way to set gpio pins for h/w debugging.
 // TODO: Add timeout function with unit test. 
 #define TIMEOUT 50
 #define RX_TIMEOUT_MICROS 4000
@@ -13,7 +14,7 @@ typedef struct {
 	modbus_response_cb cb_resp;
 	uint8_t expected_response_byte_size; 
 	uint16_t start_time;
-	Buffer buf_resp[RESP_SIZE];
+	Buffer buf_resp;
 	uint8_t request[RESP_SIZE];
 	uint16_t rx_timestamp_micros;
 } modbus_context_t;
@@ -21,7 +22,7 @@ static modbus_context_t f_ctx;
 
 static void set_master_wait(uint8_t bytes) {
 	f_ctx.expected_response_byte_size = bytes;
-	gpioSPARE_3Write(bytes > 0);
+	//gpioSPARE_3Write(bytes > 0);
 }
 static bool is_master_waiting_response() {
 	return (f_ctx.expected_response_byte_size > 0);
@@ -31,11 +32,11 @@ static void restart_rx_frame_timer() {
 	f_ctx.rx_timestamp_micros = (uint16_t)micros();
 	if (0 == f_ctx.rx_timestamp_micros)
 		f_ctx.rx_timestamp_micros = 1;
-	gpioSPARE_1Write(1);
+	//gpioSPARE_1Write(1);
 }
 static void stop_rx_frame_timeout() { 
 	f_ctx.rx_timestamp_micros = 0; 
-	gpioSPARE_1Write(0);
+	//gpioSPARE_1Write(0);
 }
 static bool is_rx_frame_timeout() { 
 	if (
@@ -60,6 +61,7 @@ void modbusInit(Stream& rs485, uint8_t tx_en, modbus_response_cb cb) {
 	f_ctx.tx_en = tx_en;
 	f_ctx.sRs485 = &rs485;
 	f_ctx.cb_resp = cb;
+	f_ctx.buf_resp.resize(RESP_SIZE);
 	digitalWrite(f_ctx.tx_en, LOW);
 	pinMode(f_ctx.tx_en, OUTPUT);
 	while(f_ctx.sRs485->available() > 0) // Flush any received chars from buffer. 
@@ -161,7 +163,7 @@ void modbusService() {
 		restart_rx_frame_timer();
 		f_ctx.buf_resp.add(c);
 	}
-	gpioSPARE_2Write(0);
+	//gpioSPARE_2Write(0);
 }
 
 static uint8_t get_response_bytesize() {

@@ -28,7 +28,4 @@
  static inline void C3(gpio, name_, Clear)() {}																							\
  static inline void C3(gpio, name_, Write)(bool b) { (void)b; }																			\
 
-// Pull in local definitions. 
-#include "gpio.local.h"
-
 #endif  // GPIO_H__

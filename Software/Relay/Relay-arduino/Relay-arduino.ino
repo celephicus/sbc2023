@@ -3,12 +3,13 @@
 #include <SPI.h>
 
 #include "SparkFun_ADXL345.h"         // SparkFun ADXL345 Library
-#include "console.h"
-#include "console-internals.h"
-#include "fconsole.h"
-#include "gpio.h"
+#include "src\common\console.h"
+#include "src\common\console-internals.h"
+#include "src\common\fconsole.h"
+#include "src\common\gpio.h"
+#include "gpio.local.h"
 #include "ADXL345.h"
-#include "modbus.h"
+#include "src\common\modbus.h"
 
 ADXL345 adxl = ADXL345(10);           // USE FOR SPI COMMUNICATION, ADXL345(CS_PIN);
 void setup_accel(){
@@ -58,6 +59,7 @@ void setup_accel(){
 }
 
 // Handy function to go off every so often, controlled by a variable. Zero turns it off. Changing the period restarts the timer. 
+// TODO: Unit test Timer.
 template <typename T>
 class Timer {
 	T m_period;
