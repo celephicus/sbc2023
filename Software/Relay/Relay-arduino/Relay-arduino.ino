@@ -1,15 +1,31 @@
 #include <SoftwareSerial.h>
 #include <Wire.h>
 #include <SPI.h>
+#include <avr/wdt.h>
 
 #include "SparkFun_ADXL345.h"         // SparkFun ADXL345 Library
 #include "src\common\console.h"
 #include "src\common\console-internals.h"
 #include "src\common\fconsole.h"
-#include "src\common\gpio.h"
-#include "gpio.local.h"
+#include "src\common\gpio.h"			// Will include `gpio.local.h'
 #include "ADXL345.h"
 #include "src\common\modbus.h"
+#include "src\common\common.h"
+#include "src\common\regs.h"
+#include "src\common\utils.h"
+#include "version.h"
+
+// Console
+SoftwareSerial consSerial(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); // RX, TX
+static bool console_cmds_user(char* cmd);
+static void	console_init() {
+	consSerial.begin(19200);
+	FConsole.begin(console_cmds_user, consSerial);
+	commonPrintConsoleStartupMessage();
+}
+static void	console_service() {
+    FConsole.service();
+}
 
 ADXL345 adxl = ADXL345(10);           // USE FOR SPI COMMUNICATION, ADXL345(CS_PIN);
 void setup_accel(){
@@ -121,8 +137,6 @@ void writeRelay(uint8_t v) {
   digitalWrite(GPIO_PIN_RSEL, 1);
 }
 
-SoftwareSerial consSerial(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); // RX, TX
-
 #define BED_FWD() do { modbusRelayBoardWrite(1, 4, MODBUS_RELAY_BOARD_CMD_CLOSE); modbusRelayBoardWrite(1, 3, MODBUS_RELAY_BOARD_CMD_CLOSE); } while (0)
 #define BED_REV() do { modbusRelayBoardWrite(1, 4, MODBUS_RELAY_BOARD_CMD_OPEN); modbusRelayBoardWrite(1, 3, MODBUS_RELAY_BOARD_CMD_CLOSE); } while (0) 
 #define BED_STOP() do { modbusRelayBoardWrite(1, 3, MODBUS_RELAY_BOARD_CMD_OPEN); modbusRelayBoardWrite(1, 4, MODBUS_RELAY_BOARD_CMD_OPEN); } while (0)
@@ -201,49 +215,101 @@ void modbus_cb(uint8_t evt) {
 	}
 }
 
-
 static bool console_cmds_user(char* cmd) {
   switch (console_hash(cmd)) {
-    case /** SLAVE **/ 0X1568: modbusSetSlaveId(console_u_pop()); break;
-    case /** FWD **/ 0XB4D0: BED_FWD(); break;
-    case /** REV **/ 0X0684: BED_REV(); break;
-    case /** STOP **/ 0X3F5D: BED_STOP(); break;
-    case /** SEND-RAW **/ 0XF690: {
+	case /** ?VER **/ 0xc33b: consolePrint(CONSOLE_PRINT_STR_P, (console_cell_t)(PSTR(VERSION_BANNER_VERBOSE_STR))); break;
+	
+	// Regs
+    case /** ?V **/ 0x688c: fori(REGS_COUNT) { regsPrintValue(i); } break;        // 
+    case /** V **/ 0xb5f3: 
+	    { const uint8_t idx = console_u_pop(); const uint8_t v = console_u_pop(); if (idx < REGS_COUNT) REGS[idx] = v; } 
+		break; 
+	case /** ??V **/ 0x85d3: {
+		fori (REGS_COUNT) {
+			consolePrint(CONSOLE_PRINT_NEWLINE, 0); 
+			consolePrint(CONSOLE_PRINT_SIGNED, (console_cell_t)i);
+			consolePrint(CONSOLE_PRINT_STR_P, (console_cell_t)regsGetRegisterName(i));
+			consolePrint(CONSOLE_PRINT_STR_P, (console_cell_t)regsGetRegisterDescription(i));
+			wdt_reset();
+		}
+		if (regsGetHelpStr())
+			consolePrint(CONSOLE_PRINT_STR_P, (console_cell_t)regsGetHelpStr());
+		}
+		break;
+		
+	// EEPROM data
+	case /** NV-DEFAULT **/ 0xfcdb: regsNvSetDefaults(); break;
+	case /** NV-W **/ 0xa8c7: regsNvWrite(); break;
+	case /** NV-R **/ 0xa8c2: regsNvRead(); break;
+
+#if 0	  
+	case `?t`: console_print_u32(millis()); return 0; 
+    case `z`: commonSetTimestampOffset(millis()); return 0;
+    case `?z`: console_print_u32(commonGetTimestampOffset()); return 0;
+
+	// Runtime errors...
+    case `restart`: while (1) continue; return 0;
+    case `cli`: cli(); return 0;
+    case `abort`: verifyCanPop(1); RUNTIME_ERROR(event_mk(u_pop())); return 0;
+
+	// Registers
+    case `dump`: 
+		verifyCanPop(1); 
+		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS, (u_tos > 0)); 
+		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS_FAST, (u_pop() > 1)); 
+		return 0;
+	case `x`:  regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS | REGS_ENABLES_MASK_DUMP_REGS_FAST, 0); return 0; // Shortcut for killing dump. 
+
+	// Events & trace...
+    case `event`: verifyCanPop(1); eventPublish(u_pop()); return 0;
+    case `event-ex`: // (id p8 p16 -- ) 
+        { verifyCanPop(3); const uint16_t p16 = u_pop(); const uint8_t p8 = u_pop(); eventPublish(u_pop(), p8, p16); } return 0;    
+	case `ctm`: case `clear-trace-mask`: eventTraceMaskClear(); return 0;
+    case `dtm`:	case `default-trace-mask`: eventTraceMaskSetDefault(); return 0;
+	case `?tm`:	case `?trace-mask`: fori((COUNT_EV + 15) / 16) console_print_hex((eventGetTraceMask()[i*2+1]<<8) | eventGetTraceMask()[i*2]); return 0;    
+    case `stm`:	case `set-trace-mask`: /* (f ev-id) */ verifyCanPop(2); { const uint8_t ev_id = u_pop(); eventTraceMaskSet(ev_id, !!u_pop()); } return 0;        
+#endif
+
+    case /** SLAVE **/ 0x1568: modbusSetSlaveId(console_u_pop()); break;
+    case /** FWD **/ 0xb4d0: BED_FWD(); break;
+    case /** REV **/ 0x0684: BED_REV(); break;
+    case /** STOP **/ 0x3f5d: BED_STOP(); break;
+    case /** SEND-RAW **/ 0xf690: {
         uint8_t* d = (uint8_t*)console_u_pop(); uint8_t sz = *d; modbusSendRaw(d + 1, sz);
       } break;
-    case /** SEND **/ 0X76F9: {
+    case /** SEND **/ 0x76f9: {
         uint8_t* d = (uint8_t*)console_u_pop(); uint8_t sz = *d; modbusMasterSend(d + 1, sz);
       } break;
-    case /** RELAY **/ 0X1DA6: { // (state relay slave -- )      
+    case /** RELAY **/ 0x1da6: { // (state relay slave -- )      
         uint8_t slave_id = console_u_pop();
         uint8_t rly = console_u_pop();
         modbusRelayBoardWrite(slave_id, rly, console_u_pop());
       } break;
 
-    case /** LED **/ 0XDC88: digitalWrite(GPIO_PIN_LED, led_state = !!console_u_pop()); break;
-    case /** PIN **/ 0X1012: {
+    case /** LED **/ 0xdc88: digitalWrite(GPIO_PIN_LED, led_state = !!console_u_pop()); break;
+    case /** PIN **/ 0x1012: {
         uint8_t pin = console_u_pop();
         digitalWrite(pin, console_u_pop());
       } break;
-    case /** PMODE **/ 0X48D6: {
+    case /** PMODE **/ 0x48d6: {
         uint8_t pin = console_u_pop();
         pinMode(pin, console_u_pop());
       } break;
      
-	case /** AUTO **/ 0XB8EA: t_autosend.setPeriod((uint16_t)console_u_pop()); break;
-    case /** ACCEL **/ 0X8FED: t_accel.setPeriod((uint16_t)console_u_pop()); break;
-	case /** ZERO **/ 0X39C7: do_zero = true; break;
-	case /** ?ACC **/ 0XF2FB: 
+	case /** AUTO **/ 0xb8ea: t_autosend.setPeriod((uint16_t)console_u_pop()); break;
+    case /** ACCEL **/ 0x8fed: t_accel.setPeriod((uint16_t)console_u_pop()); break;
+	case /** ZERO **/ 0x39c7: do_zero = true; break;
+	case /** ?ACC **/ 0xf2fb: 
 	  digitalWrite(10, LOW);
       SPI.transfer(0x80 | (uint8_t)console_u_pop());		// Transfer Starting Reg Address To Be Read  
       consolePrint(CONSOLE_PRINT_HEX, SPI.transfer(0x00));
       digitalWrite(10, HIGH);
 	  break;
-    case /** RLY **/ 0X07A2: writeRelay(console_u_pop()); break;
-    case /** WDOG **/ 0X72DE: t_watchdog.setPeriod((uint16_t)console_u_pop()); break;
-    case /** ANGLE **/ 0X2CE4: angle_target = console_u_pop(); slew = S_SLEW_START; break;
-    case /** REM **/ 0X069F: rem = console_u_pop(); break;
-    case /** DEADBAND **/ 0X1A28: deadband = console_u_pop(); break;
+    case /** RLY **/ 0x07a2: writeRelay(console_u_pop()); break;
+    case /** WDOG **/ 0x72de: t_watchdog.setPeriod((uint16_t)console_u_pop()); break;
+    case /** ANGLE **/ 0x2ce4: angle_target = console_u_pop(); slew = S_SLEW_START; break;
+    case /** REM **/ 0x069f: rem = console_u_pop(); break;
+    case /** DEADBAND **/ 0x1a28: deadband = console_u_pop(); break;
     default: return false;
   }
   return true;
@@ -251,17 +317,13 @@ static bool console_cmds_user(char* cmd) {
 
 void setup() {
   Serial.begin(9600);
+  commonInit();
   modbusInit(Serial, GPIO_PIN_RS485_TX_EN, modbus_cb);
 	BED_STOP();
   setup_accel();
-  consSerial.begin(19200);
-  FConsole.begin(console_cmds_user, consSerial);
+	console_init();
   setupRelay();
   
-  // Signon message, note two newlines to leave a gap from any preceding output on the terminal.
-  // Also note no following newline as the console prints one at startup, then a prompt.
-  consolePrint(CONSOLE_PRINT_STR_P,
-               (console_cell_t)PSTR(CONSOLE_OUTPUT_NEWLINE_STR CONSOLE_OUTPUT_NEWLINE_STR "SBC2022 Relay"));
   pinMode(GPIO_PIN_WDOG, OUTPUT);
   pinMode(GPIO_PIN_LED, OUTPUT);
   pinMode(GPIO_PIN_SPARE_1, OUTPUT);
@@ -366,7 +428,7 @@ void loop() {
 			}
 		}
 	}
-	
-    FConsole.service();
+
+	console_service();
 	modbusService();
 }

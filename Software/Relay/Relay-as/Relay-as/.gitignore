@@ -1,0 +1,3 @@
+
+# Ignore .local.h files copied from Arduino project.
+*.local.h

@@ -228,6 +228,8 @@
         <avrgcccpp.assembler.debugging.DebugLevel>Default (-Wa,-g)</avrgcccpp.assembler.debugging.DebugLevel>
       </AvrGccCpp>
     </ToolchainSettings>
+    <PreBuildEvent>
+    </PreBuildEvent>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\..\Relay-arduino\ADXL345.h">
@@ -246,6 +248,14 @@
       <SubType>compile</SubType>
       <Link>Common\Buffer.h</Link>
     </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\common.cpp">
+      <SubType>compile</SubType>
+      <Link>Common\common.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\common.h">
+      <SubType>compile</SubType>
+      <Link>Common\common.h</Link>
+    </Compile>
     <Compile Include="..\..\Relay-arduino\src\common\console-config-default.h">
       <SubType>compile</SubType>
       <Link>Common\console-config-default.h</Link>
@@ -261,6 +271,14 @@
     <Compile Include="..\..\Relay-arduino\src\common\console.h">
       <SubType>compile</SubType>
       <Link>Common\console.h</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\eeprom_driver.cpp">
+      <SubType>compile</SubType>
+      <Link>Common\eeprom_driver.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\eeprom_driver.h">
+      <SubType>compile</SubType>
+      <Link>Common\eeprom_driver.h</Link>
     </Compile>
     <Compile Include="..\..\Relay-arduino\src\common\fconsole.cpp">
       <SubType>compile</SubType>
@@ -282,7 +300,26 @@
       <SubType>compile</SubType>
       <Link>Common\modbus.h</Link>
     </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\regs.cpp">
+      <SubType>compile</SubType>
+      <Link>Common\regs.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\regs.h">
+      <SubType>compile</SubType>
+      <Link>Common\regs.h</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\utils.cpp">
+      <SubType>compile</SubType>
+      <Link>Common\utils.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\src\common\utils.h">
+      <SubType>compile</SubType>
+      <Link>Common\utils.h</Link>
+    </Compile>
     <Compile Include="Sketch.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="version.h">
       <SubType>compile</SubType>
     </Compile>
     <Content Include="readme.html">
