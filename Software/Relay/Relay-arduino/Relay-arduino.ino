@@ -3,6 +3,7 @@
 #include <SPI.h>
 #include <avr/wdt.h>
 
+#include "project_config.h"
 #include "SparkFun_ADXL345.h"         // SparkFun ADXL345 Library
 #include "src\common\console.h"
 #include "src\common\console-internals.h"
@@ -14,6 +15,9 @@
 #include "src\common\regs.h"
 #include "src\common\utils.h"
 #include "version.h"
+
+#include "src\common\debug.h"
+FILENUM(1);
 
 // Console
 SoftwareSerial consSerial(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); // RX, TX
@@ -219,6 +223,11 @@ static bool console_cmds_user(char* cmd) {
   switch (console_hash(cmd)) {
 	case /** ?VER **/ 0xc33b: consolePrint(CONSOLE_PRINT_STR_P, (console_cell_t)(PSTR(VERSION_BANNER_VERBOSE_STR))); break;
 	
+	// Runtime errors...
+    case /** RESTART **/ 0x7092: while (1) continue; break;
+    case /** CLI **/ 0xd063: cli(); break;
+    case /** ABORT **/ 0xfeaf: RUNTIME_ERROR(console_u_pop()); break;
+
 	// Regs
     case /** ?V **/ 0x688c: fori(REGS_COUNT) { regsPrintValue(i); } break;        // 
     case /** V **/ 0xb5f3: 
@@ -246,11 +255,6 @@ static bool console_cmds_user(char* cmd) {
 	case `?t`: console_print_u32(millis()); return 0; 
     case `z`: commonSetTimestampOffset(millis()); return 0;
     case `?z`: console_print_u32(commonGetTimestampOffset()); return 0;
-
-	// Runtime errors...
-    case `restart`: while (1) continue; return 0;
-    case `cli`: cli(); return 0;
-    case `abort`: verifyCanPop(1); RUNTIME_ERROR(event_mk(u_pop())); return 0;
 
 	// Registers
     case `dump`: 
@@ -331,8 +335,6 @@ void setup() {
   pinMode(GPIO_PIN_SPARE_3, OUTPUT);
   FConsole.prompt();
 }
-
-#define ELEMENT_COUNT(x_) (sizeof(x_) / sizeof(x_[0]))
 
 float tilt(float a, float b, float c) {
 	return 360.0 / M_PI * atan2(a, sqrt(b*b + c*c));

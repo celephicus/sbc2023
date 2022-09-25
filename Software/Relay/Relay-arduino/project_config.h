@@ -6,6 +6,14 @@
 // Extra help text for console.
 #define CFG_WANT_VERBOSE_CONSOLE 0
 
+// Watchdog. 
+#define CFG_WATCHDOG_TIMEOUT WDTO_2S   
+#define CFG_WATCHDOG_ENABLE 0
+#define CFG_WATCHDOG_MODULE_COUNT 0
+
+// No trace.
+#define CFG_WANT_DEBUG_TRACE 0
+
 #endif		// PROJECT_CONFIG_H__
 
 #if 0
@@ -15,11 +23,6 @@ typedef uint16_t RUN_EVERY_TIME_T;
 
 // For lc2.h
 #define CFG_LC2_USE_SWITCH 0
-
-// Watchdog. 
-#define CFG_WATCHDOG_TIMEOUT WDTO_2S   
-#define CFG_WATCHDOG_ENABLE 1
-#define CFG_WATCHDOG_MODULE_COUNT 0
 
 // Timers
 // TODO: Update to new standard (see FLW).
