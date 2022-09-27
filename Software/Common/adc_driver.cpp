@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <avr/wdt.h>
 
-#include "project_config.h"
+#include "..\..\project_config.h"
 #include "debug.h"
 #include "types.h"
 #include "event.h"

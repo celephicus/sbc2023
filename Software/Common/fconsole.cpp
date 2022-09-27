@@ -21,6 +21,7 @@ void consolePrint(uint8_t opt, console_cell_t x) {
 			default:						(void)x; return;															// Ignore, print nothing.
 			case CONSOLE_PRINT_SIGNED:		FConsole.s_stream->print(x, DEC); break;
 			case CONSOLE_PRINT_UNSIGNED:	FConsole.s_stream->print('+'); FConsole.s_stream->print((console_ucell_t)x, DEC); break;
+			case CONSOLE_PRINT_UNSIGNED_DOUBLE:	FConsole.s_stream->print('+'); FConsole.s_stream->print((uint32_t)x, DEC); break;
 			case CONSOLE_PRINT_HEX:			FConsole.s_stream->print('$');
 											for (console_ucell_t m = 0xf; CONSOLE_UCELL_MAX != m; m = (m << 4) | 0xf) {
 												if ((console_ucell_t)x <= m)

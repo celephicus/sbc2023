@@ -24,7 +24,7 @@ enum {
 // Struct to include registers and other stuff in NV storage. 
 typedef struct registers_t {
 	regs_t vals[REGS_COUNT];							// Must be first in the struct as there are some non-NV regs first.
-//	uint8_t event_trace_mask[EVENT_TRACE_MASK_SIZE];
+	uint8_t event_trace_mask[EVENT_TRACE_MASK_SIZE];
 	regs_extra_t extra;
 } registers_t;
 
@@ -32,6 +32,9 @@ typedef struct registers_t {
 extern registers_t g_registers;
 #define REGS (g_registers.vals)
 #define REGS_EXTRA (g_registers.extra)
+
+// Function to get the event trace mask, a block of 32 bytes to control which event IDs get traced. 
+uint8_t* eventGetTraceMask();
 
 // User function for setting default value of extra data. 
 void regsExtraSetDefaults()  __attribute__((weak));

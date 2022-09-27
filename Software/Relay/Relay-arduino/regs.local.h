@@ -12,15 +12,20 @@ typedef struct {
 void regsExtraSetDefaults()  { /* empty */ }
 
 // Registers are defined with 3 parameters, name, default value, and a short comment that is turned into help text. 
-#define REGS_DEFS(gen_)																														\
- gen_(FLAGS,						REGS_NO_DEFAULT,					"Various flags, see REGS_FLAGS_MASK_xxx")							\
- gen_(EEPROM_RC,					REGS_NO_DEFAULT,					"Last NV read status")												\
- gen_(RESTART,						REGS_NO_DEFAULT,					"Snapshot of MCUSR")												\
- gen_(ADC_12V_MON,					REGS_NO_DEFAULT,					"Raw ADC value DC power volts")										\
- gen_(CONFIG,						REGS_NO_DEFAULT,					"Config bits read from links at startup")							\
-																																			\
- /* NV regs. */																																\
- gen_(ENABLES,						0,									"Enable flags.")													\
+#define REGS_DEFS(gen_)																								\
+ gen_(FLAGS,				REGS_NO_DEFAULT,	"Various flags, see REGS_FLAGS_MASK_xxx")							\
+ gen_(EEPROM_RC,			REGS_NO_DEFAULT,	"Last NV read status")												\
+ gen_(RESTART,				REGS_NO_DEFAULT,	"Snapshot of MCUSR")												\
+																													\
+ /* ADC */																											\
+ gen_(ADC_VOLTS_MON_12V_IN,	REGS_NO_DEFAULT,	"Raw ADC DC power in volts")										\
+ gen_(ADC_VOLTS_MON_BUS,	REGS_NO_DEFAULT,	"Raw ADC Bus volts")												\
+ gen_(VOLTS_MON_12V_IN,		REGS_NO_DEFAULT,	"DC power in /mV")													\
+ gen_(VOLTS_MON_BUS,		REGS_NO_DEFAULT,	"Bus volts /mV")													\
+																													\
+ /* NV regs. */																										\
+ gen_(ENABLES,				0,					"Enable flags")														\
+ gen_(MODBUS_EVENT_DUMP,	0xffff,				"Flags whether corresponding MODBUS event is dumped")				\
 
 // Define the start of the NV regs. The region is from this index up to the end of the register array. 
 #define REGS_START_NV_IDX REGS_IDX_ENABLES
@@ -30,7 +35,8 @@ void regsExtraSetDefaults()  { /* empty */ }
 
 // Flags are defined with 3 parameters, name, bit position and a short description that is turned into help text. 
 #define REGS_FLAGS_DEFS(gen_)																							\
-	gen_(DC_VOLTS_LOW,			0,	"External power volts low")															\
+	gen_(DC_IN_VOLTS_LOW,			0,	"External DC power volts low")													\
+	gen_(BUS_VOLTS_LOW,				1,	"Bus volts low")																\
 																														\
 	/* Fault flags. */																									\
 	gen_(WATCHDOG_RESTART,		15, "Whoops...")																		\

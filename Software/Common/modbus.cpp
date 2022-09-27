@@ -2,11 +2,11 @@
 #include "modbus.h"
 #include "buffer.h"
 
-// TODO: Add way to set gpio pins for h/w debugging.
 // TODO: Add timeout function with unit test. 
 #define TIMEOUT 50
-#define RX_TIMEOUT_MICROS 4000
+#define RX_TIMEOUT_MICROS 2000 // 2 character times 
 
+// Keep all our state in one place for easier viewing in debugger. 
 typedef struct {
 	uint8_t tx_en;
 	Stream* sRs485;
@@ -17,12 +17,25 @@ typedef struct {
 	Buffer buf_resp;
 	uint8_t request[RESP_SIZE];
 	uint16_t rx_timestamp_micros;
+	modbus_timing_debug_cb debug_timing_cb;
+	uint8_t response_valid;		// Result of verify_response for debugging.
+
 } modbus_context_t;
 static modbus_context_t f_ctx;
 
+// Added to debug exact timings on my new logic analyser on some spare output pins.
+void modbusSetTimingDebugCb(modbus_timing_debug_cb cb) { f_ctx.debug_timing_cb = cb; }
+static void timing_debug(uint8_t id, uint8_t s) {
+	if (f_ctx.debug_timing_cb)
+		f_ctx.debug_timing_cb(id, s);
+}
+
+// Added for debug to get reason why response was rejected.
+uint8_t modbusGetResponseValidCode() { return f_ctx.response_valid; }
+
 static void set_master_wait(uint8_t bytes) {
 	f_ctx.expected_response_byte_size = bytes;
-	//gpioSPARE_3Write(bytes > 0);
+	timing_debug(MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT, (bytes > 0));
 }
 static bool is_master_waiting_response() {
 	return (f_ctx.expected_response_byte_size > 0);
@@ -32,18 +45,18 @@ static void restart_rx_frame_timer() {
 	f_ctx.rx_timestamp_micros = (uint16_t)micros();
 	if (0 == f_ctx.rx_timestamp_micros)
 		f_ctx.rx_timestamp_micros = 1;
-	//gpioSPARE_1Write(1);
+	timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT, true);
 }
 static void stop_rx_frame_timeout() { 
 	f_ctx.rx_timestamp_micros = 0; 
-	//gpioSPARE_1Write(0);
+	timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT, false);
 }
 static bool is_rx_frame_timeout() { 
 	if (
 	  (f_ctx.rx_timestamp_micros > 0) &&	// No timeout unless set.
 	  ((uint16_t)micros() - f_ctx.rx_timestamp_micros > RX_TIMEOUT_MICROS) 
 	) {
-		stop_rx_frame_timeout();		// Preevent further spurious timeouts. 
+		stop_rx_frame_timeout();		// Prevent further spurious timeouts. 
 		return true;
 	}
 	return false;
@@ -58,6 +71,7 @@ static uint8_t verify_response();
 static void appendCRC(uint8_t* buf, uint8_t sz);
 
 void modbusInit(Stream& rs485, uint8_t tx_en, modbus_response_cb cb) {
+	memset(&f_ctx, 0, sizeof(f_ctx));
 	f_ctx.tx_en = tx_en;
 	f_ctx.sRs485 = &rs485;
 	f_ctx.cb_resp = cb;
@@ -72,6 +86,9 @@ void modbusInit(Stream& rs485, uint8_t tx_en, modbus_response_cb cb) {
 void modbusSetSlaveId(uint8_t id) { f_ctx.slave_id = id; }
 uint8_t modbusGetSlaveId() { return f_ctx.slave_id; }
 
+static bool is_request_for_me(uint8_t id) {
+	return (id == f_ctx.slave_id) && (id >= 1) && (id < 248);
+}
 void modbusSendRaw(uint8_t* buf, uint8_t sz) {
 	digitalWrite(f_ctx.tx_en, HIGH);
 	f_ctx.sRs485->write(buf, sz);
@@ -127,8 +144,6 @@ bool modbusGetResponse(uint8_t* len, uint8_t* buf) {
 	return false;
 }
 
-#include <SoftwareSerial.h>
-extern SoftwareSerial consSerial;
 void modbusService() {
 	// Master may be waiting for a reply from a slave. On timeout, flag timeout to callback.
 	if (is_master_waiting_response()) {
@@ -140,16 +155,15 @@ void modbusService() {
 	
 	// Service RX timer, timeout with data is a frame.
 	if (is_rx_frame_timeout()) {
-		//gpioSPARE_2Write(1);
-		if (f_ctx.buf_resp.len() > 0) {		// Do we have data, might well get spurious timeouts.
+		timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_FRAME, true);
+		if (f_ctx.buf_resp.len() > 0) {	// Do we have data, might well get spurious timeouts.
 			if (is_master_waiting_response()) {		// Master waiting for response.
-				const uint8_t valid = verify_response(); 				// Decide if response is valid...
-				consSerial.print("<"); consSerial.print(valid); consSerial.print(">");
+				f_ctx.response_valid = verify_response(); 				// Decide if response is valid...
 				set_master_wait(0);
-				f_ctx.cb_resp((0 == valid) ? MODBUS_CB_EVT_RESP : MODBUS_CB_EVT_RESP_BAD);
+				f_ctx.cb_resp((0 == f_ctx.response_valid) ? MODBUS_CB_EVT_RESP : MODBUS_CB_EVT_RESP_BAD);
 			}
-			else {								// Master NOT waiting, must be a request from someone, only flag if it is addressed to us. 
-				if (f_ctx.buf_resp[MODBUS_FRAME_IDX_SLAVE_ID] == modbusGetSlaveId())
+			else {						// Master NOT waiting, must be a request from someone, only flag if it is addressed to us. 
+				if (is_request_for_me(f_ctx.buf_resp[MODBUS_FRAME_IDX_SLAVE_ID]))
 					f_ctx.cb_resp(MODBUS_CB_EVT_REQ);
 				else
 					f_ctx.cb_resp(MODBUS_CB_EVT_REQ_X);
@@ -163,7 +177,7 @@ void modbusService() {
 		restart_rx_frame_timer();
 		f_ctx.buf_resp.add(c);
 	}
-	//gpioSPARE_2Write(0);
+	timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_FRAME, false);
 }
 
 static uint8_t get_response_bytesize() {

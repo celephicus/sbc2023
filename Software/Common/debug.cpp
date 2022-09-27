@@ -3,8 +3,8 @@
 
 #include "..\..\project_config.h"
 #include "debug.h"
-//#include "types.h"
-//#include "event.h"
+#include "types.h"
+#include "event.h"
 #include "regs.h"
 #include "utils.h"
 

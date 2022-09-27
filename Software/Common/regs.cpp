@@ -2,19 +2,15 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "utils.h"
-#include "eeprom_driver.h"
-#include "console.h"
-#include "regs.h"
-
-/*
-#include "project_config.h"
+#include "..\..\project_config.h"
 #include "debug.h"
 #include "types.h"
 #include "event.h"
-#include "printf_serial.h"
-#include "myprintf.h"
-*/
+#include "utils.h"
+#include "eeprom_driver.h"
+#include "console.h"
+#include "event.h"
+#include "regs.h"
 
 registers_t g_registers;
 
@@ -56,7 +52,7 @@ void regsNvSetRegisterDefaults(uint8_t start, uint8_t end) {
 static void set_defaults(void* data, const void* defaultarg) {
     (void)data;
     (void)defaultarg;
-    //eventTraceMaskClear();										// Clear trace mask. 
+    eventTraceMaskClear();										// Clear trace mask. 
     regsNvSetRegisterDefaults(REGS_START_NV_IDX, REGS_COUNT);	// Set default values for NV regs.
 	regsExtraSetDefaults();										// Set default values for extra user data.
 }
@@ -147,13 +143,14 @@ void regsPrintValue(uint8_t reg_idx) {
 	consolePrint((_BV(reg_idx) & REGS_PRINT_HEX_MASK) ? CONSOLE_PRINT_HEX : CONSOLE_PRINT_UNSIGNED, (console_cell_t)REGS[reg_idx]);	
 }
 
+uint8_t* eventGetTraceMask() { return g_registers.event_trace_mask; } 
+
 #if 0
 
 FILENUM(208);  // All source files in common have file numbers starting at 200. 
 
 // I like them at offset 0, not actually necessary. 
 STATIC_ASSERT(0 == REGS_IDX_FLAGS); 
-uint8_t* eventGetTraceMask() { return g_registers.event_trace_mask; } 
 
 const char* regsFormatValue(uint8_t reg_idx) {
 	static char outs[7]; // Max string is +65535 so 6 chars + 1. 

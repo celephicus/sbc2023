@@ -1,9 +1,29 @@
 #ifndef MODBUS_H__
 #define MODBUS_H__
 
+/* Callback function supplied to modbusInit(). This is how slaves get requests & send responses back, and how the master receives the responses. */
 typedef void (*modbus_response_cb)(uint8_t evt);
 
+/* Initialise the driver. Initially the slave address is set to zero, which is not a valid slave address, so it will not respond to any requests
+	as this is outside the legal address range of 1-247 inclusive. */
+void modbusInit(Stream& rs485, uint8_t tx_en, modbus_response_cb cb);
+
+// Callback function used for hardware debugging of timing. The `id' argument is event-type, `s' is state.
+enum {
+	MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT,	// Master waiting for a response.
+	MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT,
+	MODBUS_TIMING_DEBUG_EVENT_RX_FRAME,		// Frame received from bus. 
+};
+typedef void (*modbus_timing_debug_cb)(uint8_t id, uint8_t s);
+void modbusSetTimingDebugCb(modbus_timing_debug_cb cb);
 #define RESP_SIZE 20
+
+// Slave ID, in range 1..247 inclusive.
+void modbusSetSlaveId(uint8_t id);
+uint8_t modbusGetSlaveId();
+
+// For debugging when we get a failed response, return code to determine why it failed.
+uint8_t modbusGetResponseValidCode();
 
 enum {
 	MODBUS_FRAME_IDX_SLAVE_ID,
@@ -13,7 +33,6 @@ enum {
 
 // Event IDs sent as callback from driver. 
 #define MODBUS_CB_EVT_DEFS(gen_)															\
-	gen_(NONE,						"Null event, never sent.")								\
 	gen_(RESP,						"Master received correct response from slave.")			\
 	gen_(RESP_NONE,					"Master received no response from slave.")				\
 	gen_(RESP_BAD,					"Master received corrupt response from slave.")			\
@@ -44,10 +63,6 @@ enum {
 	MODBUS_FC_MASK_WRITE_REGISTER       = 0x16,
 	MODBUS_FC_WRITE_AND_READ_REGISTERS  = 0x17,
 };
-
-void modbusInit(Stream& rs485, uint8_t tx_en, modbus_response_cb cb);
-void modbusSetSlaveId(uint8_t id);
-uint8_t modbusGetSlaveId();
 
 void modbusSendRaw(uint8_t* buf, uint8_t sz);
 void modbusMasterSend(uint8_t* frame, uint8_t sz);

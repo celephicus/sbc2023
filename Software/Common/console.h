@@ -35,6 +35,7 @@ enum {
 	CONSOLE_PRINT_NEWLINE,		// Prints the newline string CONSOLE_OUTPUT_NEWLINE_STR, second arg ignored, no seperator is printed.
 	CONSOLE_PRINT_SIGNED,		// Prints second arg as a signed integer, e.g `-123 ', `0 ', `456 ', note trailing SPACE.
 	CONSOLE_PRINT_UNSIGNED,		// Print second arg as an unsigned integer, e.g `+0 ', `+123 ', note trailing SPACE.
+	CONSOLE_PRINT_UNSIGNED_DOUBLE,
 	CONSOLE_PRINT_HEX,			// Print second arg as a hex integer, e.g `$0000 ', `$abcd ', note trailing SPACE.
 	CONSOLE_PRINT_STR,			// Print second arg as pointer to string in RAM, with trailing space.
 	CONSOLE_PRINT_STR_P,		// Print second arg as pointer to string in PROGMEM, with trailing space.

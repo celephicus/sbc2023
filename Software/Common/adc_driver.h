@@ -77,9 +77,9 @@ enum {
 };
 
 #if defined(__AVR_ATmega328P__)
- #define ADC_DRIVER_CHAN_FROM_ARDUINO_PIN(p_) ((p_) - A0 + ADC_DRIVER_CHAN_0)
+ #define ADC_DRIVER_ARD_PIN_TO_CHAN(p_) ((p_) - A0 + ADC_DRIVER_CHAN_0)
 #elif defined(__AVR_ATmega2560__)
- #define ADC_DRIVER_CHAN_FROM_ARDUINO_PIN(p_) ((p_) - A0 + (((p_) <= A7) ? ADC_DRIVER_CHAN_0 : ADC_DRIVER_CHAN_8))
+ #define ADC_DRIVER_ARD_PIN_TO_CHAN(p_) ((p_) - A0 + (((p_) <= A7) ? ADC_DRIVER_CHAN_0 : ADC_DRIVER_CHAN_8))
 #else
  #error Unknown processor!	    
 #endif

@@ -5,7 +5,7 @@
 D1/TXO,RS485_TXD,TXD,RS485 TX,Bus,J7/12,31,PD1,TXD/PCINT17,Bootloader
 D0/RXI,RS485_RXD,RXD,RS485 RX,Bus,J7/11,30,PD0,RXD/PCINT16,Bootloader
 D2,ATN,output,Pulse high to signal ATN low on bus.,Bus,J7/8,32,PD2,INT0/PCINT18,
-D3,WDOG,output,Falling edge pats output relay watchdog. ,Relay Driver,J7/7,1,PD3,PCINT19/OC2B/INT1,PWM
+D3,WDOG,output direct,Falling edge pats output relay watchdog. ,Relay Driver,J7/7,1,PD3,PCINT19/OC2B/INT1,PWM
 D4,RCLK,output,Relay driver serial clock,Relay Driver,J7/6,2,PD4,PCINT20/XCK/T0,
 D5,RDAT,output,Relay driver serial data,Relay Driver,J7/5,9,PD5,PCINT21/OC0B/T1,PWM
 D6,RSEL,output active=low,Relay driver select,Relay Driver,J7/4,10,PD6,PCINT22/OC0A/AIN0,PWM
@@ -22,8 +22,8 @@ A2,SPARE_1,output direct,Spare to adaptor board,Bed Adaptor,J6/6,25,PC2,ADC2/PCI
 A3,SPARE_2,output direct,Spare to adaptor board,Bed Adaptor,J6/5,26,PC3,ADC3/PCINT11,
 A4,SDA,SDA,I2C to Adaptor,Bed Adaptor,,27,PC4,ADC4/SDA/PCINT12,
 A5,SCL,SCL,I2C to Adaptor,Bed Adaptor,,28,PC5,ADC5/SCL/PCINT13,
-A6,MON_12V_IN,ADC6,Monitor volts input,Power,,19,ADC6,ADC6,Analogue input only.
-A7,MON_12V_BUS,ADC7,Monitor volts on bus,Bus,,22,ADC7,ADC7,Analogue input only.
+A6,VOLTS_MON_12V_IN,ADC6,Monitor volts input,Power,,19,ADC6,ADC6,Analogue input only.
+A7,VOLTS_MON_BUS,ADC7,Monitor volts on bus,Bus,,22,ADC7,ADC7,Analogue input only.
 RST,,,,,"J7/10, J6/3",29,PC6,RESET/PCINT14,
 GND,,,,,"J7/9, J6/2","3, 5, 21",GND,,
 VCC,,,,,J6/4,"4, 6",VCC,,

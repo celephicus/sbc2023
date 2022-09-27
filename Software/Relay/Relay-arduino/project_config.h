@@ -14,13 +14,13 @@
 // No trace.
 #define CFG_WANT_DEBUG_TRACE 0
 
-#endif		// PROJECT_CONFIG_H__
-
-#if 0
 // runEvery()
 typedef uint16_t RUN_EVERY_TIME_T;
 #define RUN_EVERY_GET_TIME() ((RUN_EVERY_TIME_T)millis())
 
+#endif		// PROJECT_CONFIG_H__
+
+#if 0
 // For lc2.h
 #define CFG_LC2_USE_SWITCH 0
 

@@ -1,12 +1,15 @@
 
 #include <Arduino.h>
 
-//#include "project_config.h"
-//#include "debug.h"
-#include "eeprom_driver.h"
+#include "..\..\project_config.h"
+#include "debug.h"
+#include "types.h"
+#include "event.h"
 #include "utils.h"
 
-//FILENUM(202);  // All source files in common have file numbers starting at 200. 
+#include "eeprom_driver.h"
+
+FILENUM(202);  // All source files in common have file numbers starting at 200. 
 
 // Data is stored in EEPROM as checksum then <user data>
 // Data is stored in RAM as:  <user data>
