@@ -235,6 +235,14 @@
     </PreBuildEvent>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\Relay-arduino\sm_supervisor.cpp">
+      <SubType>compile</SubType>
+      <Link>sm_supervisor.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-arduino\sm_supervisor.h">
+      <SubType>compile</SubType>
+      <Link>sm_supervisor.h</Link>
+    </Compile>
     <Compile Include="..\..\Relay-arduino\driver.cpp">
       <SubType>compile</SubType>
       <Link>driver.cpp</Link>

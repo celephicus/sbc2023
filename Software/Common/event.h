@@ -145,18 +145,22 @@ enum { SM_NO_CHANGE = -1 };
 // Base class for event context, holds state only. Derived classes can have extra data as required. 
 typedef struct {
     int8_t state;
+	uint8_t id;
 } EventSmContextBase;
 
 // Event handler, a state machine. 
 typedef int8_t (*event_sm_t)(EventSmContextBase* context, event_t* ev);
 
-// Initialise the state machine to state 0. 
+// Initialise the state machine to state 0. Set the ID of the SM to `id', this is used for tracing.
 void eventInitSm(event_sm_t sm, EventSmContextBase* context, uint8_t id);
 
 // Send an event to the state machine. 
-void eventServiceSm(event_sm_t sm, EventSmContextBase* context, event_t* ev, uint8_t id);
+void eventServiceSm(event_sm_t sm, EventSmContextBase* context, event_t* ev);
 
 const char* eventGetEventName(uint8_t ev_id);
+
+// Post an event just to this state machine.
+void eventSmPostSelf(event_t ev);
 
 #endif
     

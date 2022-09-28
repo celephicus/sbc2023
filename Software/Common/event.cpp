@@ -144,22 +144,24 @@ bool eventTimerIsDone(uint8_t timer_idx) {
 }
 
 void eventInitSm(event_sm_t sm, EventSmContextBase* context, uint8_t id) {
-	(void)id;
+	context->id = id;
     context->state = 0;
     const event_t ENTRY_EVENT = event_mk(EV_SM_ENTRY);
     (void)sm(context, (event_t*)&ENTRY_EVENT);
 }
-void eventServiceSm(event_sm_t sm, EventSmContextBase* context, event_t* ev, uint8_t id) {
+void eventServiceSm(event_sm_t sm, EventSmContextBase* context, event_t* ev) {
     const int8_t new_state = sm(context, ev);
     if (SM_NO_CHANGE != new_state) {
 		const event_t ENTRY_EVENT = event_mk(EV_SM_ENTRY);
 		const event_t EXIT_EVENT = event_mk(EV_SM_EXIT);
         (void)sm(context, (event_t*)&EXIT_EVENT);      // Exit from current state.
-        eventTraceWrite(EV_DEBUG_SM_STATE_CHANGE, id, new_state);
+        eventTraceWrite(EV_DEBUG_SM_STATE_CHANGE, context->id, new_state);
         context->state = new_state;                      // Set new state.
         (void)sm(context, (event_t*)&ENTRY_EVENT);  // Enter new state.
     }
 }
+
+// void eventSmPostSelf(event_t ev) {}
 
 const char* eventGetEventName(uint8_t ev_id) {
     EVENT_DEFINE_EVENT_NAMES_1

@@ -18,6 +18,11 @@
 typedef uint16_t RUN_EVERY_TIME_T;
 #define RUN_EVERY_GET_TIME() ((RUN_EVERY_TIME_T)millis())
 
+// Timers
+enum {
+	TIMER_SM_SUPERVISOR = 0,
+};
+
 #endif		// PROJECT_CONFIG_H__
 
 #if 0

@@ -17,6 +17,7 @@
 #include "src\common\utils.h"
 #include "src\common\sbc2022_modbus.h"
 #include "driver.h"
+#include "sm_supervisor.h"
 #include "version.h"
 
 FILENUM(1);
@@ -263,6 +264,8 @@ static bool console_cmds_user(char* cmd) {
   return true;
 }
 
+static SmSupervisorContext sm_supervisor_context;
+
 void setup() {
 	Serial.begin(9600);
 	commonInit();
@@ -272,6 +275,8 @@ void setup() {
 	console_init();
 	driverInit();
   
+  	eventInitSm(smSupervisor, (EventSmContextBase*)&sm_supervisor_context, 0);
+
 	pinMode(GPIO_PIN_SPARE_1, OUTPUT);
 	pinMode(GPIO_PIN_SPARE_2, OUTPUT);
 	pinMode(GPIO_PIN_SPARE_3, OUTPUT);
@@ -285,12 +290,14 @@ void loop() {
 	driverService();
 	modbusService();
 	commonServiceLog();
-	if (t_10Hz.service())
+	if (t_10Hz.service()) {
 		commonServiceRegsDump10Hz();
+		eventTimerService();
+	}
 	
 	// Dispatch events. 
     event_t ev;
     while (EV_NIL != (ev = eventGet())) {   // Read events until there are no more left.
-		/* empty */
+		eventServiceSm(smSupervisor, (EventSmContextBase*)&sm_supervisor_context, &ev);
 	}
 }
