@@ -2,6 +2,7 @@ import csv, sys
 
 pins = {}
 direct = []
+unused = []
 infile = sys.argv[1]
 
 with open(infile, 'rt') as csvfile:
@@ -20,11 +21,11 @@ with open(infile, 'rt') as csvfile:
 			group = 'None'
 		if pin.startswith('D'): # Arduino pins might start with a D
 			pin = pin[1:]
-			
+		comment = '/* ' + desc + ' */' if desc else ''
 		if group not in pins: # Ready to insert new group...
 			pins[group] = []
 		text = f'GPIO_PIN_{sig.upper()} = {pin},'
-		pins[group].append(f'{text:48}/* {desc} */') # For example ine above this is `GPIO_PIN_RS485_TXD = 1                   /* RS485 TX */'.
+		pins[group].append(f'{text:48}{comment}') # For example ine above this is `GPIO_PIN_RS485_TXD = 1                   /* RS485 TX */'.
 		
 		if 'direct' in func:
 			assert port[0] == 'P'
@@ -34,7 +35,10 @@ with open(infile, 'rt') as csvfile:
 			assert io_bit in range(8)
 			sigCC = ''.join([s.title() for s in sig.split('_')])
 			text = f'GPIO_DECLARE_PIN_ACCESS_FUNCS({sigCC}, {io_port}, {io_bit})'
-			direct.append(f'{text:48}/* {desc} */')
+			direct.append(f'{text:48}{comment}')
+		
+		if 'unused' in func:
+			unused.append(pin)
 
 OUTFILE = 'gpio.local.h'
 try:
@@ -63,6 +67,9 @@ if direct:
 	text.append('// Direct access ports.	')
 	text.append('\n'.join(direct))
 	text.append('\n')
+
+if unused:
+	text.append(f"#define GPIO_UNUSED_PINS {', '.join(unused)}\n")
 	
 text.append('#endif		// GPIO_LOCAL_H__')	
 
