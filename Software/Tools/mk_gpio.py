@@ -1,9 +1,11 @@
-import csv, sys
+import csv, sys, re, os
 
 pins = {}
 direct = []
 unused = []
+
 infile = sys.argv[1]
+outfile = os.path.splitext(os.path.basename(infile))[0] + '.h'	# Write to current directory
 
 with open(infile, 'rt') as csvfile:
 	reader = csv.reader(csvfile)
@@ -21,28 +23,39 @@ with open(infile, 'rt') as csvfile:
 			group = 'None'
 		if pin.startswith('D'): # Arduino pins might start with a D
 			pin = pin[1:]
-		comment = '/* ' + desc + ' */' if desc else ''
+		comment = '// ' + desc if desc else ''	# Format description as comment.
+		sigCC = ''.join([s.title() for s in sig.split('_')]) # Make CamelCase version of signal name so TX_EN -> TxEn
+
+		mport = re.match(r'P([A-D])([0-7])$', port)	# Parse out port, bit from like `PA3'.
+		if mport:			# If no port def, ignore, will give error if tagged as `direct'. 
+			io_port, io_bit = mport.groups()
+		else:
+			io_port, io_bit = None, None
+			
 		if group not in pins: # Ready to insert new group...
 			pins[group] = []
-		text = f'GPIO_PIN_{sig.upper()} = {pin},'
-		pins[group].append(f'{text:48}{comment}') # For example ine above this is `GPIO_PIN_RS485_TXD = 1                   /* RS485 TX */'.
+			
+		text = f'GPIO_PIN_{sig.upper()} = {pin},'	# Insert Arduino pin definition.
+		pins[group].append(f'{text:48}{comment}') # For example line above this is `GPIO_PIN_RS485_TXD = 1                   /* RS485 TX */'.
 		
-		if 'direct' in func:
-			assert port[0] == 'P'
-			io_port = port[1]
-			assert io_port in 'ABCD'
-			io_bit = int(port[2])
-			assert io_bit in range(8)
-			sigCC = ''.join([s.title() for s in sig.split('_')])
-			text = f'GPIO_DECLARE_PIN_ACCESS_FUNCS({sigCC}, {io_port}, {io_bit})'
-			direct.append(f'{text:48}{comment}')
+		if 'direct' in func:	# Insert a bunch of inline functions to directly access the pin.
+			direct.append(f'''\
+{comment}			
+static inline void gpio{sigCC}SetModeOutput() {{ DDR{io_port} |= _BV({io_bit}); }}													
+static inline void gpio{sigCC}SetModeInput() {{ DDR{io_port} &= ~_BV({io_bit}); }}													
+static inline void gpio{sigCC}SetMode(bool fout) {{ if (fout) DDR{io_port} |= _BV({io_bit}); else DDR{io_port} &= ~_BV({io_bit}); }}
+static inline bool gpio{sigCC}Read() {{ return !!(PIN{io_port} | _BV({io_bit})); }}
+static inline void gpio{sigCC}Toggle() {{ PORT{io_port} ^= _BV({io_bit}); }}												
+static inline void gpio{sigCC}Set() {{ PORT{io_port} |= _BV({io_bit}); }}															
+static inline void gpio{sigCC}Clear() {{ PORT{io_port} &= ~_BV({io_bit}); }}															
+static inline void gpio{sigCC}Write(bool b) {{ if (b) PORT{io_port} |= _BV({io_bit}); else PORT{io_port} &= ~_BV({io_bit}); }}
+''')		
 		
-		if 'unused' in func:
+		if 'unused' in func:		# List all unused pins
 			unused.append(pin)
 
-OUTFILE = 'gpio.local.h'
 try:
-	existing = open(OUTFILE, 'rt').read()
+	existing = open(outfile, 'rt').read()
 except FileNotFoundError:
 	existing = None
 	
@@ -75,8 +88,8 @@ text.append('#endif		// GPIO_LOCAL_H__')
 
 text = '\n'.join(text)
 if text != existing:
-	print("Updated file %s." % OUTFILE, file=sys.stderr)
-	open(OUTFILE, 'wt').write(text)
+	print("Updated file %s." % outfile, file=sys.stderr)
+	open(outfile, 'wt').write(text)
 else:
-	print("Skipped file %s as unchanged." % OUTFILE, file=sys.stderr)
+	print("Skipped file %s as unchanged." % outfile, file=sys.stderr)
 

@@ -1,5 +1,5 @@
 #Arduino Pro Mini,,,,,,,,,
-"# For Relay board. Sensor board uses same assignment, but only groups Bus, Console, SPI.",,,,,,,,,
+# For Relay board.,,,,,,,,,
 ,,,,,,,,,
 #Arduino Pin,Signal,Function,Description,Group,Arduino Pin No.,Processor Pin No.,Processor Port,Processor Alternate Function,Comment
 D1/TXO,RS485_TXD,TXD,RS485 TX,Bus,J7/12,31,PD1,TXD/PCINT17,Bootloader
