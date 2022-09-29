@@ -1,4 +1,33 @@
+#include <Arduino.h>
 #include <SoftwareSerial.h>
+
+#include "project_config.h"
+#include "Relay-gpio.h"
+#include "console.h"
+
+// Console
+SoftwareSerial consSerial(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); // RX, TX
+
+static bool console_cmds(char* cmd) { return false; }
+void setup() {
+	consSerial.begin(19200);
+	consoleInit(console_cmds, consSerial);
+	// Signon message, note two newlines to leave a gap from any preceding output on the terminal.
+	consSerial.print(F("\n\n" CFG_BANNER_STR)); 	
+#if 0		// Print the restart code & EEPROM driver status. 
+	CONSOLE_PRINT_PSTR(CONSOLE_OUTPUT_NEWLINE_STR "Restart code: ");
+	regsPrintValue(REGS_IDX_RESTART);	
+	CONSOLE_PRINT_PSTR(CONSOLE_OUTPUT_NEWLINE_STR "EEPROM status: ");
+	regsPrintValue(REGS_IDX_EEPROM_RC);	
+#endif
+	consolePrompt();
+}
+
+void loop() {
+	consoleService();
+}
+
+#if 0
 #include <Wire.h>
 #include <SPI.h>
 #include <avr/wdt.h>
@@ -7,7 +36,7 @@
 #include "src\common\debug.h"
 #include "src\common\types.h"
 #include "src\common\event.h"
-#include "src\common\console.h"
+
 #include "src\common\console-internals.h"
 #include "src\common\fconsole.h"
 #include "src\common\gpio.h"			// Will include `gpio.local.h'
@@ -22,12 +51,6 @@
 
 FILENUM(1);
 
-// Console
-SoftwareSerial consSerial(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); // RX, TX
-static bool console_cmds_user(char* cmd);
-static void	console_init() {
-	consSerial.begin(19200);
-	FConsole.begin(console_cmds_user, consSerial);
 	commonPrintConsoleStartupMessage();
 }
 static void	console_service() {
@@ -301,3 +324,4 @@ void loop() {
 		eventServiceSm(smSupervisor, (EventSmContextBase*)&sm_supervisor_context, &ev);
 	}
 }
+#endif

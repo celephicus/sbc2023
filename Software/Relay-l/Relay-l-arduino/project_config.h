@@ -1,7 +1,38 @@
-// project-config.h -- Configuration file for shared libraries.
+// project-config.h -- Project configuration file. 
 
 #ifndef PROJECT_CONFIG_H__
 #define PROJECT_CONFIG_H__
+
+// Product name
+#define CFG_PRODUCT_NAME_STR "TSA SBC2022 Relay Module"
+
+// Version info, set by manual editing. 
+#define CFG_VER_MAJOR 1     
+#define CFG_VER_MINOR 0
+
+// Build number incremented with each build by cfg-set-build.py script. 
+#define CFG_BUILD_NUMBER 20
+
+// Timestamp in ISO8601 format set by cfg-set-build.py script.
+#define CFG_BUILD_TIMESTAMP "20220929T132804"
+
+// Macro tricks to get symbols with build info
+#define CFG_STRINGIFY2(x) #x
+#define CFG_STRINGIFY(x) CFG_STRINGIFY2(x)
+
+// Build number as a string.
+#define CFG_BUILD_NUMBER_STR CFG_STRINGIFY(CFG_BUILD_NUMBER)
+
+// Version as an integer.
+#define CFG_VER ((CFG_VER_MAJOR * 100) + (CFG_VER_MINOR))
+
+// Version as a string.
+#define CFG_VER_STR CFG_STRINGIFY(CFG_VER_MAJOR) "." CFG_STRINGIFY(CFG_VER_MINOR) 
+
+// Banner string combining all the information.
+#define CFG_BANNER_STR CFG_PRODUCT_NAME_STR " V" CFG_VER_STR " (" CFG_BUILD_NUMBER_STR ") " CFG_BUILD_TIMESTAMP
+
+#if 0
 
 // Extra help text for console.
 #define CFG_WANT_VERBOSE_CONSOLE 0
@@ -23,9 +54,6 @@ enum {
 	TIMER_SM_SUPERVISOR = 0,
 };
 
-#endif		// PROJECT_CONFIG_H__
-
-#if 0
 // For lc2.h
 #define CFG_LC2_USE_SWITCH 0
 
@@ -44,5 +72,7 @@ enum {
 #define CFG_CONSOLE_BAUDRATE 9600
 #define CFG_WANT_CONSOLE_ECHO 0		// SoftwareSerial can't do echo, its sort of half-duplex. 
 #define CFG_CONSOLE_INPUT_ACCEPT_BUFFER_SIZE (32)
+#endif	
 
-#endif		
+#endif		// PROJECT_CONFIG_H__
+	
