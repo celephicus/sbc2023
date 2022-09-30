@@ -433,8 +433,8 @@ void consolePrint(uint8_t opt, console_cell_t x) {
 		case CFMT_D:		g_console_ctx.s->print((console_cell_t)x, DEC); break;
 		case CFMT_U:		if (!(opt & CFMT_M_NO_LEAD)) g_console_ctx.s->print('+'); 
 							g_console_ctx.s->print((console_ucell_t)x, DEC); break;
-		//case CFMT_U_D:	if (!(opt & CFMT_M_NO_LEAD))  g_console_ctx.s->print('+'); 
-		//					g_console_ctx.s->print((uint32_t)x, DEC); break;
+		case CFMT_U_D:		if (!(opt & CFMT_M_NO_LEAD))  g_console_ctx.s->print('+'); 
+							g_console_ctx.s->print(*(uint32_t*)x, DEC); break;
 		case CFMT_X:		if (!(opt & CFMT_M_NO_LEAD)) g_console_ctx.s->print('$');
 							for (console_ucell_t m = 0xf; CONSOLE_UCELL_MAX != m; m = (m << 4) | 0xf) {
 								if ((console_ucell_t)x <= m)

@@ -65,7 +65,7 @@ enum {
 	CFMT_NL,		// Prints the newline string CONSOLE_OUTPUT_NEWLINE_STR, second arg ignored, no seperator is printed.
 	CFMT_D,			// Prints second arg as a signed integer, e.g `-123 ', `0 ', `456 '.
 	CFMT_U,			// Print second arg as an unsigned integer, e.g `+0 ', `+123 '.
-	// CONSOLE_PRINT_UNSIGNED_DOUBLE,
+	CFMT_U_D,
 	CFMT_X,			// Print second arg as a hex integer, e.g `$0000 ', `$abcd '.
 	CFMT_STR,		// Print second arg as pointer to string in RAM.
 	CFMT_STR_P,		// Print second arg as pointer to string in PROGMEM.

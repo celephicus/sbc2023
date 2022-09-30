@@ -3,6 +3,7 @@
 
 #include "project_config.h"
 #include "Relay-gpio.h"
+#include "regs.h"
 #include "utils.h"
 #include "console.h"
 #include "modbus.h"
@@ -66,12 +67,10 @@ void driverRelayWrite(uint8_t v) {
 // MODBUS
 //
 static uint8_t read_holding_register(uint16_t address, uint16_t* value) { 
-/*
-	if (address < REGS_COUNT) {
+	if (address < COUNT_REGS) {
 		*value = REGS[address];
 		return 0;
 	}
-*/
 	if (SBC2022_MODBUS_REGISTER_RELAY == address) {
 		*value = driverRelayRead();
 		return 0;
@@ -95,7 +94,7 @@ void modbus_cb(uint8_t evt) {
 
 	gpioSpare1Write(true);
 	// Dump MODBUS...
-	if (1) { // (REGS[REGS_IDX_MODBUS_EVENT_DUMP] & _BV(evt)) {
+	if (REGS[REGS_IDX_MODBUS_EVENT_DUMP] & _BV(evt)) {
 		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("RECV: ")); 
 		consolePrint(CFMT_U, evt);
 		consolePrint(CFMT_STR_P, (console_cell_t)PSTR(" "));
@@ -212,17 +211,23 @@ static bool console_cmds_user(char* cmd) {
 		modbusMasterSend(req, 6);
 	  } break;
 
+	// Regs
+    case /** ?V **/ 0x688c: fori(COUNT_REGS) { regsPrintValue(i); } break;
+    case /** V **/ 0xb5f3: 
+	    { const uint8_t idx = console_u_pop(); const uint8_t v = console_u_pop(); if (idx < COUNT_REGS) REGS[idx] = v; } 
+		break; 
+    case /** DUMP **/ 0x4fe9: 
+		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS, (console_u_tos() > 0)); 
+		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS_FAST, (console_u_pop() > 1)); 
+		break;
+	case /** X **/ 0xb5fd:  regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS | REGS_ENABLES_MASK_DUMP_REGS_FAST, 0); break; // Shortcut for killing dump. 
+
 #if 0	
 	// Runtime errors...
     case /** RESTART **/ 0x7092: while (1) continue; break;
     case /** CLI **/ 0xd063: cli(); break;
     case /** ABORT **/ 0xfeaf: RUNTIME_ERROR(console_u_pop()); break;
 
-	// Regs
-    case /** ?V **/ 0x688c: fori(REGS_COUNT) { regsPrintValue(i); } break;
-    case /** V **/ 0xb5f3: 
-	    { const uint8_t idx = console_u_pop(); const uint8_t v = console_u_pop(); if (idx < REGS_COUNT) REGS[idx] = v; } 
-		break; 
 	case /** ??V **/ 0x85d3: {
 		fori (REGS_COUNT) {
 			consolePrint(CONSOLE_PRINT_NEWLINE, 0); 
@@ -235,12 +240,6 @@ static bool console_cmds_user(char* cmd) {
 			consolePrint(CONSOLE_PRINT_STR_P, (console_cell_t)regsGetHelpStr());
 		}
 		break;
-			// Registers
-    case /** DUMP **/ 0x4fe9: 
-		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS, (console_u_tos() > 0)); 
-		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS_FAST, (console_u_pop() > 1)); 
-		break;
-	case /** X **/ 0xb5fd:  regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS | REGS_ENABLES_MASK_DUMP_REGS_FAST, 0); break; // Shortcut for killing dump. 
 
 	// EEPROM data
 	case /** NV-DEFAULT **/ 0xfcdb: regsNvSetDefaults(); break;
@@ -268,6 +267,24 @@ static bool console_cmds_user(char* cmd) {
   }
   return true;
 }
+
+static void service_regs_dump() {
+    static uint8_t s_ticker;
+    if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_REGS) {
+		if (0 == s_ticker--) {
+			uint32_t timestamp = millis();
+			s_ticker = (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_REGS_FAST) ? 2 : 10; // Dump 5Hz or 1Hz.
+			consolePrint(CFMT_STR_P, (console_cell_t)PSTR("Regs:"));
+			consolePrint(CFMT_U_D|CFMT_M_NO_LEAD, (console_cell_t)&timestamp);
+			fori(REGS_START_NV_IDX) 
+				regsPrintValue(i);
+			consolePrint(CFMT_NL, 0);
+		}
+    }
+	else 
+		s_ticker = 0;
+}
+
 void setup() {
 	consSerial.begin(19200);
 	consoleInit(console_cmds_user, consSerial);
@@ -287,6 +304,7 @@ void setup() {
 
 void loop() {
 	consoleService();
+	service_regs_dump();
 	relay_driver_pat_watchdog();		// Must happen every 50ms or so. 
 	modbus_service();
 	utilsRunEvery(100) {				// Basic 100ms timebase.
