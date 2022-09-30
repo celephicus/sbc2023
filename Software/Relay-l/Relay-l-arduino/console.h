@@ -17,6 +17,9 @@
 	Note that the parser may write to the input buffer, but not beyond the terminating nul. */
 typedef bool (*console_recogniser_func)(char* cmd);
 
+// Hash function for implementing command lookup in recogniser functions. 
+uint16_t console_hash(const char* str);
+
 /* Initialise the console with a local recogniser for the special commands needed by the application.  
 	The Stream is the stream used for IO, and flags control echo, prompt, etc. 
 	Does not print anything to the stream, so you need to at least call consolePrompt() to give the user something to type at. 
@@ -57,35 +60,21 @@ typedef int8_t console_rc_t;
 	positive error code. If no EOL, then it returns CONSOLE_RC_STATUS_ACCEPT_PENDING. */
 console_rc_t consoleService();
 
-// Define this symbol if you want implementation stuff
-#ifdef CONSOLE_WANT_INTERNALS
-
-// We must have macros PSTR that places a const string into const memory.
-// And READ_FUNC_PTR that deferences a pointer to a function in Flash
-#if defined(AVR)
- #include <avr/pgmspace.h>	// Takes care of PSTR().
- #define CONSOLE_READ_FUNC_PTR(x_) pgm_read_word(x_)		// 16 bit target.
-#elif defined(ESP32 )
- #include <pgmspace.h>	// Takes care of PSTR().
- #define CONSOLE_READ_FUNC_PTR(x_) pgm_read_dword(x_)		// 32 bit target.
-#else
- #define PSTR(str_) (str_)
- #define CONSOLE_READ_FUNC_PTR(x_) (*(x_))					// Generic target. 
-#endif
-
-// Stack size, we don't need much.
-#define CONSOLE_DATA_STACK_SIZE (8)
-
-// Input buffer size
-#define CONSOLE_INPUT_BUFFER_SIZE 40
-
-// Character to signal EOL for input string.
-#define CONSOLE_INPUT_NEWLINE_CHAR '\r'
-
-// Get max/min for types. This only works because we assume two's complement representation and we have checked that the signed & unsigned types are compatible.
-#define CONSOLE_UCELL_MAX (~(console_ucell_t)(0))
-#define CONSOLE_CELL_MAX ((console_cell_t)(CONSOLE_UCELL_MAX >> 1))
-#define CONSOLE_CELL_MIN ((console_cell_t)(~(CONSOLE_UCELL_MAX >> 1)))
+// Print various datatypes on the console. 
+enum {
+	CFMT_NL,		// Prints the newline string CONSOLE_OUTPUT_NEWLINE_STR, second arg ignored, no seperator is printed.
+	CFMT_D,			// Prints second arg as a signed integer, e.g `-123 ', `0 ', `456 '.
+	CFMT_U,			// Print second arg as an unsigned integer, e.g `+0 ', `+123 '.
+	// CONSOLE_PRINT_UNSIGNED_DOUBLE,
+	CFMT_X,			// Print second arg as a hex integer, e.g `$0000 ', `$abcd '.
+	CFMT_STR,		// Print second arg as pointer to string in RAM.
+	CFMT_STR_P,		// Print second arg as pointer to string in PROGMEM.
+	CFMT_C,			// Print second arg as char.
+	CFMT_X2, 		// Print as 2 hex digits.
+	CFMT_M_NO_LEAD = 0x40,	// AND with option to _NOT_ print a leading `+' or `$'.
+	CFMT_M_NO_SEP = 0x80	// AND with option to _NOT_ print a trailing space.
+};
+void consolePrint(uint8_t opt, console_cell_t x);
 
 // Stack primitives.
 console_cell_t console_u_pick(uint8_t i);
@@ -95,8 +84,5 @@ console_cell_t console_u_depth();
 console_cell_t console_u_pop();
 void console_u_push(console_cell_t x);
 void console_u_clear();
-
-
-#endif // CONSOLE_WANT_INTERNALS
 
 #endif // CONSOLE_H__

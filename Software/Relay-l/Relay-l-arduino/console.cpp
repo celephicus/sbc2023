@@ -3,22 +3,49 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define CONSOLE_WANT_INTERNALS
+#include "utils.h"
 #include "console.h"
-
-// Check integral types. If this is wrong so much will break in surprising ways.
-#define STATIC_ASSERT(expr_) extern int error_static_assert_fail__[(expr_) ? 1 : -1] __attribute__((unused))
 
 // Is an integer type signed, works for chars as well.
 #define utilsIsTypeSigned(T_) (((T_)(-1)) < (T_)0)
 
 // And check for compatibility of the two cell types.
-STATIC_ASSERT(sizeof(console_cell_t) == sizeof(console_ucell_t));
-STATIC_ASSERT(utilsIsTypeSigned(console_cell_t));
-STATIC_ASSERT(!utilsIsTypeSigned(console_ucell_t));
+UTILS_STATIC_ASSERT(sizeof(console_cell_t) == sizeof(console_ucell_t));
+UTILS_STATIC_ASSERT(utilsIsTypeSigned(console_cell_t));
+UTILS_STATIC_ASSERT(!utilsIsTypeSigned(console_ucell_t));
+
+// We must have macros PSTR that places a const string into const memory.
+// And READ_FUNC_PTR that deferences a pointer to a function in Flash
+#if defined(AVR)
+ #include <avr/pgmspace.h>	// Takes care of PSTR().
+ #define CONSOLE_READ_FUNC_PTR(x_) pgm_read_word(x_)		// 16 bit target.
+#elif defined(ESP32 )
+ #include <pgmspace.h>	// Takes care of PSTR().
+ #define CONSOLE_READ_FUNC_PTR(x_) pgm_read_dword(x_)		// 32 bit target.
+#else
+ #define PSTR(str_) (str_)
+ #define CONSOLE_READ_FUNC_PTR(x_) (*(x_))					// Generic target. 
+#endif
+
+// Stack size, we don't need much.
+#define CONSOLE_DATA_STACK_SIZE (8)
+
+// Input buffer size
+#define CONSOLE_INPUT_BUFFER_SIZE 40
+
+// Character to signal EOL for input string.
+#define CONSOLE_INPUT_NEWLINE_CHAR '\r'
+
+// Newline on output.
+#define CONSOLE_OUTPUT_NEWLINE_STR "\r\n"
+
+// Get max/min for types. This only works because we assume two's complement representation and we have checked that the signed & unsigned types are compatible.
+#define CONSOLE_UCELL_MAX (~(console_ucell_t)(0))
+#define CONSOLE_CELL_MAX ((console_cell_t)(CONSOLE_UCELL_MAX >> 1))
+#define CONSOLE_CELL_MIN ((console_cell_t)(~(CONSOLE_UCELL_MAX >> 1)))
 
 // We must be able to fit a pointer into a cell.
-STATIC_ASSERT(sizeof(void*) <= sizeof(console_ucell_t));
+UTILS_STATIC_ASSERT(sizeof(void*) <= sizeof(console_ucell_t));
 
 // Unused static functions are OK. The linker will remove them.
 #pragma GCC diagnostic ignored "-Wunused-function"
@@ -271,19 +298,10 @@ bool console_r_hex_string(char* cmd) {
 // Essential commands that will always be required
 bool console_cmds_builtin(char* cmd) {
 	switch (console_hash(cmd)) {
-		case /** . **/ 0XB58B: g_console_ctx.s->print((console_cell_t)console_u_pop()); break;		// Pop and print in signed decimal.
-		case /** U. **/ 0X73DE: // Pop and print in unsigned decimal, with leading `+'.
-			g_console_ctx.s->print('+'); g_console_ctx.s->print((console_ucell_t)console_u_pop()); break;	
-		case /** $. **/ 0X658F: { // Pop and print as 4 hex digits decimal with leading `$'.
-			console_ucell_t x = console_u_pop();
-			g_console_ctx.s->print('$');
-			for (console_ucell_t m = 0xf; CONSOLE_UCELL_MAX != m; m = (m << 4) | 0xf) {
-				if (x <= m)
-					g_console_ctx.s->print(0);
-			}
-			g_console_ctx.s->print(x, HEX); 
-		} break;		
-		case /** ." **/ 0X66C9: g_console_ctx.s->print((const char*)console_u_pop()); break; 		// Pop and print string.
+		case /** . **/ 0XB58B: consolePrint(CFMT_D, console_u_pop()); break;	// Pop and print in signed decimal.
+		case /** U. **/ 0X73DE: consolePrint(CFMT_U, console_u_pop()); break;	// Pop and print in unsigned decimal, with leading `+'.
+		case /** $. **/ 0X658F: consolePrint(CFMT_X, console_u_pop()); break; 	// Pop and print as 4 hex digits decimal with leading `$'.
+		case /** ." **/ 0X66C9: consolePrint(CFMT_STR, console_u_pop()); break; // Pop and print string.
 		case /** DEPTH **/ 0XB508: console_u_push(console_u_depth()); break;					// Push stack depth.
 		case /** CLEAR **/ 0X9F9C: console_u_clear(); break;									// Clear stack so that it has zero depth.
 		case /** DROP **/ 0X5C2C: console_u_pop(); break;										// Remove top item from stack.
@@ -295,7 +313,7 @@ bool console_cmds_builtin(char* cmd) {
 
 /* The number & string recognisers must be before any recognisers that lookup using a hash, as numbers & strings
 	can have potentially any hash value so could look like commands. */
-static bool local_r(char* cmd) { return g_console_ctx.local_r; }
+static bool local_r(char* cmd) { return g_console_ctx.local_r(cmd); }
 static const console_recogniser_func RECOGNISERS[] PROGMEM = {
 	console_r_number_decimal,
 	console_r_number_hex,
@@ -381,7 +399,7 @@ void consoleInit(console_recogniser_func r, Stream& s, uint8_t flags) {
 
 void consolePrompt() {
 	if (!(g_console_ctx.flags & CONSOLE_FLAG_NO_PROMPT))
-		g_console_ctx.s->print(F("\n>"));
+		consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CONSOLE_OUTPUT_NEWLINE_STR ">"));
 }
 
 console_rc_t consoleService() {
@@ -407,3 +425,30 @@ console_rc_t consoleService() {
 	}
 	return CONSOLE_RC_STATUS_ACCEPT_PENDING;
 }
+
+void consolePrint(uint8_t opt, console_cell_t x) {
+	switch (opt & 0x3f) {
+		case CFMT_NL:		g_console_ctx.s->print(F(CONSOLE_OUTPUT_NEWLINE_STR)); (void)x; return; 	// No separator.
+		default:			(void)x; return;															// Ignore, print nothing.
+		case CFMT_D:		g_console_ctx.s->print((console_cell_t)x, DEC); break;
+		case CFMT_U:		if (!(opt & CFMT_M_NO_LEAD)) g_console_ctx.s->print('+'); 
+							g_console_ctx.s->print((console_ucell_t)x, DEC); break;
+		//case CFMT_U_D:	if (!(opt & CFMT_M_NO_LEAD))  g_console_ctx.s->print('+'); 
+		//					g_console_ctx.s->print((uint32_t)x, DEC); break;
+		case CFMT_X:		if (!(opt & CFMT_M_NO_LEAD)) g_console_ctx.s->print('$');
+							for (console_ucell_t m = 0xf; CONSOLE_UCELL_MAX != m; m = (m << 4) | 0xf) {
+								if ((console_ucell_t)x <= m)
+									g_console_ctx.s->print('0');
+							}
+							g_console_ctx.s->print((console_ucell_t)x, HEX); break;
+		case CFMT_STR:		g_console_ctx.s->print((const char*)x); break;
+		case CFMT_STR_P:	g_console_ctx.s->print((const __FlashStringHelper*)x); break;
+		case CFMT_C:		g_console_ctx.s->print((char)x); break;
+		case CFMT_X2: 		if ((console_ucell_t)x < 16) g_console_ctx.s->print('0');
+							g_console_ctx.s->print((console_ucell_t)(x), HEX);
+							break;
+	}
+	if (!(opt & CFMT_M_NO_SEP))	
+		g_console_ctx.s->print(' ');			// Print a space.
+}
+

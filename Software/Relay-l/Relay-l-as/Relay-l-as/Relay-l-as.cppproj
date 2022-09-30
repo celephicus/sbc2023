@@ -238,6 +238,22 @@ build.cmd
 </PreBuildEvent>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\Relay-l-arduino\modbus.h">
+      <SubType>compile</SubType>
+      <Link>modbus.h</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-l-arduino\modbus.cpp">
+      <SubType>compile</SubType>
+      <Link>modbus.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-l-arduino\utils.h">
+      <SubType>compile</SubType>
+      <Link>utils.h</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-l-arduino\utils.cpp">
+      <SubType>compile</SubType>
+      <Link>utils.cpp</Link>
+    </Compile>
     <Compile Include="..\..\Relay-l-arduino\project_config.h">
       <SubType>compile</SubType>
       <Link>project_config.h</Link>
