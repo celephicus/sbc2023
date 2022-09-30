@@ -233,18 +233,17 @@ static bool console_cmds_user(char* cmd) {
 		break;
 	case /** X **/ 0xb5fd:  regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS | REGS_ENABLES_MASK_DUMP_REGS_FAST, 0); break; // Shortcut for killing dump. 
 
-#if 0	
 	// Runtime errors...
     case /** RESTART **/ 0x7092: while (1) continue; break;
     case /** CLI **/ 0xd063: cli(); break;
-    case /** ABORT **/ 0xfeaf: RUNTIME_ERROR(console_u_pop()); break;
-
+//    case /** ABORT **/ 0xfeaf: RUNTIME_ERROR(console_u_pop()); break;
 
 	// EEPROM data
 	case /** NV-DEFAULT **/ 0xfcdb: regsNvSetDefaults(); break;
 	case /** NV-W **/ 0xa8c7: regsNvWrite(); break;
 	case /** NV-R **/ 0xa8c2: regsNvRead(); break;
 
+#if 0	
 	// Events & trace...
     case /** EVENT **/ 0x8a29: eventPublish(console_u_pop()); break;
     case /** EVENT-EX **/ 0x2f99: /* (id p8 p16 -- ) */ { const uint16_t p16 = console_u_pop(); const uint8_t p8 = console_u_pop(); eventPublish(console_u_pop(), p8, p16); } break;
@@ -310,10 +309,10 @@ void setup() {
 void loop() {
 	devWatchdogPat(DEV_WATCHDOG_MASK_MAINLOOP);
 	consoleService();
-	service_regs_dump();
 	relay_driver_pat_watchdog();		// Must happen every 50ms or so. 
 	modbus_service();
 	utilsRunEvery(100) {				// Basic 100ms timebase.
+		service_regs_dump();
 		utilsSeqService(&f_led_seq);
 	}
 }
