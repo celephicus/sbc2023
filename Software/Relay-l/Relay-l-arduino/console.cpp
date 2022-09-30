@@ -36,9 +36,6 @@ UTILS_STATIC_ASSERT(!utilsIsTypeSigned(console_ucell_t));
 // Character to signal EOL for input string.
 #define CONSOLE_INPUT_NEWLINE_CHAR '\r'
 
-// Newline on output.
-#define CONSOLE_OUTPUT_NEWLINE_STR "\r\n"
-
 // Get max/min for types. This only works because we assume two's complement representation and we have checked that the signed & unsigned types are compatible.
 #define CONSOLE_UCELL_MAX (~(console_ucell_t)(0))
 #define CONSOLE_CELL_MAX ((console_cell_t)(CONSOLE_UCELL_MAX >> 1))

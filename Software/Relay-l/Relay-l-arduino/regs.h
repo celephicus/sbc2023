@@ -45,12 +45,71 @@ enum {
 	REGS_ENABLES_MASK_DUMP_REGS = (int)_BV(0),
 	REGS_ENABLES_MASK_DUMP_REGS_FAST = (int)_BV(1),
 };
+
+#define DECLARE_REGS_NAMES()													\
+ static const char REG_NAME_0[] PROGMEM = "FLAGS";								\
+ static const char REG_NAME_1[] PROGMEM = "EEPROM_RC";							\
+ static const char REG_NAME_2[] PROGMEM = "RESTART";							\
+ static const char REG_NAME_3[] PROGMEM = "ADC_VOLTS_MON_12V_IN";				\
+ static const char REG_NAME_4[] PROGMEM = "ADC_VOLTS_MON_BUS";					\
+ static const char REG_NAME_5[] PROGMEM = "VOLTS_MON_12V_IN";					\
+ static const char REG_NAME_6[] PROGMEM = "VOLTS_MON_BUS";						\
+ static const char REG_NAME_7[] PROGMEM = "ENABLES";							\
+ static const char REG_NAME_8[] PROGMEM = "MODBUS_EVENT_DUMP";					\
+																				\
+ static const char* const REGS_NAMES[COUNT_REGS] PROGMEM = {					\
+	REG_NAME_0,	 																\
+    REG_NAME_1,	 																\
+    REG_NAME_2,	 																\
+    REG_NAME_3,	 																\
+    REG_NAME_4,	 																\
+    REG_NAME_5,	 																\
+    REG_NAME_6,	 																\
+    REG_NAME_7,	 																\
+    REG_NAME_8,	 																\
+}
+
+#define DECLARE_REGS_DESCRS()													\
+ static const char REG_DESCR_0[] PROGMEM = "Various flags";						\
+ static const char REG_DESCR_1[] PROGMEM = "Last NV read status";				\
+ static const char REG_DESCR_2[] PROGMEM = "Snapshot of MCUSR";					\
+ static const char REG_DESCR_3[] PROGMEM = "Raw ADC DC power in volts";			\
+ static const char REG_DESCR_4[] PROGMEM = "Raw ADC Bus volts";					\
+ static const char REG_DESCR_5[] PROGMEM = "DC power in /mV";					\
+ static const char REG_DESCR_6[] PROGMEM = "Bus volts /mV";						\
+ static const char REG_DESCR_7[] PROGMEM = "Enable flags";						\
+ static const char REG_DESCR_8[] PROGMEM = "Dump MODBUS event";					\
+																				\
+ static const char* const REGS_DESCRS[COUNT_REGS] PROGMEM = {					\
+	REG_DESCR_0,	 															\
+    REG_DESCR_1,	 															\
+    REG_DESCR_2,	 															\
+    REG_DESCR_3,	 															\
+    REG_DESCR_4,	 															\
+    REG_DESCR_5,	 															\
+    REG_DESCR_6,	 															\
+    REG_DESCR_7,	 															\
+    REG_DESCR_8,	 															\
+}
+
+#define DECLARE_REGS_HELPS()													\
+ static const char REGS_HELPS[] PROGMEM =										\
+  "\r\nFlags:"																	\
+  "\r\n DC_IN_VOLTS_LOW: 0 (External DC power volts low.)"						\
+  "\r\n BUS_VOLTS_LOW: 1 (Bus volts low.)"										\
+  "\r\n WATCHDOG_RESTART: 15 (Whoops....)"										\
+  "\r\nEnables:"																\
+  "\r\n DUMP_REGS: 0 (Regs values dump to console.)"							\
+  "\r\n DUMP_REGS_FAST: 1 (Dump at 5/s rather than 1/s.)" 						\
+
 // Regs Definition End
 
 // Access registers as an external.
 extern regs_t REGS[];
 
-void regsInit();
+// Initialise the driver, reads the NV regs from EEPROM, sets default values if corrupt. Returns error code from devEepromDriver. 
+// Clears volatile registers. 
+uint8_t regsInit();
 
 // Return flags register, this compiles to two lds instructions. 
 static inline regs_t& regsFlags() { return REGS[REGS_IDX_FLAGS]; }
@@ -77,42 +136,23 @@ void regsSetDefaultAll();
 //  like a set of menu options. Note that the non-NV regs will just be set to zero, which is unlikely to be useful. 
 void regsSetDefaultRange(uint8_t start, uint8_t end);
 
-#if 0
-// Struct to include registers and other stuff in NV storage. 
-typedef struct registers_t {
-	regs_t vals[REGS_COUNT];							// Must be first in the struct as there are some non-NV regs first.
-	uint8_t event_trace_mask[EVENT_TRACE_MASK_SIZE];
-	regs_extra_t extra;
-} registers_t;
-
-
-// Function to get the event trace mask, a block of 32 bytes to control which event IDs get traced. 
-uint8_t* eventGetTraceMask();
-
-// User function for setting default value of extra data. 
-void regsExtraSetDefaults()  __attribute__((weak));
-
-// Initialise the driver, reads the NV regs from EEPROM, sets default values if corrupt. Error code written to register index REGS_IDX_EEPROM_RC.
-// Note: DOES NOT clear volatile registers. This is up to you. 
-// Calls regsNvRead() so traces event EV_NV_READ with p8 set to return code.
-void regsInit();
-
-// Read the values from EEPROM, when it returns it is guaranteed to have valid data in the buffer, but it might be set to default values.
-// Return values as for eepromDriverRead() so one of EEPROM_DRIVER_READ_ERROR_xxx. Status also written to register index REGS_IDX_EEPROM_RC.
-// Traces event EV_NV_READ with p8 set to return code.
-uint8_t regsNvRead();
-
-// Write EEPROM data. Traces event EV_NV_WRITE.
-void regsNvWrite();
-
-// Return the name of the register derived from the settings.local.h file. 
+// Return the name of the register derived from the settings.local.h file.
 const char* regsGetRegisterName(uint8_t idx);
 
-// Return a help text derived from the settings.local.h file. 
+// Return a help text derived from the settings.local.h file.
 const char* regsGetRegisterDescription(uint8_t idx);
 
-// Return an additional help string, contents generated in the settings.local.h file. 
+// Return an additional help string, contents generated in the settings.local.h file.
 const char* regsGetHelpStr();
 
-#endif
+// Read the non-volatile registers from EEPROM, when it returns it is guaranteed to have valid data in the buffer, but it might be set to default values.
+// Returns error code from devEepromDriver. 
+uint8_t regsNvRead();
+
+// Writes non-volatile registers to EEPROM.
+void regsNvWrite();
+
+// Sets default values of all non-volatile registers.
+void regsNvSetDefaults();
+
 #endif // REGS_H__

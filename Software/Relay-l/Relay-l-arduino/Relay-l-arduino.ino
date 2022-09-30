@@ -10,10 +10,6 @@
 #include "modbus.h"
 #include "sbc2022_modbus.h"
 
-// Console
-SoftwareSerial consSerial(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); // RX, TX
-static void print_banner() { consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CFG_BANNER_STR)); }	
-
 // Driver for the blinky LED.
 static UtilsSeqCtx f_led_seq;
 typedef struct {        
@@ -168,6 +164,9 @@ static void modbus_service() {
 	}
 }
 
+
+// Console
+static void print_banner() { consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CFG_BANNER_STR)); }	
 static bool console_cmds_user(char* cmd) {
   switch (console_hash(cmd)) {
 	case /** ?VER **/ 0xc33b: print_banner(); break;
@@ -217,6 +216,17 @@ static bool console_cmds_user(char* cmd) {
     case /** V **/ 0xb5f3: 
 	    { const uint8_t idx = console_u_pop(); const uint8_t v = console_u_pop(); if (idx < COUNT_REGS) REGS[idx] = v; } 
 		break; 
+	case /** ??V **/ 0x85d3: {
+		fori (COUNT_REGS) {
+			consolePrint(CFMT_NL, 0); 
+			consolePrint(CFMT_D, (console_cell_t)i);
+			consolePrint(CFMT_STR_P, (console_cell_t)regsGetRegisterName(i));
+			consolePrint(CFMT_STR_P, (console_cell_t)regsGetRegisterDescription(i));
+			devWatchdogPat(DEV_WATCHDOG_MASK_MAINLOOP);
+		}
+		consolePrint(CFMT_STR_P, (console_cell_t)regsGetHelpStr());
+		}
+		break;
     case /** DUMP **/ 0x4fe9: 
 		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS, (console_u_tos() > 0)); 
 		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS_FAST, (console_u_pop() > 1)); 
@@ -229,18 +239,6 @@ static bool console_cmds_user(char* cmd) {
     case /** CLI **/ 0xd063: cli(); break;
     case /** ABORT **/ 0xfeaf: RUNTIME_ERROR(console_u_pop()); break;
 
-	case /** ??V **/ 0x85d3: {
-		fori (REGS_COUNT) {
-			consolePrint(CONSOLE_PRINT_NEWLINE, 0); 
-			consolePrint(CONSOLE_PRINT_SIGNED, (console_cell_t)i);
-			consolePrint(CONSOLE_PRINT_STR_P, (console_cell_t)regsGetRegisterName(i));
-			consolePrint(CONSOLE_PRINT_STR_P, (console_cell_t)regsGetRegisterDescription(i));
-			wdt_reset();
-		}
-		if (regsGetHelpStr())
-			consolePrint(CONSOLE_PRINT_STR_P, (console_cell_t)regsGetHelpStr());
-		}
-		break;
 
 	// EEPROM data
 	case /** NV-DEFAULT **/ 0xfcdb: regsNvSetDefaults(); break;
@@ -268,7 +266,21 @@ static bool console_cmds_user(char* cmd) {
   }
   return true;
 }
+SoftwareSerial consSerial(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); // RX, TX
+static void console_init() {
+	consSerial.begin(19200);
+	consoleInit(console_cmds_user, consSerial);
+	// Signon message, note two newlines to leave a gap from any preceding output on the terminal.
+	consolePrint(CFMT_NL, 0); consolePrint(CFMT_NL, 0);
+	print_banner();
+	// Print the restart code & EEPROM driver status. 
+	consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CONSOLE_OUTPUT_NEWLINE_STR "Restart code:"));
+	regsPrintValue(REGS_IDX_RESTART);	
+	consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CONSOLE_OUTPUT_NEWLINE_STR "EEPROM status: "));
+	regsPrintValue(REGS_IDX_EEPROM_RC);	
+	consolePrompt();
 
+}
 static void service_regs_dump() {
     static uint8_t s_ticker;
     if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_REGS) {
@@ -287,23 +299,16 @@ static void service_regs_dump() {
 }
 
 void setup() {
-	consSerial.begin(19200);
-	consoleInit(console_cmds_user, consSerial);
-	// Signon message, note two newlines to leave a gap from any preceding output on the terminal.
-	consolePrint(CFMT_NL, 0); consolePrint(CFMT_NL, 0);
-	print_banner();
-#if 0		// Print the restart code & EEPROM driver status. 
-	CONSOLE_PRINT_PSTR(CONSOLE_OUTPUT_NEWLINE_STR "Restart code: ");
-	regsPrintValue(REGS_IDX_RESTART);	
-	CONSOLE_PRINT_PSTR(CONSOLE_OUTPUT_NEWLINE_STR "EEPROM status: ");
-	regsPrintValue(REGS_IDX_EEPROM_RC);	
-#endif
-	consolePrompt();
+	const uint16_t restart = devWatchdogInit();
+	regsInit();
+	REGS[REGS_IDX_RESTART] = restart;
+	console_init();
 	relay_driver_init();
 	modbus_init();
 }
 
 void loop() {
+	devWatchdogPat(DEV_WATCHDOG_MASK_MAINLOOP);
 	consoleService();
 	service_regs_dump();
 	relay_driver_pat_watchdog();		// Must happen every 50ms or so. 

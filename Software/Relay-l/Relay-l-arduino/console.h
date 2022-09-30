@@ -60,6 +60,9 @@ typedef int8_t console_rc_t;
 	positive error code. If no EOL, then it returns CONSOLE_RC_STATUS_ACCEPT_PENDING. */
 console_rc_t consoleService();
 
+// Newline on output.
+#define CONSOLE_OUTPUT_NEWLINE_STR "\r\n"
+
 // Print various datatypes on the console. 
 enum {
 	CFMT_NL,		// Prints the newline string CONSOLE_OUTPUT_NEWLINE_STR, second arg ignored, no seperator is printed.

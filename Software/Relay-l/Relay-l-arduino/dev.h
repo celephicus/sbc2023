@@ -148,4 +148,24 @@ void devEepromSetDefaults(const DevEepromBlock* block, const void* default_arg);
 // Write EEPROM data.
 void devEepromWrite(const DevEepromBlock* block);
 
+// 
+// Watchdog driver.
+//
+
+/* 	CFG_WATCHDOG_ENABLE: turns watchdog off/on.
+	CFG_WATCHDOG_TIMEOUT: timeout from avr/wdt.h.
+	CFG_WATCHDOG_MODULE_COUNT: If non-zero then extra masks must be used with values _BV(2) through _BV(2+N).
+	  So if equal to `2' then values _BV(2), _BV(3) need to be supplied to devWatchdogPat(). */
+	  
+// Start watchdog going and return cause of last restart.
+uint16_t devWatchdogInit();
+
+// Pat the dog with a value, only when all values have been supplied will the watchdog get a pat. Guards against an ISR or the mainloop hanging.
+#define DEV_WATCHDOG_MASK_MAINLOOP _BV(0)
+#define DEV_WATCHDOG_MASK_TIMER_ISR _BV(1)
+void devWatchdogPat(uint8_t m);
+
+// Check if restart was due to watchdog.
+static inline bool devWatchdogIsRestartWatchdog(uint16_t rst) { return !!(rst & _BV(WDRF)); }
+
 #endif // DEV_H__

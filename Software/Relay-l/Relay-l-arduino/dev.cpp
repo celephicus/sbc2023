@@ -1,13 +1,13 @@
 #include <Arduino.h>
+#include <avr/wdt.h>
 
+#include "project_config.h"
 #include "utils.h"
 #include "dev.h"
 #if 0
 #include <stdarg.h>
 #include <stdint.h>
-#include <avr/wdt.h>
 
-#include "..\..\project_config.h"
 #include "debug.h"
 #include "types.h"
 #include "event.h"
@@ -167,3 +167,42 @@ void devEepromWrite(const DevEepromBlock* block) {
 	write_eeprom(block, EEPROM_BANK_1, checksum);
 }
 
+// 
+// Watchdog driver.
+//
+
+// Place in section that is not zeroed by startup code. Then after a wd restart we can read this, any set bits are the masks of modules that did NOT refresh in time.
+static uint8_t f_wdacc __attribute__ ((section (".noinit")));   
+
+ISR(TIMER0_COMPA_vect) {				// Kick watchdog with timer mask.
+    devWatchdogPat(DEV_WATCHDOG_MASK_TIMER_ISR);
+}
+
+// Mask for all used modules that have watchdog masks. 
+#define WATCHDOG_MASK_ALL (_BV(CFG_WATCHDOG_MODULE_COUNT+2) - 1)
+void devWatchdogPat(uint8_t m) {
+    f_wdacc &= ~m;
+    if (0 == f_wdacc) {
+        wdt_reset();
+        f_wdacc = WATCHDOG_MASK_ALL;
+    }
+}
+
+
+uint16_t devWatchdogInit() {
+	const uint16_t restart = ((uint16_t)f_wdacc << 8) | MCUSR;		// (JTRF) WDRF BORF EXTRF PORF , JTRF only on JTAG parts
+    MCUSR = 0;														// Necessary to disable watchdog on some processors. 
+
+#if CFG_WATCHDOG_ENABLE											
+	wdt_enable(CFG_WATCHDOG_TIMEOUT);
+#else
+	wdt_disable();
+#endif
+
+	wdt_reset();
+	f_wdacc = 0;						// Force immediate watchdog reset.
+    OCR0A = 0xAF;						// Setup timer 0 compare to a point in the cycle where it won't interfere with timing. Timer 0 overflow is used by the Arduino for millis(). 
+    TIMSK0 |= _BV(OCIE0A);				// Enable interrupt. 
+	
+	return restart;
+}

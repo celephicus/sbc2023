@@ -3,6 +3,11 @@
 #ifndef PROJECT_CONFIG_H__
 #define PROJECT_CONFIG_H__
 
+// Watchdog. 
+#define CFG_WATCHDOG_TIMEOUT WDTO_2S   
+#define CFG_WATCHDOG_ENABLE 0
+#define CFG_WATCHDOG_MODULE_COUNT 0
+
 // Product name
 #define CFG_PRODUCT_NAME_STR "TSA SBC2022 Relay Module"
 
@@ -11,10 +16,12 @@
 #define CFG_VER_MINOR 0
 
 // Build number incremented with each build by cfg-set-build.py script. 
-#define CFG_BUILD_NUMBER 90
+#define CFG_BUILD_NUMBER 111
 
 // Timestamp in ISO8601 format set by cfg-set-build.py script.
-#define CFG_BUILD_TIMESTAMP "20220930T132826"
+#define CFG_BUILD_TIMESTAMP "20220930T160722"
+
+// Do not edit below this line......
 
 // Macro tricks to get symbols with build info
 #define CFG_STRINGIFY2(x) #x
@@ -36,11 +43,6 @@
 
 // Extra help text for console.
 #define CFG_WANT_VERBOSE_CONSOLE 0
-
-// Watchdog. 
-#define CFG_WATCHDOG_TIMEOUT WDTO_2S   
-#define CFG_WATCHDOG_ENABLE 0
-#define CFG_WATCHDOG_MODULE_COUNT 0
 
 // No trace.
 #define CFG_WANT_DEBUG_TRACE 0
