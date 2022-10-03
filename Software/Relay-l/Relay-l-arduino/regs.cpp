@@ -20,7 +20,7 @@ static void set_defaults(void* data, const void* defaultarg) {
     (void)data;
     (void)defaultarg;
     regsSetDefaultRange(REGS_START_NV_IDX, COUNT_REGS);	// Set default values for NV regs.
-}
+} 
 
 // EEPROM block definition. 
 static const DevEepromBlock EEPROM_BLK PROGMEM = {

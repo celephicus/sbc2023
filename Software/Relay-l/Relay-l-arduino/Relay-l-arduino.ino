@@ -91,7 +91,7 @@ void modbus_cb(uint8_t evt) {
 
 	gpioSpare1Write(true);
 	// Dump MODBUS...
-	if (REGS[REGS_IDX_MODBUS_EVENT_DUMP] & _BV(evt)) {
+	if (REGS[REGS_IDX_ENABLES] & _BV(evt)) {
 		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("RECV: ")); 
 		consolePrint(CFMT_U, evt);
 		consolePrint(CFMT_STR_P, (console_cell_t)PSTR(" "));
@@ -276,7 +276,7 @@ static void console_init() {
 	consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CONSOLE_OUTPUT_NEWLINE_STR "Restart code:"));
 	regsPrintValue(REGS_IDX_RESTART);	
 	consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CONSOLE_OUTPUT_NEWLINE_STR "EEPROM status: "));
-	regsPrintValue(REGS_IDX_EEPROM_RC);	
+	regsPrintValue(REGS_IDX_FLAGS & (REGS_FLAGS_MASK_EEPROM_READ_BAD_0|REGS_FLAGS_MASK_EEPROM_READ_BAD_1));	
 	consolePrompt();
 
 }

@@ -28,10 +28,10 @@ with open(infile, 'rt') as f:
 		if s < len(NEXT) and re.search(NEXT[s], ln):
 			s += 1
 		parts[s].append(ln)
-
+"""
 import pprint
 pprint.pprint(parts)
-
+"""
 # Fix up tags to not be removed by processing.
 parts[S_LEADER].append(parts[S_DEFS].pop(0))
 
@@ -87,7 +87,7 @@ regs, regs_nv = [], []
 for r in registers:
 	if 'nv' in registers[r][0]: regs_nv.append(r)
 	else:						regs.append(r)
-	
+'''
 print (regs, regs_nv)
 print('REGISTERS')
 for f in registers.items(): print(f)
@@ -96,7 +96,7 @@ for f in fields:
 	print(f)
 	for ff in fields[f]:
 		print(' ', ff)
-
+'''
 # Generate declarations...
 outs = [parts[S_DECLS][0]]
 
@@ -126,7 +126,6 @@ for r in regs_nv:
 	
 outs.append('')
 outs.append(f"#define REGS_NV_DEFAULT_VALS {', '.join(nv_defaults)}")
-
 
 p_hex = []
 for r in list(registers.keys())[:16]:
