@@ -5,10 +5,6 @@
 typedef uint16_t regs_t;
 static const regs_t REGS_MAXVAL = 65535U;
 
-// Define version of regs schema. If you change the schema or the implementation, increment the number to force any existing
-// EEPROM to flag as corrupt. Also increment to force the default values to be set for testing.
-const uint16_t REGS_VERSION = 1;
-
 /* [[[ Definition start...
 FLAGS [print-hex] "Various flags."
 	DC_IN_VOLTS_LOW [0] "External DC power volts low,"
@@ -119,10 +115,6 @@ enum {
 // Access registers as an external.
 extern regs_t REGS[];
 
-// Initialise the driver, reads the NV regs from EEPROM, sets default values if corrupt. Returns error code from devEepromDriver.
-// Clears volatile registers.
-uint8_t regsInit();
-
 // Return flags register, this compiles to two lds instructions.
 static inline regs_t& regsFlags() { return REGS[REGS_IDX_FLAGS]; }
 
@@ -156,15 +148,5 @@ const char* regsGetRegisterDescription(uint8_t idx);
 
 // Return an additional help string, contents generated in the settings.local.h file.
 const char* regsGetHelpStr();
-
-// Read the non-volatile registers from EEPROM, when it returns it is guaranteed to have valid data in the buffer, but it might be set to default values.
-// Returns error code from devEepromDriver.
-uint8_t regsNvRead();
-
-// Writes non-volatile registers to EEPROM.
-void regsNvWrite();
-
-// Sets default values of all non-volatile registers.
-void regsNvSetDefaults();
 
 #endif // REGS_H__

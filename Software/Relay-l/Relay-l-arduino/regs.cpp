@@ -3,43 +3,10 @@
 #include <stdbool.h>
 
 #include "utils.h"
-#include "dev.h"
 #include "console.h"
 #include "regs.h"
 
 regs_t REGS[COUNT_REGS];
-
-// Locate two copies of the NV portion of the registers in EEPROM. 
-typedef struct {
-    dev_eeprom_checksum_t cs;
-    regs_t nv_regs[COUNT_REGS - REGS_START_NV_IDX];
-} EepromPackage;
-static EepromPackage EEMEM f_eeprom_package[2];
-
-static void set_defaults(void* data, const void* defaultarg) {
-    (void)data;
-    (void)defaultarg;
-    regsSetDefaultRange(REGS_START_NV_IDX, COUNT_REGS);	// Set default values for NV regs.
-} 
-
-// EEPROM block definition. 
-static const DevEepromBlock EEPROM_BLK PROGMEM = {
-    REGS_VERSION,													// Defines schema of data. 
-    sizeof(regs_t) * (COUNT_REGS - REGS_START_NV_IDX),    			// Size of user data block.
-    { (void*)&f_eeprom_package[0], (void*)&f_eeprom_package[1] },	// Address of two blocks of EEPROM data. They do not have to be contiguous
-    (void*)&REGS[REGS_START_NV_IDX],             					// User data in RAM.
-    set_defaults, 													// Fills user RAM data with default data.
-};
-
-uint8_t regsInit() { 
-	regsSetDefaultRange(0, REGS_START_NV_IDX);		// Set volatile registers. 
-    devEepromInit(&EEPROM_BLK); 					// Was a No-op last time I looked. 
-    return regsNvRead();							// Writes regs from REGS_START_NV_IDX on up, does not write to 0..(REGS_START_NV_IDX-1)
-}
-
-uint8_t regsNvRead() { return devEepromRead(&EEPROM_BLK, NULL); }
-void regsNvWrite() { devEepromWrite(&EEPROM_BLK); }
-void regsNvSetDefaults() { set_defaults(NULL, NULL); }
 
 bool regsWriteMask(uint8_t idx, regs_t mask, bool s) { return utilsWriteFlags<regs_t>(&REGS[idx], mask, s); }
 bool regsUpdateMask(uint8_t idx, regs_t mask, regs_t value) { return utilsUpdateFlags<regs_t>(&REGS[idx], mask, value); }

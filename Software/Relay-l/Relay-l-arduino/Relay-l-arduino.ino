@@ -61,6 +61,43 @@ void driverRelayWrite(uint8_t v) {
   digitalWrite(GPIO_PIN_RSEL, 1);
 }
 
+// Non-volatile objects.
+
+// Define version of NV data. If you change the schema or the implementation, increment the number to force any existing
+// EEPROM to flag as corrupt. Also increment to force the default values to be set for testing.
+const uint16_t NV_VERSION = 1;
+
+// Locate two copies of the NV portion of the registers in EEPROM. 
+typedef struct {
+    dev_eeprom_checksum_t cs;
+    regs_t nv_regs[COUNT_REGS - REGS_START_NV_IDX];
+} EepromPackage;
+static EepromPackage EEMEM f_eeprom_package[2];
+
+static void nv_set_defaults(void* data, const void* defaultarg) {
+    (void)data;
+    (void)defaultarg;
+    regsSetDefaultRange(REGS_START_NV_IDX, COUNT_REGS);	// Set default values for NV regs.
+} 
+
+// EEPROM block definition. 
+static const DevEepromBlock EEPROM_BLK PROGMEM = {
+    NV_VERSION,														// Defines schema of data. 
+    sizeof(regs_t) * (COUNT_REGS - REGS_START_NV_IDX),    			// Size of user data block.
+    { (void*)&f_eeprom_package[0], (void*)&f_eeprom_package[1] },	// Address of two blocks of EEPROM data. They do not have to be contiguous
+    (void*)&REGS[REGS_START_NV_IDX],             					// User data in RAM.
+    nv_set_defaults, 												// Fills user RAM data with default data.
+};
+
+uint8_t nvRead() { return devEepromRead(&EEPROM_BLK, NULL); }
+void nvWrite() { devEepromWrite(&EEPROM_BLK); }
+void nvSetDefaults() { nv_set_defaults(NULL, NULL); }
+
+uint8_t nvInit() { 
+    devEepromInit(&EEPROM_BLK); 					// Was a No-op last time I looked. 
+    return nvRead();							// Writes regs from REGS_START_NV_IDX on up, does not write to 0..(REGS_START_NV_IDX-1)
+}
+
 // MODBUS
 //
 static uint8_t read_holding_register(uint16_t address, uint16_t* value) { 
@@ -239,9 +276,9 @@ static bool console_cmds_user(char* cmd) {
 //    case /** ABORT **/ 0xfeaf: RUNTIME_ERROR(console_u_pop()); break;
 
 	// EEPROM data
-	case /** NV-DEFAULT **/ 0xfcdb: regsNvSetDefaults(); break;
-	case /** NV-W **/ 0xa8c7: regsNvWrite(); break;
-	case /** NV-R **/ 0xa8c2: regsNvRead(); break;
+	case /** NV-DEFAULT **/ 0xfcdb: nvSetDefaults(); break;
+	case /** NV-W **/ 0xa8c7: nvWrite(); break;
+	case /** NV-R **/ 0xa8c2: nvRead(); break;
 
 #if 0	
 	// Events & trace...
@@ -299,7 +336,8 @@ static void service_regs_dump() {
 
 void setup() {
 	const uint16_t restart = devWatchdogInit();
-	regsInit();
+	regsSetDefaultRange(0, REGS_START_NV_IDX);		// Set volatile registers. 
+	nvInit();
 	REGS[REGS_IDX_RESTART] = restart;
 	console_init();
 	relay_driver_init();
