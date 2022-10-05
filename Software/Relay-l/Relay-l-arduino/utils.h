@@ -27,6 +27,39 @@ bool utilsIsTimerDone(T &then, T timeout) { return ((T)millis() - then) > timeou
 // Stolen from a discussion on some Arduino forum. 
 #define utilsRunEvery(t_) for (static uint16_t then; ((uint16_t)millis() - then) >= (uint16_t)(t_); then += (uint16_t)(t_))
 
+/* Declare a queue type with a specific length for a specific data type. Not sure where this clever implementation
+	originated, apocryphally it's from a Keil UART driver. 
+   The length must be a power of 2. Note that after inserting (length) items, the queue is full. 
+   If only put and get methods are called by different threads, then it is thread safe if the index type is atomic. 
+   However, if the _put_overwrite or _push methods are used, then all calls should be from critical sections.
+   Also see https://github.com/QuantumLeaps/lock-free-ring-buffer 
+*/
+#define DECLARE_QUEUE_TYPE(name_, type_, size_)																			\
+UTILS_STATIC_ASSERT(0 == ((size_) & ((size_) - 1U)));																	\
+typedef struct {																										\
+	type_ fifo[size_];																								 	\
+	volatile uint8_t head, tail;																					 	\
+} Queue##name_;																								   			\
+static inline void queue_##name_##Init(Queue##name_* q) { q->head = q->tail = 0U; }									  	\
+static inline uint8_t queue_##name_##Len(const Queue##name_* q) { return q->tail - q->head; }			  				\
+static inline bool queue_##name_##Empty(const Queue##name_* q) { return queue_##name_##_len(q) == 0U; }				  	\
+static inline bool queue_##name_##Full(const Queue##name_* q) { return queue_##name_##_len(q) >= (size_); }			  	\
+static inline void queue_##name_##Put(Queue##name_* q, type_ x)  {											   			\
+	q->fifo[q->tail++ & ((size_) - 1U)] = x;																		   	\
+}																													  	\
+static inline void queue_##name_##PutOverwrite(Queue##name_* q, type_ x)  {									 			\
+	if (queue_##name_##_full(q))																					  	\
+		q->head += 1U;																								 	\
+	queue_##name_##_put(q, x);																		   					\
+}																													  	\
+static inline void queue_##name_##Push(Queue##name_* q, type_ x)  {											  			\
+	q->fifo[--q->head & ((size_) - 1U)] = x;																		   	\
+}																													  	\
+static inline type_ queue_##name_##Get(Queue##name_* q)  {													   			\
+	return q->fifo[q->head++ & ((size_) - 1U)];																			\
+}
+
+
 // A little "C" implementation of a buffer that can have stuff appended to it without fear of overflowing.
 #define DECLARE_BUFFER_TYPE(name_, size_)																					\
 UTILS_STATIC_ASSERT((size_) <= (uint_least8_t)-1);																			\
@@ -53,7 +86,7 @@ static inline void buffer##name_##AddU16(Buffer##name_* q, uint16_t x) { 							
 
 // When you need to loop an index over a small range...
 #define fori(limit_) for (uint8_t i = 0; i < (limit_); i += 1)
-    
+	
 // Perhaps an inner loop as well...
 #define forj(limit_) for (uint8_t j = 0; j < (limit_); j += 1)
 
@@ -76,15 +109,15 @@ T utilsLowestSetBit(T x) { return x & (x - 1); }
 // Increment/decrement a variable within limits. Returns true if value updated. 
 template <typename T, typename U> // T is usually unsigned, U must be signed. 
 bool utilsBump(T* val, U incdec, T min, T max, bool rollaround=false) {
-    U bumped_val = *val + incdec; // Assume no overflow. 
-    if (bumped_val < (U)min) 
-        bumped_val = rollaround ? (U)max : (U)min; 
-    if (bumped_val > (U)max) 
-        bumped_val = rollaround ? (U)min : (U)max; 
-    bool changed = (*val != (T)bumped_val); /* Now the result must be in range so we can compare it to the original value. */ 
-    if (changed) 
-        *val = (T)bumped_val; 
-    return changed;
+	U bumped_val = *val + incdec; // Assume no overflow. 
+	if (bumped_val < (U)min) 
+		bumped_val = rollaround ? (U)max : (U)min; 
+	if (bumped_val > (U)max) 
+		bumped_val = rollaround ? (U)min : (U)max; 
+	bool changed = (*val != (T)bumped_val); /* Now the result must be in range so we can compare it to the original value. */ 
+	if (changed) 
+		*val = (T)bumped_val; 
+	return changed;
 }
 
 // Increment/decrement a variable within limits, given a target value and a delta value.
@@ -153,28 +186,28 @@ T utilsAbs(T x)  {
 
 // Update the bits matching the mask in the value. Return true if value has changed. 
 template <typename T>
-bool utilsUpdateFlags(T* flags, T mask, T val) { const T old = *flags; *flags = (*flags & ~mask) | val; return (old != *flags); }
+static inline bool utilsUpdateFlags(T* flags, T mask, T val) { const T old = *flags; *flags = (*flags & ~mask) | val; return (old != *flags); }
 
-// Update the bits matching the mask in the value. Return true if value has changed. 
+// Write the bits matching the mask in the value. Return true if value has changed. 
 template <typename T>
-bool utilsWriteFlags(T* flags, T mask, bool s) { const T old = *flags; if (s) *flags |=  mask; else *flags &= ~mask; return (old != *flags); }
+static inline bool utilsWriteFlags(T* flags, T mask, bool s) { const T old = *flags; if (s) *flags |=  mask; else *flags &= ~mask; return (old != *flags); }
 
 // Integer division spreading error.
 template <typename T>
 T utilsRoundedDivide(T num, T den) {
-    return (num + den/2) / den;
+	return (num + den/2) / den;
 }	
 
 // Absolute difference for unsigned types.
 template <typename T>
 T utilsAbsDiff(T a, T b) {
-    return  (a > b) ? (a - b) : (b - a);
+	return  (a > b) ? (a - b) : (b - a);
 }
 	
 // Rescale a scaled value, assuming no offset.
 template <typename T, typename U>  // T is unsigned, U can be larger type that can hold input*max-output. 
 T utilsRescale(T input_value, T max_input, T max_output) {
-    return (T)utilsRoundedDivide<U>((U)input_value * (U)max_output, (U)max_input);
+	return (T)utilsRoundedDivide<U>((U)input_value * (U)max_output, (U)max_input);
 }
 #define utilsRescaleU8 utilsRescale<uint8_t, uint16_t>
 #define utilsRescaleU16 utilsRescale<uint16_t, uint32_t>
