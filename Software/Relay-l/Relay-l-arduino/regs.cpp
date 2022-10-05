@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <util/atomic.h>
 
 #include "utils.h"
 #include "console.h"
@@ -14,7 +15,9 @@ bool regsWriteMaskFlags(regs_t mask, bool s) { return regsWriteMask(REGS_IDX_FLA
 bool regsUpdateMaskFlags(regs_t mask, regs_t value) { return regsUpdateMask(REGS_IDX_FLAGS, mask, value); }
 
 void regsPrintValue(uint8_t reg_idx) {
-	consolePrint((_BV(reg_idx) & REGS_PRINT_HEX_MASK) ? CFMT_X : CFMT_D, (console_cell_t)REGS[reg_idx]);	
+	regs_t val; 
+	ATOMIC_BLOCK(ATOMIC_FORCEON) { v = REGS[reg_idx]; }	// Might be written by an ISR.
+	consolePrint((_BV(reg_idx) & REGS_PRINT_HEX_MASK) ? CFMT_X : CFMT_D, (console_cell_t)v);	
 }
 
 void regsSetDefaultAll() { regsSetDefaultRange(0, COUNT_REGS); }

@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <SoftwareSerial.h>
+#include <util/atomic.h>
 
 #include "project_config.h"
 #include "Relay-gpio.h"
@@ -251,8 +252,10 @@ static bool console_cmds_user(char* cmd) {
 	// Regs
     case /** ?V **/ 0x688c: fori(COUNT_REGS) { regsPrintValue(i); } break;
     case /** V **/ 0xb5f3: 
-	    { const uint8_t idx = console_u_pop(); const uint8_t v = console_u_pop(); if (idx < COUNT_REGS) REGS[idx] = v; } 
-		break; 
+	    { const uint8_t idx = console_u_pop(); const uint8_t v = console_u_pop(); 
+		    if (idx < COUNT_REGS) 
+		    	ATOMIC_BLOCK(ATOMIC_FORCEON) { REGS[idx] = v; } // Might be interrupted by an ISR part way through.
+		} break; 
 	case /** ??V **/ 0x85d3: {
 		fori (COUNT_REGS) {
 			consolePrint(CFMT_NL, 0); 
