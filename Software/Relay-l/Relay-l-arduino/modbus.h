@@ -86,8 +86,16 @@ void modbusRelayBoardWrite(uint8_t id, uint8_t rly, uint8_t state, uint8_t delay
 
 bool modbusIsBusy();
 
+// Call in mainloop frequently to service the driver.
 void modbusService();
-bool modbusGetResponse(uint8_t* len, uint8_t* buf);
+
+// Call in event handler to get a response from the slave, len set to length of client buffer before call. If there is a response available, true is returned and len is set to number of bytes copied, zero implies overflow.
+enum {
+	MODBUS_RESPONSE_NONE,
+	MODBUS_RESPONSE_AVAILABLE,
+	MODBUS_RESPONSE_OVERFLOW,
+};
+uint8_t modbusGetResponse(uint8_t* len, uint8_t* buf);
 
 // Setters/getters for modbus 16 bit format.
 static inline uint16_t modbusGetU16(const uint8_t* v)  { return ((uint16_t)v[0] << 8) | (uint16_t)(v[1]); }

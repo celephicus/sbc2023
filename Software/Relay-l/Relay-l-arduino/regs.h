@@ -6,18 +6,18 @@ typedef uint16_t regs_t;
 static const regs_t REGS_MAXVAL = 65535U;
 
 /* [[[ Definition start...
-FLAGS [print-hex] "Various flags."
+FLAGS [hex] "Various flags."
 	DC_IN_VOLTS_LOW [0] "External DC power volts low,"
 	BUS_VOLTS_LOW [1] "Bus volts low,"
 	EEPROM_READ_BAD_0 [2] "EEPROM bank 0 corrupt."
 	EEPROM_READ_BAD_1 [3] "EEPROM bank 1 corrupt."
 	WATCHDOG_RESTART [15] "Whoops."
-RESTART [print-hex] "MCUSR in low byte, wdog in high byte."
+RESTART [hex] "MCUSR in low byte, wdog in high byte."
 ADC_VOLTS_MON_12V_IN "Raw ADC DC power in volts,"
 ADC_VOLTS_MON_BUS "Raw ADC Bus volts."
 VOLTS_MON_12V_IN "DC power in /mV."
 VOLTS_MON_BUS "Bus volts /mV"
-ENABLES [nv print-hex 0xff] "Enable flags."
+ENABLES [nv hex 0xff] "Enable flags."
 	DUMP_MODBUS_EVENTS [0..7] "Dump MODBUS event, flag bits map to MODBUS event Ids."
 	DUMP_REGS [8] "Regs values dump to console"
 	DUMP_REGS_FAST [9] "Dump at 5/s rather than 1/s"

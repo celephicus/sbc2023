@@ -135,14 +135,24 @@ bool modbusIsBusy() {
 	return f_ctx.expected_response_byte_size > 0;
 }
 
-bool modbusGetResponse(uint8_t* len, uint8_t* buf) {
-	*len = bufferFrameLen(&f_ctx.buf_resp);
-	if (*len > 0) {
+uint8_t modbusGetResponse(uint8_t* len, uint8_t* buf) {
+	const uint8_t resp_len = bufferFrameLen(&f_ctx.buf_resp);	// Get length of response 
+	uint8_t rc;
+	
+	if (0 == resp_len) 			// If no response available...
+		return MODBUS_RESPONSE_NONE;
+		
+	if (resp_len > *len) 	// If overflow...
+		rc = MODBUS_RESPONSE_OVERFLOW;	
+	else {
+		*len = resp_len;
 		memcpy(buf, f_ctx.buf_resp.buf, *len);
-		bufferFrameReset(&f_ctx.buf_resp);
-		return true;
+		rc = MODBUS_RESPONSE_AVAILABLE;
 	}
-	return false;
+	
+	bufferFrameReset(&f_ctx.buf_resp);
+	return rc;
+	
 }
 
 void modbusService() {

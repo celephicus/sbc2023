@@ -18,8 +18,12 @@ enum {
 	DRIVER_LED_PATTERN_BUS_VOLTS_LOW,
 	DRIVER_LED_PATTERN_NO_COMMS,
 };
-
 void driverSetLedPattern(uint8_t p);
+
+// NV objects.
+uint8_t driverNvRead();
+void driverNvWrite();
+void driverNvSetDefaults();
 
 #if 0
 // The scanner controls various flags in the flags register. This function causes the events associated with a flags mask to be rescanned, and the event to be resent if the value is above/below a threshold. 

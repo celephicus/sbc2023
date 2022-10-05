@@ -55,7 +55,7 @@ for ln in parts[S_DEFS]:
 		for opt in raw_options:
 			try: int(opt, 0)
 			except ValueError: 
-				if opt not in 'nv print-hex'.split(): error(f"{name}: illegal option `{opt}'.") 
+				if opt not in 'nv hex'.split(): error(f"{name}: illegal option `{opt}'.") 
 			if opt in options: error(f"{name}: duplicate option `{opt}'.") 
 			options.append(opt)
 		registers[name] = (options, r_desc)
@@ -129,7 +129,7 @@ outs.append(f"#define REGS_NV_DEFAULT_VALS {', '.join(nv_defaults)}")
 
 p_hex = []
 for r in list(registers.keys())[:16]:
-	if 'print-hex' in registers[r][0]:
+	if 'hex' in registers[r][0]:
 		p_hex.append(f'_BV(REGS_IDX_{r})')
 	
 outs.append('')

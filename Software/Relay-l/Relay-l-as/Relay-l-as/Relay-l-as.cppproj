@@ -236,6 +236,14 @@ build.cmd
 </PreBuildEvent>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\Relay-l-arduino\driver.h">
+      <SubType>compile</SubType>
+      <Link>driver.h</Link>
+    </Compile>
+    <Compile Include="..\..\Relay-l-arduino\driver.cpp">
+      <SubType>compile</SubType>
+      <Link>driver.cpp</Link>
+    </Compile>
     <Compile Include="..\..\Relay-l-arduino\dev.h">
       <SubType>compile</SubType>
       <Link>dev.h</Link>

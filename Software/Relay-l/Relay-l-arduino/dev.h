@@ -3,8 +3,8 @@
 
 enum { DEV_ADC_MAX_VAL = 1023 };
 
-#define DEV_ADC_RESULT_NONE NULL   		// Result pointer to not store result, e.g if waiting for the ADC to settle.
-#define DEV_ADC_RESULT_END ((void*)1)	// Result pointer for the last definition in the definition list. 
+#define DEV_ADC_RESULT_NONE ((void*)1)	// Result pointer to not store result, e.g if waiting for the ADC to settle.
+#define DEV_ADC_RESULT_END NULL			// Result pointer for the last definition in the definition list. 
 
 // ADC reference options, use ORed with ADMUX value.
 enum { 
@@ -46,9 +46,9 @@ enum {
 	DEV_ADC_CHAN_5 =				5,
 	DEV_ADC_CHAN_6 =				6,
 	DEV_ADC_CHAN_7 =				7,
-    DEV_ADC_CHAN_TEMPERATURE = 	8,		// Requires ADC ref set to internal bandgap (1.1V). 
-    DEV_ADC_CHAN_BAND_GAP_REF = 	14,		// Nominal 1.1V, but really not very accurate. 
-    DEV_ADC_CHAN_GND = 			15,		// Why do this??
+	DEV_ADC_CHAN_TEMPERATURE = 		8,		// Requires ADC ref set to internal bandgap (1.1V). 
+	DEV_ADC_CHAN_BAND_GAP_REF = 	14,		// Nominal 1.1V, but really not very accurate. 
+	DEV_ADC_CHAN_GND = 				15,		// Why do this??
 #elif defined(__AVR_ATmega2560__)
 	DEV_ADC_CHAN_0 =				0,
 	DEV_ADC_CHAN_1 =				1,
@@ -58,17 +58,17 @@ enum {
 	DEV_ADC_CHAN_5 =				5,
 	DEV_ADC_CHAN_6 =				6,
 	DEV_ADC_CHAN_7 =				7,
-    DEV_ADC_CHAN_TEMPERATURE = 	8,		// Requires ADC ref set to internal bandgap (1.1V). 
+    DEV_ADC_CHAN_TEMPERATURE = 		8,		// Requires ADC ref set to internal bandgap (1.1V). 
     DEV_ADC_CHAN_BAND_GAP_REF = 	30,		// Nominal 1.1V, but really not very accurate. 
-    DEV_ADC_CHAN_GND = 			31,		// Why do this??
+    DEV_ADC_CHAN_GND = 				31,		// Why do this??
 	DEV_ADC_CHAN_8 =				32,
 	DEV_ADC_CHAN_9 =				33,
-	DEV_ADC_CHAN_10 =			34,
-	DEV_ADC_CHAN_11 =			35,
-	DEV_ADC_CHAN_12 =			36,
-	DEV_ADC_CHAN_13 =			37,
-	DEV_ADC_CHAN_14 =			38,
-	DEV_ADC_CHAN_15 =			39,
+	DEV_ADC_CHAN_10 =				34,
+	DEV_ADC_CHAN_11 =				35,
+	DEV_ADC_CHAN_12 =				36,
+	DEV_ADC_CHAN_13 =				37,
+	DEV_ADC_CHAN_14 =				38,
+	DEV_ADC_CHAN_15 =				39,
 #else
  #error Unknown processor!	    
 #endif
@@ -95,7 +95,7 @@ void devAdcInit(uint8_t ps);
 // Array defined elsewhere. Last item must have a register index of DEV_ADC_RESULT_END, and the setup function is called one last time with the last setup arg value. 
 extern const DevAdcChannelDef g_adc_def_list[];
 
-// Setup function called just before starting conversion. Declared weak so that you can supply your own definition.
+// Setup function called just before starting conversion. An empty body is provided but declared weak so that you can supply your own definition.
 extern void devAdcSetupFunc(void* setup_arg);
 
 // Start conversions in list. 

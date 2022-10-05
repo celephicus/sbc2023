@@ -8,95 +8,9 @@
 #include "utils.h"
 #include "console.h"
 #include "modbus.h"
+#include "driver.h"
 #include "sbc2022_modbus.h"
 
-// Driver for the blinky LED.
-static UtilsSeqCtx f_led_seq;
-typedef struct {        
-	UtilsSeqHdr hdr;
-    uint8_t colour;
-} led_pattern_def_t;
-
-static void led_action_func(const UtilsSeqHdr* hdr) {
-   const led_pattern_def_t* def = (const led_pattern_def_t*)hdr;
-   gpioLedWrite((NULL != def) ? !!pgm_read_byte(&def->colour) : false);
-}
-static void led_set_pattern(const led_pattern_def_t* def) { 
-	utilsSeqStart(&f_led_seq, (const UtilsSeqHdr*)def, sizeof(led_pattern_def_t), led_action_func); 
-}
-
-static const led_pattern_def_t LED_PATTERN_OK[] PROGMEM = 				{ {2, 0}, {UTILS_SEQ_END, 1}, };
-static const led_pattern_def_t LED_PATTERN_DC_IN_VOLTS_LOW[] PROGMEM = 	{ {20, 1}, {20, 0}, {UTILS_SEQ_REPEAT, 0}, };
-static const led_pattern_def_t LED_PATTERN_BUS_VOLTS_LOW[] PROGMEM = 	{ {5, 1},	{5, 0}, {UTILS_SEQ_REPEAT, 0}, };
-static const led_pattern_def_t LED_PATTERN_NO_COMMS[] PROGMEM = 		{ {50, 1},	{5, 0}, {UTILS_SEQ_REPEAT, 0}, };
-
-static const led_pattern_def_t* const LED_PATTERNS[] PROGMEM = { 
-	LED_PATTERN_OK, LED_PATTERN_DC_IN_VOLTS_LOW, LED_PATTERN_BUS_VOLTS_LOW, LED_PATTERN_NO_COMMS, 
-};
-void driverSetLedPattern(uint8_t p) {
-	if (p >= UTILS_ELEMENT_COUNT(LED_PATTERNS))
-		p = 0;
-	led_set_pattern((const led_pattern_def_t*)pgm_read_word(&LED_PATTERNS[p]));
-}
-
-// MAX4820 relay driver driver.
-void driverRelayWrite(uint8_t v);
-static void relay_driver_init() {
-  pinMode(GPIO_PIN_RSEL, OUTPUT);
-  digitalWrite(GPIO_PIN_RSEL, 1);   // Set inactive.
-  pinMode(GPIO_PIN_RDAT, OUTPUT);
-  pinMode(GPIO_PIN_RCLK, OUTPUT);
-  driverRelayWrite(0);
-  gpioWdogSetModeOutput();
-}
-static void relay_driver_pat_watchdog() {
-	gpioWdogToggle();
-}
-static uint8_t f_relay_data;
-uint8_t driverRelayRead() { return f_relay_data; }
-void driverRelayWrite(uint8_t v) {
-	f_relay_data = v;
-  digitalWrite(GPIO_PIN_RSEL, 0);
-  shiftOut(GPIO_PIN_RDAT, GPIO_PIN_RCLK, MSBFIRST , v);
-  digitalWrite(GPIO_PIN_RSEL, 1);
-}
-
-// Non-volatile objects.
-
-// Define version of NV data. If you change the schema or the implementation, increment the number to force any existing
-// EEPROM to flag as corrupt. Also increment to force the default values to be set for testing.
-const uint16_t NV_VERSION = 1;
-
-// Locate two copies of the NV portion of the registers in EEPROM. 
-typedef struct {
-    dev_eeprom_checksum_t cs;
-    regs_t nv_regs[COUNT_REGS - REGS_START_NV_IDX];
-} EepromPackage;
-static EepromPackage EEMEM f_eeprom_package[2];
-
-static void nv_set_defaults(void* data, const void* defaultarg) {
-    (void)data;
-    (void)defaultarg;
-    regsSetDefaultRange(REGS_START_NV_IDX, COUNT_REGS);	// Set default values for NV regs.
-} 
-
-// EEPROM block definition. 
-static const DevEepromBlock EEPROM_BLK PROGMEM = {
-    NV_VERSION,														// Defines schema of data. 
-    sizeof(regs_t) * (COUNT_REGS - REGS_START_NV_IDX),    			// Size of user data block.
-    { (void*)&f_eeprom_package[0], (void*)&f_eeprom_package[1] },	// Address of two blocks of EEPROM data. They do not have to be contiguous
-    (void*)&REGS[REGS_START_NV_IDX],             					// User data in RAM.
-    nv_set_defaults, 												// Fills user RAM data with default data.
-};
-
-uint8_t nvRead() { return devEepromRead(&EEPROM_BLK, NULL); }
-void nvWrite() { devEepromWrite(&EEPROM_BLK); }
-void nvSetDefaults() { nv_set_defaults(NULL, NULL); }
-
-uint8_t nvInit() { 
-    devEepromInit(&EEPROM_BLK); 					// Was a No-op last time I looked. 
-    return nvRead();							// Writes regs from REGS_START_NV_IDX on up, does not write to 0..(REGS_START_NV_IDX-1)
-}
 
 // MODBUS
 //
@@ -123,9 +37,10 @@ static uint8_t write_holding_register(uint16_t address, uint16_t value) {
 
 void modbus_cb(uint8_t evt) { 
 	uint8_t frame[RESP_SIZE];
-	uint8_t frame_len;
-	bool resp_avail = modbusGetResponse(&frame_len, frame);
+	uint8_t frame_len = RESP_SIZE;	// Must call modbusGetResponse() with buffer length set. 
+	const uint8_t resp_avail = modbusGetResponse(&frame_len, frame);
 
+	
 	gpioSpare1Write(true);
 	// Dump MODBUS...
 	if (REGS[REGS_IDX_ENABLES] & _BV(evt)) {
@@ -134,11 +49,13 @@ void modbus_cb(uint8_t evt) {
 		consolePrint(CFMT_STR_P, (console_cell_t)PSTR(" "));
 		consolePrint(CFMT_STR_P, (console_cell_t)modbusGetCallbackEventDescription(evt));
 		consolePrint(CFMT_STR_P, (console_cell_t)PSTR(": "));
-		if (resp_avail) {
+		if (MODBUS_RESPONSE_AVAILABLE == resp_avail) {
 			const uint8_t* p = frame;
 			while (frame_len-- > 0)
 				consolePrint(CFMT_X2, *p++);
 		} 
+		if (MODBUS_RESPONSE_OVERFLOW == resp_avail)
+			consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OVERFLOW"));
 		consolePrint(CFMT_NL, 0);
 	}
 	
@@ -186,11 +103,21 @@ void modbus_cb(uint8_t evt) {
 	gpioSpare1Write(0);
 }
 
+// Stuff for debugging NODBUS timing.
+void modbus_timing_debug(uint8_t id, uint8_t s) {
+	switch (id) {
+//	case MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT: gpioSpare1Write(s); break;
+	case MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT: 	gpioSpare2Write(s); break;
+	case MODBUS_TIMING_DEBUG_EVENT_RX_FRAME: 	gpioSpare3Write(s); break;
+	}
+}		
+
 static BufferFrame f_modbus_autosend_buf;
 
 static void modbus_init() {
 	Serial.begin(9600);
 	modbusInit(Serial, GPIO_PIN_RS485_TX_EN, modbus_cb);
+	modbusSetTimingDebugCb(modbus_timing_debug);
 	bufferFrameReset(&f_modbus_autosend_buf);
 }
 static void modbus_service() {
@@ -200,7 +127,6 @@ static void modbus_service() {
 			modbusMasterSend(f_modbus_autosend_buf.buf, bufferFrameLen(&f_modbus_autosend_buf));
 	}
 }
-
 
 // Console
 static void print_banner() { consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CFG_BANNER_STR)); }	
@@ -256,7 +182,9 @@ static bool console_cmds_user(char* cmd) {
 	case /** ??V **/ 0x85d3: {
 		fori (COUNT_REGS) {
 			consolePrint(CFMT_NL, 0); 
-			consolePrint(CFMT_D, (console_cell_t)i);
+			consolePrint(CFMT_D|CFMT_M_NO_SEP, (console_cell_t)i);
+			consolePrint(CFMT_C, (console_cell_t)':');
+			regsPrintValue(i);
 			consolePrint(CFMT_STR_P, (console_cell_t)regsGetRegisterName(i));
 			consolePrint(CFMT_STR_P, (console_cell_t)regsGetRegisterDescription(i));
 			devWatchdogPat(DEV_WATCHDOG_MASK_MAINLOOP);
@@ -276,9 +204,9 @@ static bool console_cmds_user(char* cmd) {
 //    case /** ABORT **/ 0xfeaf: RUNTIME_ERROR(console_u_pop()); break;
 
 	// EEPROM data
-	case /** NV-DEFAULT **/ 0xfcdb: nvSetDefaults(); break;
-	case /** NV-W **/ 0xa8c7: nvWrite(); break;
-	case /** NV-R **/ 0xa8c2: nvRead(); break;
+	case /** NV-DEFAULT **/ 0xfcdb: driverNvSetDefaults(); break;
+	case /** NV-W **/ 0xa8c7: driverNvWrite(); break;
+	case /** NV-R **/ 0xa8c2: driverNvRead(); break;
 
 #if 0	
 	// Events & trace...
@@ -302,6 +230,7 @@ static bool console_cmds_user(char* cmd) {
   }
   return true;
 }
+
 SoftwareSerial consSerial(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); // RX, TX
 static void console_init() {
 	consSerial.begin(19200);
@@ -335,23 +264,21 @@ static void service_regs_dump() {
 }
 
 void setup() {
-	const uint16_t restart = devWatchdogInit();
+	const uint16_t restart_rc = devWatchdogInit();
 	regsSetDefaultRange(0, REGS_START_NV_IDX);		// Set volatile registers. 
-	nvInit();
-	REGS[REGS_IDX_RESTART] = restart;
+	driverInit();
+	REGS[REGS_IDX_RESTART] = restart_rc;
 	console_init();
-	relay_driver_init();
 	modbus_init();
 }
 
 void loop() {
 	devWatchdogPat(DEV_WATCHDOG_MASK_MAINLOOP);
 	consoleService();
-	relay_driver_pat_watchdog();		// Must happen every 50ms or so. 
 	modbus_service();
+	driverService();
 	utilsRunEvery(100) {				// Basic 100ms timebase.
 		service_regs_dump();
-		utilsSeqService(&f_led_seq);
 	}
 }
 
@@ -399,23 +326,10 @@ public:
 	}	
 };
 
-
-
-// Stuff for debugging timing.
-void modbus_timing_debug(uint8_t id, uint8_t s) {
-	switch (id) {
-//	case MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT: gpioSpare1Write(s); break;
-	case MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT: 	gpioSpare2Write(s); break;
-	case MODBUS_TIMING_DEBUG_EVENT_RX_FRAME: 	gpioSpare3Write(s); break;
-	}
-}		
-
-
 static SmSupervisorContext sm_supervisor_context;
 
 void setup() {
 	commonInit();
-	modbusSetTimingDebugCb(modbus_timing_debug);
 	modbusSetSlaveId(SBC2022_MODBUS_SLAVE_ADDRESS_RELAY);
 	console_init();
 	driverInit();
