@@ -7,6 +7,7 @@ extern uint32_t millis();
 #endif
 
 // I can't believe how often I stuff up using millis() to time a period. So as usual, here's a function to do timeouts.
+uint32_t millis();
 template <typename T>
 void utilsStartTimer(T &then) { then = (T)millis(); }
 

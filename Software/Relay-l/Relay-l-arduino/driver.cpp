@@ -7,30 +7,7 @@
 #include "dev.h"
 #include "driver.h"
 
-/*
-#include "SoftwareSerial.h"
-
-#include <stdarg.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <avr/wdt.h>
-
-#include "project_config.h"
-#include "src\common\debug.h"
-#include "src\common\types.h"
-#include "src\common\event.h"
-#include "src\common\regs.h"
-#include "src\common\adc_driver.h"
-#include "src\common\thold_scanner.h"
-#include "src\common\utils.h"
-#include "src\common\gpio.h"
-#include "src\common\sequencer.h"
-#include "driver.h"
-
-
-#include "thread.h"
-#include "sw_scanner.h"
-*/
+// These objects are declared here in order that the NV driver can write them to EEPROM as one block. 
 
 // Driver for the blinky LED.
 //
@@ -92,10 +69,22 @@ void driverRelayWrite(uint8_t v) {
 // EEPROM to flag as corrupt. Also increment to force the default values to be set for testing.
 const uint16_t NV_VERSION = 1;
 
+// All data managed by NV
+typedef struct {
+	uint16_t regs[COUNT_REGS];		// Must be first in struct as we only write the last bit to NV.
+} NvData;
+static NvData l_nv_data;
+
+// Defined in regs, declared here since we have the storage.
+uint16_t* regsGetRegs() { return l_nv_data.regs; }
+
+// The NV only managed the latter part of regs and whatever else is in the NvData struct.
+#define NV_DATA_NV_SIZE (sizeof(l_nv_data) - sizeof(uint16_t) * (COUNT_REGS - REGS_START_NV_IDX))
+
 // Locate two copies of the NV portion of the registers in EEPROM. 
 typedef struct {
     dev_eeprom_checksum_t cs;
-    regs_t nv_regs[COUNT_REGS - REGS_START_NV_IDX];
+    uint8_t raw_mem[NV_DATA_NV_SIZE];
 } EepromPackage;
 static EepromPackage EEMEM f_eeprom_package[2];
 
@@ -108,9 +97,9 @@ static void nv_set_defaults(void* data, const void* defaultarg) {
 // EEPROM block definition. 
 static const DevEepromBlock EEPROM_BLK PROGMEM = {
     NV_VERSION,														// Defines schema of data. 
-    sizeof(regs_t) * (COUNT_REGS - REGS_START_NV_IDX),    			// Size of user data block.
-    { (void*)&f_eeprom_package[0], (void*)&f_eeprom_package[1] },	// Address of two blocks of EEPROM data. They do not have to be contiguous
-    (void*)&REGS[REGS_START_NV_IDX],             					// User data in RAM.
+    NV_DATA_NV_SIZE,												// Size of user data block in EEPROM package.
+    { (void*)&f_eeprom_package[0], (void*)&f_eeprom_package[1] },	// Address of two blocks of EEPROM data. 
+    (void*)&l_nv_data.regs[REGS_START_NV_IDX],      				// User data in RAM.
     nv_set_defaults, 												// Fills user RAM data with default data.
 };
 
@@ -122,7 +111,6 @@ static uint8_t nv_init() {
     devEepromInit(&EEPROM_BLK); 					// Was a No-op last time I looked. 
     return driverNvRead();							// Writes regs from REGS_START_NV_IDX on up, does not write to 0..(REGS_START_NV_IDX-1)
 }
-
 
 // ADC read.
 //

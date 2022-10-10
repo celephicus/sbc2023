@@ -3,11 +3,18 @@
 #include <stdbool.h>
 #include <string.h>
 
+// millis()
+#if defined(AVR)
+#include <Arduino.h>
+#elif defined(ESP32)
+#else
+uint32_t millis();
+#endif
+
 // Progmem access.
 #if defined(AVR)
  #include <avr/pgmspace.h>	// Takes care of PSTR(), pgm_read_xxx().
- #define pgm_read_ptr(x_) (const void*)pgm_read_word(x_)		// 16 bit target.
-#elif defined(ESP32 )
+#elif defined(ESP32)
  #include <pgmspace.h>	// Takes care of PSTR() ,pgm_read_xxx()
  #define pgm_read_ptr(x_) (const void*)pgm_read_dword(x_)		// 32 bit target.
 #else
@@ -23,7 +30,7 @@
  #include <util/atomic.h>
 #elif defined(ESP32 )
 #else
- #define ATOMIC_RESTORE /*empty */
+ #define ATOMIC_RESTORESTATE /*empty */
  #define ATOMIC_BLOCK(_a) /* empty */
  #define _BV(_x) (1U << (_x))
 #endif
@@ -33,7 +40,9 @@
 #else
  #include "project_config.test.h"
 #endif
-
+#ifndef PROJECT_CONFIG_H__
+#error "no project config"
+#endif
 #include "utils.h"
 #include "event.h"
 
@@ -74,7 +83,7 @@ static bool event_publish(t_event ev, bool flag_front) {
 	if (EV_NIL == event_id(ev))
 		return true;
 	eventTraceWriteEv(ev);
-    ATOMIC_BLOCK(ATOMIC_RESTORE) {		// Need to lock event queue to ensure an ISR doesn't add an event between us checking and putting.
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {		// Need to lock event queue to ensure an ISR doesn't add an event between us checking and putting.
 		if (flag_front)
 			success = queueEventPush(&f_queue_event, &ev);
 		else
@@ -90,7 +99,7 @@ bool eventPublishEvFront(t_event ev) { return event_publish(ev, true); }
 t_event eventGet() {
     t_event ev;
 	bool available;
-    ATOMIC_BLOCK(ATOMIC_RESTORE) { available = queueEventGet(&f_queue_event, &ev); }
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { available = queueEventGet(&f_queue_event, &ev); }
 	return available ? ev : event_mk(EV_NIL);
 }
 
@@ -98,7 +107,7 @@ t_event eventGet() {
 //
 
 void eventTraceClear() {
-	ATOMIC_BLOCK(ATOMIC_RESTORE) { queueTraceInit(&f_queue_trace); }
+	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { queueTraceInit(&f_queue_trace); }
 }
 
 // Do we trace an event?
@@ -111,7 +120,7 @@ void eventTraceWriteEv(t_event ev) {
         EventTraceItem item;
         item.timestamp = (uint32_t)millis();   // Safe to call millis() from ISR.
         item.event = ev;
-		ATOMIC_BLOCK(ATOMIC_RESTORE) {
+		ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
 			queueTracePutOverwrite(&f_queue_trace, &item);
 		}
     }
@@ -119,7 +128,7 @@ void eventTraceWriteEv(t_event ev) {
 
 bool eventTraceRead(EventTraceItem* b) {
     bool is_event_available;
-	ATOMIC_BLOCK(ATOMIC_RESTORE) {
+	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
 	    is_event_available = queueTraceGet(&f_queue_trace, b);
 	}
     return is_event_available;
@@ -142,7 +151,7 @@ void eventTraceMaskSetDefault() {
 // Timers, only used with SMs.
 //
 
-// Cookies are unique values stord with eachtimer when it is started. They are used to block events from this timer from an older timeout
+// Cookies are unique values stored with each timer when it is started. They are used to block events from this timer from an older timeout
 //  from getting to the SM. Timers are not shared between SMs.
 static uint16_t l_timer_cookie;
 static struct {

@@ -112,8 +112,9 @@ enum {
 
 // ]]]  Declaration end.
 
-// Access registers as an external.
-extern regs_t REGS[];
+// Access registers as a block of memory somewhere else.
+uint16_t* regsGetRegs();
+#define REGS (regsGetRegs())
 
 // Return flags register, this compiles to two lds instructions.
 static inline regs_t& regsFlags() { return REGS[REGS_IDX_FLAGS]; }

@@ -7,7 +7,6 @@
 #include "console.h"
 #include "regs.h"
 
-regs_t REGS[COUNT_REGS];
 
 bool regsWriteMask(uint8_t idx, regs_t mask, bool s) { return utilsWriteFlags<regs_t>(&REGS[idx], mask, s); }
 bool regsUpdateMask(uint8_t idx, regs_t mask, regs_t value) { return utilsUpdateFlags<regs_t>(&REGS[idx], mask, value); }
@@ -15,7 +14,7 @@ bool regsWriteMaskFlags(regs_t mask, bool s) { return regsWriteMask(REGS_IDX_FLA
 bool regsUpdateMaskFlags(regs_t mask, regs_t value) { return regsUpdateMask(REGS_IDX_FLAGS, mask, value); }
 
 void regsPrintValue(uint8_t reg_idx) {
-	regs_t val; 
+	regs_t v; 
 	ATOMIC_BLOCK(ATOMIC_FORCEON) { v = REGS[reg_idx]; }	// Might be written by an ISR.
 	consolePrint((_BV(reg_idx) & REGS_PRINT_HEX_MASK) ? CFMT_X : CFMT_U, (console_cell_t)v);	
 }

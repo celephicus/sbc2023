@@ -8,6 +8,11 @@
 #define CFG_WATCHDOG_ENABLE 0
 #define CFG_WATCHDOG_MODULE_COUNT 0
 
+// Event & Trace queues.
+#define CFG_EVENT_QUEUE_SIZE 8
+#define CFG_EVENT_TRACE_BUFFER_SIZE 16
+#define CFG_EVENT_TMER_COUNT 4
+
 // Product name
 #define CFG_PRODUCT_NAME_STR "TSA SBC2022 Relay Module"
 
@@ -16,10 +21,10 @@
 #define CFG_VER_MINOR 0
 
 // Build number incremented with each build by cfg-set-build.py script. 
-#define CFG_BUILD_NUMBER 139
+#define CFG_BUILD_NUMBER 169
 
 // Timestamp in ISO8601 format set by cfg-set-build.py script.
-#define CFG_BUILD_TIMESTAMP "20221004T161207"
+#define CFG_BUILD_TIMESTAMP "20221010T130802"
 
 // Do not edit below this line......
 
