@@ -212,14 +212,25 @@ static bool console_cmds_user(char* cmd) {
 	case /** NV-W **/ 0xa8c7: driverNvWrite(); break;
 	case /** NV-R **/ 0xa8c2: driverNvRead(); break;
 
-#if 0	
 	// Events & trace...
     case /** EVENT **/ 0x8a29: eventPublish(console_u_pop()); break;
     case /** EVENT-EX **/ 0x2f99: /* (id p8 p16 -- ) */ { const uint16_t p16 = console_u_pop(); const uint8_t p8 = console_u_pop(); eventPublish(console_u_pop(), p8, p16); } break;
 	case /** CTM **/ 0xd17f: eventTraceMaskClear(); break;
     case /** DTM **/ 0xbcb8: eventTraceMaskSetDefault(); break;
-	case /** ?TM **/ 0x7a03: fori((COUNT_EV + 15) / 16) consolePrint(CONSOLE_PRINT_HEX, (console_cell_t)*(const uint16_t*)&eventGetTraceMask()[i*2]); break;
+	case /** ?TM **/ 0x7a03: fori(EVENT_TRACE_MASK_SIZE) consolePrint(CFMT_X2, (console_cell_t)eventGetTraceMask()[i]); break;
+	case /** ??TM **/ 0x3fbc: fori (COUNT_EV) {
+		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("Event:"));
+		consolePrint(CFMT_U|CFMT_M_NO_LEAD, (console_cell_t)i);
+		consolePrint(CFMT_STR_P, (console_cell_t)PSTR(":"));
+		consolePrint(CFMT_U|CFMT_M_NO_LEAD, (console_cell_t)(!!(eventGetTraceMask()[i/8] & _BV(i&7))));
+		consolePrint(CFMT_STR_P, (console_cell_t)eventGetEventName(i));
+		consolePrint(CFMT_STR_P, (console_cell_t)eventGetEventDesc(i));
+		consolePrint(CFMT_NL, 0);
+	} break;
+
     case /** STM **/ 0x116f: /* (f ev-id) */ { const uint8_t ev_id = console_u_pop(); eventTraceMaskSet(ev_id, !!console_u_pop()); } break;
+
+#if 0	
 
     case /** PIN **/ 0x1012: {
         uint8_t pin = console_u_pop();
@@ -266,6 +277,21 @@ static void service_regs_dump() {
 	else 
 		s_ticker = 0;
 }
+static bool service_event_trace() {
+    EventTraceItem evt;
+    if (eventTraceRead(&evt)) {
+		const uint8_t id = event_id(evt.event);
+        consolePrint(CFMT_STR_P, (console_cell_t)PSTR("Ev:"));
+		consolePrint(CFMT_U_D|CFMT_M_NO_LEAD, (console_cell_t)&evt.timestamp);
+		consolePrint(CFMT_STR_P, (console_cell_t)eventGetEventName(id));
+		consolePrint(CFMT_U_D|CFMT_M_NO_LEAD, (console_cell_t)id);	
+		consolePrint(CFMT_U_D|CFMT_M_NO_LEAD, (console_cell_t)event_p8(evt.event));	
+		consolePrint(CFMT_U_D|CFMT_M_NO_LEAD, (console_cell_t)event_p16(evt.event));	
+		consolePrint(CFMT_NL, 0);
+		return true;
+	}
+	return false;
+}
 
 void setup() {
 	const uint16_t restart_rc = devWatchdogInit();
@@ -284,8 +310,8 @@ void loop() {
 	driverService();
 	utilsRunEvery(100) {				// Basic 100ms timebase.
 		service_regs_dump();
-		eventPublishEv(1);
 	}
+	service_event_trace();
 
 	// Dispatch events. 
     t_event ev;

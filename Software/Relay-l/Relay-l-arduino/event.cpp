@@ -134,7 +134,7 @@ bool eventTraceRead(EventTraceItem* b) {
     return is_event_available;
 }
 
-void eventTraceMaskClear() { memset(eventGetTraceMask(), 0xff, EVENT_TRACE_MASK_SIZE); }
+void eventTraceMaskClear() { memset(eventGetTraceMask(), 0, EVENT_TRACE_MASK_SIZE); }
 void eventTraceMaskSet(uint8_t ev_id, bool f) {
     utilsWriteFlags(&eventGetTraceMask()[ev_id / 8], (uint8_t)_BV(ev_id & 7), f);
 }

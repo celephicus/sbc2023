@@ -95,6 +95,7 @@ static void nv_set_defaults(void* data, const void* defaultarg) {
     (void)data;
     (void)defaultarg;
     regsSetDefaultRange(REGS_START_NV_IDX, COUNT_REGS);	// Set default values for NV regs.
+	eventTraceMaskSetDefault();
 } 
 
 // EEPROM block definition. 
