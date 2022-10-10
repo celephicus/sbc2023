@@ -3,6 +3,7 @@
 #include "project_config.h"
 #include "Relay-gpio.h"
 #include "utils.h"
+#include "event.h"
 #include "regs.h"
 #include "dev.h"
 #include "driver.h"
@@ -72,11 +73,13 @@ const uint16_t NV_VERSION = 1;
 // All data managed by NV
 typedef struct {
 	uint16_t regs[COUNT_REGS];		// Must be first in struct as we only write the last bit to NV.
+	uint8_t trace_mask[EVENT_TRACE_MASK_SIZE];
 } NvData;
 static NvData l_nv_data;
 
 // Defined in regs, declared here since we have the storage.
 uint16_t* regsGetRegs() { return l_nv_data.regs; }
+uint8_t* eventGetTraceMask() { return l_nv_data.trace_mask; }
 
 // The NV only managed the latter part of regs and whatever else is in the NvData struct.
 #define NV_DATA_NV_SIZE (sizeof(l_nv_data) - sizeof(uint16_t) * (COUNT_REGS - REGS_START_NV_IDX))

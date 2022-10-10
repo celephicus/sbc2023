@@ -6,6 +6,7 @@
 #include "Relay-gpio.h"
 #include "dev.h"
 #include "regs.h"
+#include "event.h"
 #include "utils.h"
 #include "console.h"
 #include "modbus.h"
@@ -270,6 +271,7 @@ void setup() {
 	const uint16_t restart_rc = devWatchdogInit();
 	regsSetDefaultRange(0, REGS_START_NV_IDX);		// Set volatile registers. 
 	driverInit();
+	eventInit();
 	REGS[REGS_IDX_RESTART] = restart_rc;
 	console_init();
 	modbus_init();
@@ -282,6 +284,13 @@ void loop() {
 	driverService();
 	utilsRunEvery(100) {				// Basic 100ms timebase.
 		service_regs_dump();
+		eventPublishEv(1);
+	}
+
+	// Dispatch events. 
+    t_event ev;
+	while (EV_NIL != (ev = eventGet())) {   // Read events until there are no more left.
+		(void)ev;
 	}
 }
 
@@ -357,9 +366,6 @@ void loop() {
 		eventTimerService();
 	}
 	
-	// Dispatch events. 
-    event_t ev;
-    while (EV_NIL != (ev = eventGet())) {   // Read events until there are no more left.
 		eventServiceSm(smSupervisor, (EventSmContextBase*)&sm_supervisor_context, &ev);
 	}
 }
