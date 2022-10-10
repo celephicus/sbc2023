@@ -1,4 +1,24 @@
-#include <Arduino.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+// We must have macros PSTR that places a const string into const memory.
+#if defined(AVR)
+ #include <avr/pgmspace.h>	// Takes care of PSTR(), pgm_read_xxx().
+ #define READ_FUNC_PTR(x_) pgm_read_word(x_)		// 16 bit target.
+#elif defined(ESP32 )
+ #include <pgmspace.h>	// Takes care of PSTR() ,pgm_read_xxx()
+ #define READ_FUNC_PTR(x_) pgm_read_dword(x_)		// 32 bit target.
+#else
+ #define PSTR(str_) (str_)
+ #define pgm_read_word(_a) (*(uint16_t*)(_a))
+ #define READ_FUNC_PTR(x_) (*(x_))					// Generic target.
+#endif
+
+// Mock millis() for testing.
+#ifdef TEST
+uint32_t l_test_millis;
+#endif
 
 #include "utils.h"
 
@@ -16,7 +36,7 @@ uint16_t utilsChecksumFletcher16(uint8_t const *data, size_t count) {
         sum1 = (sum1 & 0xff) + (sum1 >> 8);
         sum2 = (sum2 & 0xff) + (sum2 >> 8);
     }
-    
+
     /* Second reduction step to reduce sums to 8 bits */
     sum1 = (sum1 & 0xff) + (sum1 >> 8);
     sum2 = (sum2 & 0xff) + (sum2 >> 8);
@@ -34,12 +54,12 @@ void utilsChecksumEepromUpdate(utils_checksum_eeprom_state_t* s, const void *dat
         s->sum2 += s->sum1;
     }
 }
-uint16_t utilsChecksumEepromGet(utils_checksum_eeprom_state_t* s) {    
-    return ((uint16_t)(s->sum2) << 8) | (uint16_t)(s->sum1);
+uint16_t utilsChecksumEepromGet(utils_checksum_eeprom_state_t* s) {
+    return ((s->sum2) << 8) | (s->sum1);
 }
 uint16_t utilsChecksumEeprom(const void *data, size_t count) {
     utils_checksum_eeprom_state_t s;
-    
+
     utilsChecksumEepromInit(&s);
     utilsChecksumEepromUpdate(&s, data, count);
     return utilsChecksumEepromGet(&s);
@@ -49,14 +69,14 @@ bool utilsMultiThreshold(const uint16_t* thresholds, uint8_t count, uint16_t hys
     uint8_t i;
     int8_t new_level = 0;
     bool changed;
-    
+
     for (i = 0; i < count; i += 1) {
         uint16_t threshold = pgm_read_word(&thresholds[i]);
         if (i < *level)
             threshold -= hysteresis;
         new_level += (val > threshold);
     }
-    
+
     changed = (*level != new_level);
     *level = new_level;
     return changed;
@@ -65,8 +85,8 @@ bool utilsMultiThreshold(const uint16_t* thresholds, uint8_t count, uint16_t hys
 // Utils Sequencer -- generic driver to run an arbitrary sequence by calling a user function every so often with a canned argument.
 
 bool utilsSeqIsBusy(const UtilsSeqCtx* seq) { return (NULL != seq->hdr); }
-	
-UTILS_STATIC_ASSERT(sizeof(utils_seq_duration_t) == 2);  // Make sure that we use the correct pgm_read_xxx macro. 
+
+UTILS_STATIC_ASSERT(sizeof(utils_seq_duration_t) == 2);  // Make sure that we use the correct pgm_read_xxx macro.
 static void seq_load_timer(UtilsSeqCtx* seq) {
 	seq->timer = pgm_read_word(&seq->hdr->duration);
 }
@@ -81,46 +101,46 @@ static void seq_next_def(UtilsSeqCtx* seq) {
 
 static void seq_update(UtilsSeqCtx* seq) {
     seq_load_timer(seq);
-	
+
     if (UTILS_SEQ_END == seq->timer) {
         seq->action(seq->hdr);					// Call action on last item.
-        seq->hdr = NULL;						// Set no more stuff for us to do. Timer set to zero so no more response on service. 
+        seq->hdr = NULL;						// Set no more stuff for us to do. Timer set to zero so no more response on service.
     }
     else if (UTILS_SEQ_REPEAT == seq->timer) {
-												// DO NOT call action on last item. There's no point as the longest it will go for is a tick, and possibly a lot less. 
-        seq->hdr = seq->base;					// Restart sequence. 
-		seq_load_timer(seq);						// Load timer with start value. 
-        seq->action(seq->hdr);					// Do action. 
+												// DO NOT call action on last item. There's no point as the longest it will go for is a tick, and possibly a lot less.
+        seq->hdr = seq->base;					// Restart sequence.
+		seq_load_timer(seq);						// Load timer with start value.
+        seq->action(seq->hdr);					// Do action.
 	}
     else if (UTILS_SEQ_LOOP_END == seq->timer) {
 		SEQ_ASSERT(seq->loop_start >= seq->base);
 		SEQ_ASSERT((seq->loop_start - seq->base) < 50);
-		if (0 == seq->loop_counter) 
+		if (0 == seq->loop_counter)
 			seq_next_def(seq);						// Jump to next instruction.
 		else {
 			seq->loop_counter -= 1;				// One more done...
-			seq->hdr = seq->loop_start;			// Jump to next instruction past loop start. 
+			seq->hdr = seq->loop_start;			// Jump to next instruction past loop start.
 		}
-		seq_update(seq);							// Whatever we did, execute it. 
+		seq_update(seq);							// Whatever we did, execute it.
 	}
     else if (UTILS_SEQ_LOOP_MASK & seq->timer) {
-		seq->loop_counter = utilsLimitMin(1U, (seq->timer & ~UTILS_SEQ_LOOP_MASK) - 1);
-		seq_next_def(seq);							// Advance to next instruction since we will have to execute it. 
-		seq->loop_start = seq->hdr;				// Record address of instruction.  
-		seq_update(seq);							// And execute it. 
+		seq->loop_counter = utilsLimitMin((utils_seq_duration_t)1U, (utils_seq_duration_t)((seq->timer & ~UTILS_SEQ_LOOP_MASK) - 1));
+		seq_next_def(seq);							// Advance to next instruction since we will have to execute it.
+		seq->loop_start = seq->hdr;				// Record address of instruction.
+		seq_update(seq);							// And execute it.
 	}
-    else 
-        seq->action(seq->hdr);					// By default, just run the action. 
-		
+    else
+        seq->action(seq->hdr);					// By default, just run the action.
+
 	SEQ_ASSERT(SEQ_INVARIANT(seq));
 }
 
 void utilsSeqStart(UtilsSeqCtx* seq, const UtilsSeqHdr* def, uint8_t item_size, sequencer_action_func action) {
 	seq->hdr = seq->base = seq->loop_start = def;
-	seq->loop_counter = 0;				// If we see a loop end we'll go over it. 
+	seq->loop_counter = 0;				// If we see a loop end we'll go over it.
 	seq->item_size = item_size;
 	seq->action = action;
-	if (NULL != seq->hdr)				// Often happens, just a shorthand for a default action. 
+	if (NULL != seq->hdr)				// Often happens, just a shorthand for a default action.
         seq_update(seq);
     else
         seq->action(NULL);
@@ -129,9 +149,9 @@ void utilsSeqStart(UtilsSeqCtx* seq, const UtilsSeqHdr* def, uint8_t item_size, 
 
 void utilsSeqService(UtilsSeqCtx* seq) {
 	SEQ_ASSERT(SEQ_INVARIANT(seq));
-    if(NULL != seq->hdr) {				// If there is a sequence and sequence has not finished... 
+    if(NULL != seq->hdr) {				// If there is a sequence and sequence has not finished...
 		SEQ_ASSERT(seq->timer > 0);			// Always true...
-		if (0 == --seq->timer) {		// On timeout, next instruction and execute. 
+		if (0 == --seq->timer) {		// On timeout, next instruction and execute.
 			seq_next_def(seq);
 			seq_update(seq);
 		}
@@ -143,10 +163,10 @@ bool utilsStrtoui(unsigned* n, const char* str, char** endptr, unsigned base) {
 	unsigned char c;
 	char conv, ovf;
 
-	if (NULL != endptr)		// Record start position, if error we restore it. 
+	if (NULL != endptr)		// Record start position, if error we restore it.
 		* endptr = (char*)str;
 
-	// Check for silly base. 
+	// Check for silly base.
 	if ((base < 2) || (base > 36))
 		return false;
 
@@ -172,7 +192,7 @@ bool utilsStrtoui(unsigned* n, const char* str, char** endptr, unsigned base) {
 		else if (c >= 'a' && c <= 'z')
 			c -= 'a' - 10;
 		else
-			break;				// Not a valid character, so exit loop. 
+			break;				// Not a valid character, so exit loop.
 
 		if (c >= base)					// Digit too big.
 			break;
@@ -181,14 +201,14 @@ bool utilsStrtoui(unsigned* n, const char* str, char** endptr, unsigned base) {
 		old_n = *n;
 		*n = *n * base + c;
 		if (*n < old_n)  				// Rollover!
-			ovf = 1;					// Signal overflow. 
-	
+			ovf = 1;					// Signal overflow.
+
 		c = *str++;
-	} 
+	}
 
 
 	if (conv & !ovf) {
-		if (NULL != endptr)		
+		if (NULL != endptr)
 			*endptr = (char*)str - 1;
 		return true;
 	}

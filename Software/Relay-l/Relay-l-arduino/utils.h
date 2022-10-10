@@ -1,6 +1,12 @@
 #ifndef UTILS_H__
 #define UTILS_H__
 
+// Mock millis() for testing.
+#ifdef TEST
+extern uint32_t l_test_millis;
+#define millis() (l_test_millis)
+#endif
+
 // I can't believe how often I stuff up using millis() to time a period. So as usual, here's a function to do timeouts.
 template <typename T>
 void utilsStartTimer(T &then) { then = (T)millis(); }
@@ -24,41 +30,41 @@ bool utilsIsTimerDone(T &then, T timeout) { return ((T)millis() - then) > timeou
 #endif
 
 // The worlds simplest scheduler, run a block every so often up to 32 seconds. Note that it does not recover well if you set delay to zero and then non-zero.
-// Stolen from a discussion on some Arduino forum. 
+// Stolen from a discussion on some Arduino forum.
 #define utilsRunEvery(t_) for (static uint16_t then; ((uint16_t)millis() - then) >= (uint16_t)(t_); then += (uint16_t)(t_))
 
 /* Declare a queue type with a specific length for a specific data type. Not sure where this clever implementation
-	originated, apocryphally it's from a Keil UART driver. 
-   The length must be a power of 2. Note that after inserting (length) items, the queue is full. 
-   If only put and get methods are called by different threads, then it is thread safe if the index type is atomic. 
+	originated, apocryphally it's from a Keil UART driver.
+   The size must be non-zero and a power of 2. Note that after inserting (size) items, the queue is full.
+   If only put and get methods are called by different threads, then it is thread safe if the index type is atomic.
    However, if the _put_overwrite or _push methods are used, then all calls should be from critical sections.
-   Also see https://github.com/QuantumLeaps/lock-free-ring-buffer 
+   Also see https://github.com/QuantumLeaps/lock-free-ring-buffer
 */
 #define DECLARE_QUEUE_TYPE(name_, type_, size_)																			\
-UTILS_STATIC_ASSERT(0 == ((size_) & ((size_) - 1U)));																	\
+/*UTILS_STATIC_ASSERT((size_ > 0) && (0 == ((size_) & ((size_) - 1U))));*/												\
 typedef struct {																										\
 	type_ fifo[size_];																								 	\
 	volatile uint8_t head, tail;																					 	\
 } Queue##name_;																								   			\
-static inline void queue_##name_##Init(Queue##name_* q) { q->head = q->tail = 0U; }									  	\
-static inline uint8_t queue_##name_##Len(const Queue##name_* q) { return q->tail - q->head; }			  				\
-static inline bool queue_##name_##Empty(const Queue##name_* q) { return queue_##name_##_len(q) == 0U; }				  	\
-static inline bool queue_##name_##Full(const Queue##name_* q) { return queue_##name_##_len(q) >= (size_); }			  	\
-static inline void queue_##name_##Put(Queue##name_* q, type_ x)  {											   			\
-	q->fifo[q->tail++ & ((size_) - 1U)] = x;																		   	\
+static inline uint8_t queue##name_##Mask() { return (size_) - (uint8_t)1U; }											\
+static inline void queue##name_##Init(Queue##name_* q) { q->head = q->tail; }							  				\
+static inline uint8_t queue##name_##Len(const Queue##name_* q) { return (uint8_t)(q->tail - q->head); }					\
+static inline bool queue##name_##Empty(const Queue##name_* q) { return queue##name_##Len(q) == (uint8_t)0U; }		  	\
+static inline bool queue##name_##Full(const Queue##name_* q) { return queue##name_##Len(q) >= (uint8_t)(size_); }	  	\
+static inline bool queue##name_##Put(Queue##name_* q, type_* el)  {											   			\
+	if (queue##name_##Full(q)) return false; else { q->fifo[q->tail++ & queue##name_##Mask()] = *el; return true; }	   	\
 }																													  	\
-static inline void queue_##name_##PutOverwrite(Queue##name_* q, type_ x)  {									 			\
-	if (queue_##name_##_full(q))																					  	\
-		q->head += 1U;																								 	\
-	queue_##name_##_put(q, x);																		   					\
+static inline bool queue##name_##Get(Queue##name_* q, type_* el)  {											   			\
+	if (queue##name_##Empty(q)) return false; else { *el = q->fifo[q->head++ & queue##name_##Mask()]; return true; }	\
 }																													  	\
-static inline void queue_##name_##Push(Queue##name_* q, type_ x)  {											  			\
-	q->fifo[--q->head & ((size_) - 1U)] = x;																		   	\
+static inline void queue##name_##PutOverwrite(Queue##name_* q, type_* el)  {								 			\
+	if (queue##name_##Full(q))																						  	\
+		q->head += (uint8_t)1U;																						 	\
+	queue##name_##Put(q, el);																		   					\
 }																													  	\
-static inline type_ queue_##name_##Get(Queue##name_* q)  {													   			\
-	return q->fifo[q->head++ & ((size_) - 1U)];																			\
+static inline bool queue##name_##Push(Queue##name_* q, type_ *el)  {										  			\
+	if (queue##name_##Full(q)) return false; else { q->fifo[--q->head & queue##name_##Mask()] = *el; return true; }	   	\
 }
-
 
 // A little "C" implementation of a buffer that can have stuff appended to it without fear of overflowing.
 #define DECLARE_BUFFER_TYPE(name_, size_)																					\
@@ -86,42 +92,42 @@ static inline void buffer##name_##AddU16(Buffer##name_* q, uint16_t x) { 							
 
 // When you need to loop an index over a small range...
 #define fori(limit_) for (uint8_t i = 0; i < (limit_); i += 1)
-	
+
 // Perhaps an inner loop as well...
 #define forj(limit_) for (uint8_t j = 0; j < (limit_); j += 1)
 
-// Fletcher16 checksum modulo 255, note that it will not notice a 00 changing to ff. 
+// Fletcher16 checksum modulo 255, note that it will not notice a 00 changing to ff.
 uint16_t utilsChecksumFletcher16(uint8_t const *data, size_t count);
 
-// Simple very fast checksum for EEPROM, guaranteed to note changing values to 0x00 or 0xff, which are the most likely errors. 
+// Simple very fast checksum for EEPROM, guaranteed to note changing values to 0x00 or 0xff, which are the most likely errors.
 typedef struct { uint8_t sum1, sum2; } utils_checksum_eeprom_state_t;
 void utilsChecksumEepromInit(utils_checksum_eeprom_state_t* s);
 void utilsChecksumEepromUpdate(utils_checksum_eeprom_state_t* s, const void *data, size_t count);
 uint16_t utilsChecksumEepromGet(utils_checksum_eeprom_state_t* s);
 
-// Simple version of the above. 
+// Simple version of the above.
 uint16_t utilsChecksumEeprom(const void *data, size_t count);
 
-// Return lowest set bit as a mask. 
+// Return lowest set bit as a mask.
 template <typename T>
 T utilsLowestSetBit(T x) { return x & (x - 1); }
 
-// Increment/decrement a variable within limits. Returns true if value updated. 
-template <typename T, typename U> // T is usually unsigned, U must be signed. 
+// Increment/decrement a variable within limits. Returns true if value updated.
+template <typename T, typename U> // T is usually unsigned, U must be signed.
 bool utilsBump(T* val, U incdec, T min, T max, bool rollaround=false) {
-	U bumped_val = *val + incdec; // Assume no overflow. 
-	if (bumped_val < (U)min) 
-		bumped_val = rollaround ? (U)max : (U)min; 
-	if (bumped_val > (U)max) 
-		bumped_val = rollaround ? (U)min : (U)max; 
-	bool changed = (*val != (T)bumped_val); /* Now the result must be in range so we can compare it to the original value. */ 
-	if (changed) 
-		*val = (T)bumped_val; 
+	U bumped_val = *val + incdec; // Assume no overflow.
+	if (bumped_val < (U)min)
+		bumped_val = rollaround ? (U)max : (U)min;
+	if (bumped_val > (U)max)
+		bumped_val = rollaround ? (U)min : (U)max;
+	bool changed = (*val != (T)bumped_val); /* Now the result must be in range so we can compare it to the original value. */
+	if (changed)
+		*val = (T)bumped_val;
 	return changed;
 }
 
 // Increment/decrement a variable within limits, given a target value and a delta value.
-template <typename T> 
+template <typename T>
 bool utilsSlew(T* val, T target, T slew) {
 	if (*val != target) {
 		const bool finc = (*val < target);
@@ -148,7 +154,7 @@ bool utilsSlew(T* val, T target, T slew) {
 // Limit a value to a maximum.
 template <typename T>
 T utilsLimitMax(T value, T max) {
-	return (value > max) ? max : value; 
+	return (value > max) ? max : value;
 }
 #define utilsLimitMaxU8 utilsLimitMax<uint8_t>
 #define utilsLimitMaxU16 utilsLimitMax<uint16_t>
@@ -157,7 +163,7 @@ T utilsLimitMax(T value, T max) {
 // Limit a value to a minimum.
 template <typename T>
 T utilsLimitMin(T value, T min) {
-	return (value < min) ? min : value; 
+	return (value < min) ? min : value;
 }
 #define utilsLimitMinU8 utilsLimitMin<uint8_t>
 #define utilsLimitMinU16 utilsLimitMin<uint16_t>
@@ -175,7 +181,7 @@ T utilsLimit(T value, T min, T max)  {
 #define utilsLimitI16 utilsLimit<int16_t>
 #define utilsLimitI32 utilsLimit<int32_t>
 
-// Return the absolute value. 
+// Return the absolute value.
 template <typename T>
 T utilsAbs(T x)  {
 	return (x < 0) ? -x : x;
@@ -184,11 +190,11 @@ T utilsAbs(T x)  {
 #define utilsAbsI16 utilsAbs<int16_t>
 #define utilsAbsI32 utilsAbs<int32_t>
 
-// Update the bits matching the mask in the value. Return true if value has changed. 
+// Update the bits matching the mask in the value. Return true if value has changed.
 template <typename T>
 static inline bool utilsUpdateFlags(T* flags, T mask, T val) { const T old = *flags; *flags = (*flags & ~mask) | val; return (old != *flags); }
 
-// Write the bits matching the mask in the value. Return true if value has changed. 
+// Write the bits matching the mask in the value. Return true if value has changed.
 template <typename T>
 static inline bool utilsWriteFlags(T* flags, T mask, bool s) { const T old = *flags; if (s) *flags |=  mask; else *flags &= ~mask; return (old != *flags); }
 
@@ -196,16 +202,16 @@ static inline bool utilsWriteFlags(T* flags, T mask, bool s) { const T old = *fl
 template <typename T>
 T utilsRoundedDivide(T num, T den) {
 	return (num + den/2) / den;
-}	
+}
 
 // Absolute difference for unsigned types.
 template <typename T>
 T utilsAbsDiff(T a, T b) {
 	return  (a > b) ? (a - b) : (b - a);
 }
-	
+
 // Rescale a scaled value, assuming no offset.
-template <typename T, typename U>  // T is unsigned, U can be larger type that can hold input*max-output. 
+template <typename T, typename U>  // T is unsigned, U can be larger type that can hold input*max-output.
 T utilsRescale(T input_value, T max_input, T max_output) {
 	return (T)utilsRoundedDivide<U>((U)input_value * (U)max_output, (U)max_input);
 }
@@ -217,16 +223,16 @@ T utilsRescale(T input_value, T max_input, T max_output) {
 static const uint16_t PROGMEM THRESHOLDS[] = { 50, 100, 500 };
 enum { HYSTERESIS = 20 };
 uint8_t level;
-	
-After executing 	
+
+After executing
 	multiThreshold(THRESHOLDS,  ELEMENT_COUNT(THRESHOLDS),	HYSTERESIS, &level, x);
-	
+
 	as x ranges from 0 .. 600 .. 0, level changes so:
 
 0..49	0
 50.. 99 1
 100..499 2
-500..600 3	
+500..600 3
 600.. 480 3
 479.. 80 2
 79..30 1
@@ -247,13 +253,13 @@ void utilsFilterInit(T* accum, uint16_t input, uint8_t k) { utilsFilter(accum, i
 
 template <typename T>
 uint16_t utilsFilter(T* accum, uint16_t input, uint8_t k, bool reset) {
-	*accum = reset ? ((T)input << k) : (*accum - (*accum >> k) + (T)input); 
+	*accum = reset ? ((T)input << k) : (*accum - (*accum >> k) + (T)input);
 	return (uint16_t)(*accum >> k);
 }
 
-// Simple implementation of strtoul for unsigned ints. String may have leading whitespace and an optional leading '+'. Then digits up to one less than the 
+// Simple implementation of strtoul for unsigned ints. String may have leading whitespace and an optional leading '+'. Then digits up to one less than the
 //  base are converted, until the first illegal character or a nul is read. Then, if the result has not rolled over, the function returns true, and the result is set to n.
-//  If endptr is non-NULL, it is set to the first illegal character. 
+//  If endptr is non-NULL, it is set to the first illegal character.
 bool utilsStrtoui(unsigned* n, const char *str, char **endptr, unsigned base);
 
 // Utils Sequencer -- generic driver to run an arbitrary sequence by calling a user function every so often with a canned argument.
@@ -278,7 +284,7 @@ void playService() { utilsSeqService(&f_seq); }
 */
 
 /* The header of the action type, defines the action for the sequencer. A struct must have this as the first member, the action function downcasts the
-   argument to the derived type and extracts the values. 
+   argument to the derived type and extracts the values.
    If the last duration value is UTILS_SEQ_END then the action function is called for the associated data, and then the sequence ends. This allows a LED say
    to display a colour sequence, then hold on a colour.
    If the last duration value is UTILS_SEQ_REPEAT then the action function is NOT called for the associated data, and the sequence restarts.
@@ -297,7 +303,7 @@ typedef struct {
 	utils_seq_duration_t duration;
 } UtilsSeqHdr;
 
-// Casts UtilsSeqHdr to subtype, extracts values and actions them. If handed a NULL pointer then turn off the thing. 
+// Casts UtilsSeqHdr to subtype, extracts values and actions them. If handed a NULL pointer then turn off the thing.
 typedef void (*sequencer_action_func)(const UtilsSeqHdr*);
 
 typedef struct {
@@ -305,7 +311,7 @@ typedef struct {
 	const UtilsSeqHdr* hdr;
 	const UtilsSeqHdr* loop_start;
 	utils_seq_duration_t loop_counter;
-	uint8_t item_size;		// Size of derived type that has a UtilsSeqHdr as first item. 
+	uint8_t item_size;		// Size of derived type that has a UtilsSeqHdr as first item.
 	sequencer_action_func action;
 	utils_seq_duration_t timer;
 } UtilsSeqCtx;
