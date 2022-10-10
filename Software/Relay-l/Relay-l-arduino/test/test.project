@@ -3,6 +3,8 @@
   <Description/>
   <Dependencies/>
   <VirtualDirectory Name="src">
+    <File Name="support_test.cpp"/>
+    <File Name="support_test.h"/>
     <File Name="test_event.cpp"/>
     <File Name="project_config.test.h"/>
     <File Name="../event.h"/>

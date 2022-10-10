@@ -101,12 +101,9 @@ void eventTraceClear() {
 	ATOMIC_BLOCK(ATOMIC_RESTORE) { queueTraceInit(&f_queue_trace); }
 }
 
-// Trace mask, if event ID is set then trace event.
-uint8_t eventTraceMask[EVENT_TRACE_MASK_SIZE];
-
 // Do we trace an event?
 static bool trace_event_p(uint8_t ev_id) {
-	return (ev_id < EVENT_TRACE_MASK_SIZE*8) && (eventTraceMask[ev_id / 8] & ((uint8_t)_BV(ev_id & 7)));
+	return (ev_id < EVENT_TRACE_MASK_SIZE*8) && (eventGetTraceMask()[ev_id / 8] & ((uint8_t)_BV(ev_id & 7)));
 }
 
 void eventTraceWriteEv(t_event ev) {
@@ -128,9 +125,9 @@ bool eventTraceRead(EventTraceItem* b) {
     return is_event_available;
 }
 
-void eventTraceMaskClear() { memset(eventTraceMask, 0xff, EVENT_TRACE_MASK_SIZE); }
+void eventTraceMaskClear() { memset(eventGetTraceMask(), 0xff, EVENT_TRACE_MASK_SIZE); }
 void eventTraceMaskSet(uint8_t ev_id, bool f) {
-    utilsWriteFlags(&eventTraceMask[ev_id / 8], (uint8_t)_BV(ev_id & 7), f);
+    utilsWriteFlags(&eventGetTraceMask()[ev_id / 8], (uint8_t)_BV(ev_id & 7), f);
 }
 void eventTraceMaskSetList(const uint8_t* ev_ids, uint8_t count) {
     while (count-- > 0)

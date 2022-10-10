@@ -60,7 +60,7 @@ AS       := /usr/bin/as
 ## User defined environment variables
 ##
 CodeLiteDir:=/usr/share/codelite
-Objects0=$(IntermediateDirectory)/up_utils.cpp$(ObjectSuffix) $(IntermediateDirectory)/main.cpp$(ObjectSuffix) $(IntermediateDirectory)/test_utils.cpp$(ObjectSuffix) $(IntermediateDirectory)/unity.c$(ObjectSuffix) $(IntermediateDirectory)/test_event.cpp$(ObjectSuffix) $(IntermediateDirectory)/up_event.cpp$(ObjectSuffix) 
+Objects0=$(IntermediateDirectory)/up_utils.cpp$(ObjectSuffix) $(IntermediateDirectory)/main.cpp$(ObjectSuffix) $(IntermediateDirectory)/test_utils.cpp$(ObjectSuffix) $(IntermediateDirectory)/unity.c$(ObjectSuffix) $(IntermediateDirectory)/test_event.cpp$(ObjectSuffix) $(IntermediateDirectory)/up_event.cpp$(ObjectSuffix) $(IntermediateDirectory)/support_test.cpp$(ObjectSuffix) 
 
 
 
@@ -142,6 +142,14 @@ $(IntermediateDirectory)/up_event.cpp$(DependSuffix): ../event.cpp
 
 $(IntermediateDirectory)/up_event.cpp$(PreprocessSuffix): ../event.cpp
 	$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/up_event.cpp$(PreprocessSuffix) ../event.cpp
+
+$(IntermediateDirectory)/support_test.cpp$(ObjectSuffix): support_test.cpp $(IntermediateDirectory)/support_test.cpp$(DependSuffix)
+	$(CXX) $(IncludePCH) $(SourceSwitch) "/home/tom/git/misc/2022SBC/Software/Relay-l/Relay-l-arduino/test/support_test.cpp" $(CXXFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/support_test.cpp$(ObjectSuffix) $(IncludePath)
+$(IntermediateDirectory)/support_test.cpp$(DependSuffix): support_test.cpp
+	@$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) -MG -MP -MT$(IntermediateDirectory)/support_test.cpp$(ObjectSuffix) -MF$(IntermediateDirectory)/support_test.cpp$(DependSuffix) -MM support_test.cpp
+
+$(IntermediateDirectory)/support_test.cpp$(PreprocessSuffix): support_test.cpp
+	$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/support_test.cpp$(PreprocessSuffix) support_test.cpp
 
 
 -include $(IntermediateDirectory)/*$(DependSuffix)

@@ -179,8 +179,8 @@ static inline void eventTraceWrite(uint8_t ev_id, uint8_t p8=0, uint16_t p16=0) 
 /* Read a trace item from the ring buffer. Copies the item to the pointer and returns true if the buffer was not empty, else returns false. */
 bool eventTraceRead(EventTraceItem* b);
 
-// Event tracemask, array of size EVENT_TRACE_MASK_SIZE. Declared extern as it can be written & restored from NV memory.
-extern uint8_t eventTraceMask[];
+// Get pointer to event tracemask, array of size EVENT_TRACE_MASK_SIZE. DThis function must be declared and memory assigned.
+uint8_t* eventGetTraceMask();
 
 // Clear trace mask so that no events are traced.
 void eventTraceMaskClear();

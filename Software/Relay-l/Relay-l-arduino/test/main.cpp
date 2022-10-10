@@ -38,6 +38,7 @@ void testEventQueueNoPublishNil();
 void testEventQueueOverflow();
 void testEventQueuePublishFront_1();
 void testEventQueuePublishFront_N();
+void testEventTraceMaskInit();
 void testUtilsQueueSetup();
 void testUtilsQueueEmpty();
 void testUtilsQueuePut(QueuePutFunc put, uint8_t preload, uint8_t n, int8_t start, int8_t inc);
@@ -290,6 +291,7 @@ int main(int argc, char** argv) {
   do_run_test(testEventQueueOverflow, "testEventQueueOverflow", 82);
   do_run_test(testEventQueuePublishFront_1, "testEventQueuePublishFront_1", 88);
   do_run_test(testEventQueuePublishFront_N, "testEventQueuePublishFront_N", 93);
+  do_run_test(testEventTraceMaskInit, "testEventTraceMaskInit", 106);
   registerFixture(NULL, NULL, NULL);
   
   UnitySetTestFile("test_utils.cpp");

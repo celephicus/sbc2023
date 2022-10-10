@@ -97,3 +97,15 @@ void testEventQueuePublishFront_N() {
 	TEST_ASSERT_EQUAL_HEX32(event_mk(0xfe), eventGet());
 	verify_multi(CFG_EVENT_QUEUE_SIZE-1);
 }
+
+// Trace Mask tests.
+//
+
+static uint8_t t_event_trace_mask[EVENT_TRACE_MASK_SIZE];
+uint8_t* eventGetTraceMask() { return t_event_trace_mask; }
+static EventTraceItem tm_item;
+void testEventTraceMaskInit() {
+	TEST_ASSERT_FALSE(eventTraceRead(&tm_item));
+}
+
+// support_test_set_millis

@@ -3,8 +3,7 @@
 
 // Mock millis() for testing.
 #ifdef TEST
-extern uint32_t l_test_millis;
-#define millis() (l_test_millis)
+extern uint32_t millis();
 #endif
 
 // I can't believe how often I stuff up using millis() to time a period. So as usual, here's a function to do timeouts.
