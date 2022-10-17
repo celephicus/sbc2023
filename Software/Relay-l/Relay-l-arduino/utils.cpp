@@ -167,8 +167,8 @@ bool utilsStrtoui(unsigned* n, const char* str, char** endptr, unsigned base) {
 		* endptr = (char*)str;
 
 	// Check for silly base.
-	if ((base < 2) || (base > 36))
-		return false;
+//	if ((base < 2) || (base > 36))
+//		return false;
 
 	// Skip leading whitespace.
 	do {
@@ -207,12 +207,12 @@ bool utilsStrtoui(unsigned* n, const char* str, char** endptr, unsigned base) {
 	}
 
 
-	if (conv & !ovf) {
-		if (NULL != endptr)
-			*endptr = (char*)str - 1;
-		return true;
-	}
-	return false;
+	// Always update pointer to first non-converted character.
+	if (NULL != endptr)
+		*endptr = (char*)str - 1;
+
+	// Success only if we converted at least one character _and_ no overflow.
+	return (conv && !ovf);
 }
 
 #if 0

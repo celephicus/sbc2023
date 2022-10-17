@@ -19,10 +19,14 @@
 #include "event.h"
 #include "utils.h"
 
+// Test our FIFO type.
+//
+
 // Need these available for test cases.
 #define QUEUE_DEPTH 4
 DECLARE_QUEUE_TYPE(Q, uint8_t, QUEUE_DEPTH)
 typedef bool (*QueuePutFunc)(QueueQ*, uint8_t*);
+#define TEST_UTILS_BUF_SIZE 4
 
 /*** External test functions scraped from test files. ***/
 void testMakeEvent(t_event ev, uint8_t id, uint8_t p8=0, uint16_t p16=0);
@@ -46,10 +50,20 @@ void testUtilsQueuePutOvf(QueuePutFunc put, uint8_t preload, int8_t start, int8_
 void testUtilsQueuePutLifo(uint8_t preload, uint8_t n);
 void testUtilsQueuePutOverwrite(uint8_t preload, uint8_t n);
 void testCleared();
+void testUtilsBufferSetup();
+void testBufferInit();
+void testBufferAddChar(int n);
+void testBufferAddCharOverflow();
+void testBufferAddU16(int n);
+void testBufferAddU16Overflow();
+void testBufferAddMem();
+void testUtilsBufferReset();
+void testUtilsStrtoui(const char *fmtstr, unsigned long nn, unsigned base, bool rc_exp, unsigned n_exp, char end);
 
 /*** Fixture & dump functions from test files. ***/
 void testEventSetup(void);
 void testUtilsQueueSetup(void);
+void testUtilsBufferSetup(void);
 
 /* Declare test stubs. */
 static void testMakeEvent_stub_0(void) { testMakeEvent(event_mk(0xef), 0xef); }
@@ -239,6 +253,29 @@ static void testUtilsQueuePutOverwrite_stub_183(void) { testUtilsQueuePutOverwri
 static void testUtilsQueuePutOverwrite_stub_184(void) { testUtilsQueuePutOverwrite(255, 4); }
 static void testUtilsQueuePutOverwrite_stub_185(void) { testUtilsQueuePutOverwrite(255, 5); }
 static void testUtilsQueuePutOverwrite_stub_186(void) { testUtilsQueuePutOverwrite(255, 6); }
+static void testBufferAddChar_stub_187(void) { testBufferAddChar(1); }
+static void testBufferAddChar_stub_188(void) { testBufferAddChar(TEST_UTILS_BUF_SIZE-1); }
+static void testBufferAddChar_stub_189(void) { testBufferAddChar(TEST_UTILS_BUF_SIZE); }
+static void testBufferAddU16_stub_190(void) { testBufferAddU16(1); }
+static void testBufferAddU16_stub_191(void) { testBufferAddU16(TEST_UTILS_BUF_SIZE/2-1); }
+static void testBufferAddU16_stub_192(void) { testBufferAddU16(TEST_UTILS_BUF_SIZE/2); }
+static void testUtilsStrtoui_stub_193(void) { testUtilsStrtoui("", 0, 10, false, 0, '\0'); }
+static void testUtilsStrtoui_stub_194(void) { testUtilsStrtoui("*", 0,  10, false, 0, '*'); }
+static void testUtilsStrtoui_stub_195(void) { testUtilsStrtoui("9", 0,  10, true, 9, '\0'); }
+static void testUtilsStrtoui_stub_196(void) { testUtilsStrtoui("1", 0,  2, true, 1, '\0'); }
+static void testUtilsStrtoui_stub_197(void) { testUtilsStrtoui("f", 0,  16, true, 15, '\0'); }
+static void testUtilsStrtoui_stub_198(void) { testUtilsStrtoui("F", 0,  16, true, 15, '\0'); }
+static void testUtilsStrtoui_stub_199(void) { testUtilsStrtoui("z", 0,  36, true, 35, '\0'); }
+static void testUtilsStrtoui_stub_200(void) { testUtilsStrtoui("Z", 0,  36, true, 35, '\0'); }
+static void testUtilsStrtoui_stub_201(void) { testUtilsStrtoui("+9", 0,  10, true, 9, '\0'); }
+static void testUtilsStrtoui_stub_202(void) { testUtilsStrtoui(" 9", 0,  10, true, 9, '\0'); }
+static void testUtilsStrtoui_stub_203(void) { testUtilsStrtoui("09", 0,  10, true, 9, '\0'); }
+static void testUtilsStrtoui_stub_204(void) { testUtilsStrtoui("%lu", UINT_MAX,  10, true, UINT_MAX, '\0'); }
+static void testUtilsStrtoui_stub_205(void) { testUtilsStrtoui("%lx", UINT_MAX,  16, true, UINT_MAX, '\0'); }
+static void testUtilsStrtoui_stub_206(void) { testUtilsStrtoui("%lu", (unsigned long)UINT_MAX+1,  10, false, 0, '\0'); }
+static void testUtilsStrtoui_stub_207(void) { testUtilsStrtoui("%lx", (unsigned long)UINT_MAX+1,  16, false, 0, '\0'); }
+static void testUtilsStrtoui_stub_208(void) { testUtilsStrtoui("9a", 0,  10, true, 9, 'a'); }
+static void testUtilsStrtoui_stub_209(void) { testUtilsStrtoui("a", 0,  10, false, 0, 'a'); }
 
 /*** Extra Unity support. ***/
 
@@ -483,6 +520,36 @@ int main(int argc, char** argv) {
   do_run_test(testUtilsQueuePutOverwrite_stub_185, "testUtilsQueuePutOverwrite(255, 5)", 157);
   do_run_test(testUtilsQueuePutOverwrite_stub_186, "testUtilsQueuePutOverwrite(255, 6)", 157);
   do_run_test(testCleared, "testCleared", 160);
+  do_run_test(testUtilsBufferSetup, "testUtilsBufferSetup", 176);
+  registerFixture(testUtilsBufferSetup, NULL, NULL);
+  do_run_test(testBufferInit, "testBufferInit", 188);
+  do_run_test(testBufferAddChar_stub_187, "testBufferAddChar(1)", 203);
+  do_run_test(testBufferAddChar_stub_188, "testBufferAddChar(TEST_UTILS_BUF_SIZE-1)", 204);
+  do_run_test(testBufferAddChar_stub_189, "testBufferAddChar(TEST_UTILS_BUF_SIZE)", 205);
+  do_run_test(testBufferAddCharOverflow, "testBufferAddCharOverflow", 207);
+  do_run_test(testBufferAddU16_stub_190, "testBufferAddU16(1)", 232);
+  do_run_test(testBufferAddU16_stub_191, "testBufferAddU16(TEST_UTILS_BUF_SIZE/2-1)", 233);
+  do_run_test(testBufferAddU16_stub_192, "testBufferAddU16(TEST_UTILS_BUF_SIZE/2)", 234);
+  do_run_test(testBufferAddU16Overflow, "testBufferAddU16Overflow", 236);
+  do_run_test(testBufferAddMem, "testBufferAddMem", 249);
+  do_run_test(testUtilsBufferReset, "testUtilsBufferReset", 266);
+  do_run_test(testUtilsStrtoui_stub_193, "testUtilsStrtoui(\"\", 0, 10, false, 0, '\\0')", 294);
+  do_run_test(testUtilsStrtoui_stub_194, "testUtilsStrtoui(\"*\", 0,  10, false, 0, '*')", 295);
+  do_run_test(testUtilsStrtoui_stub_195, "testUtilsStrtoui(\"9\", 0,  10, true, 9, '\\0')", 297);
+  do_run_test(testUtilsStrtoui_stub_196, "testUtilsStrtoui(\"1\", 0,  2, true, 1, '\\0')", 298);
+  do_run_test(testUtilsStrtoui_stub_197, "testUtilsStrtoui(\"f\", 0,  16, true, 15, '\\0')", 299);
+  do_run_test(testUtilsStrtoui_stub_198, "testUtilsStrtoui(\"F\", 0,  16, true, 15, '\\0')", 300);
+  do_run_test(testUtilsStrtoui_stub_199, "testUtilsStrtoui(\"z\", 0,  36, true, 35, '\\0')", 301);
+  do_run_test(testUtilsStrtoui_stub_200, "testUtilsStrtoui(\"Z\", 0,  36, true, 35, '\\0')", 302);
+  do_run_test(testUtilsStrtoui_stub_201, "testUtilsStrtoui(\"+9\", 0,  10, true, 9, '\\0')", 304);
+  do_run_test(testUtilsStrtoui_stub_202, "testUtilsStrtoui(\" 9\", 0,  10, true, 9, '\\0')", 305);
+  do_run_test(testUtilsStrtoui_stub_203, "testUtilsStrtoui(\"09\", 0,  10, true, 9, '\\0')", 306);
+  do_run_test(testUtilsStrtoui_stub_204, "testUtilsStrtoui(\"%lu\", UINT_MAX,  10, true, UINT_MAX, '\\0')", 308);
+  do_run_test(testUtilsStrtoui_stub_205, "testUtilsStrtoui(\"%lx\", UINT_MAX,  16, true, UINT_MAX, '\\0')", 309);
+  do_run_test(testUtilsStrtoui_stub_206, "testUtilsStrtoui(\"%lu\", (unsigned long)UINT_MAX+1,  10, false, 0, '\\0')", 311);
+  do_run_test(testUtilsStrtoui_stub_207, "testUtilsStrtoui(\"%lx\", (unsigned long)UINT_MAX+1,  16, false, 0, '\\0')", 312);
+  do_run_test(testUtilsStrtoui_stub_208, "testUtilsStrtoui(\"9a\", 0,  10, true, 9, 'a')", 314);
+  do_run_test(testUtilsStrtoui_stub_209, "testUtilsStrtoui(\"a\", 0,  10, false, 0, 'a')", 315);
   registerFixture(NULL, NULL, NULL);
 
   return UnityEnd();

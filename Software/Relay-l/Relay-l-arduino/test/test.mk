@@ -13,7 +13,7 @@ CurrentFileName        :=
 CurrentFilePath        :=
 CurrentFileFullPath    :=
 User                   :=Tom
-Date                   :=10/10/22
+Date                   :=17/10/22
 CodeLitePath           :=/home/tom/.codelite
 LinkerName             :=/usr/bin/g++
 SharedObjectLinkerName :=/usr/bin/g++ -shared -fPIC
@@ -60,7 +60,7 @@ AS       := /usr/bin/as
 ## User defined environment variables
 ##
 CodeLiteDir:=/usr/share/codelite
-Objects0=$(IntermediateDirectory)/up_utils.cpp$(ObjectSuffix) $(IntermediateDirectory)/main.cpp$(ObjectSuffix) $(IntermediateDirectory)/test_utils.cpp$(ObjectSuffix) $(IntermediateDirectory)/unity.c$(ObjectSuffix) $(IntermediateDirectory)/test_event.cpp$(ObjectSuffix) $(IntermediateDirectory)/up_event.cpp$(ObjectSuffix) $(IntermediateDirectory)/support_test.cpp$(ObjectSuffix) 
+Objects0=$(IntermediateDirectory)/main.cpp$(ObjectSuffix) $(IntermediateDirectory)/test_utils.cpp$(ObjectSuffix) $(IntermediateDirectory)/unity.c$(ObjectSuffix) $(IntermediateDirectory)/up_utils.cpp$(ObjectSuffix) $(IntermediateDirectory)/up_event.cpp$(ObjectSuffix) $(IntermediateDirectory)/test_event.cpp$(ObjectSuffix) $(IntermediateDirectory)/support_test.cpp$(ObjectSuffix) 
 
 
 
@@ -95,14 +95,6 @@ PreBuild:
 ##
 ## Objects
 ##
-$(IntermediateDirectory)/up_utils.cpp$(ObjectSuffix): ../utils.cpp $(IntermediateDirectory)/up_utils.cpp$(DependSuffix)
-	$(CXX) $(IncludePCH) $(SourceSwitch) "/home/tom/git/misc/2022SBC/Software/Relay-l/Relay-l-arduino/utils.cpp" $(CXXFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/up_utils.cpp$(ObjectSuffix) $(IncludePath)
-$(IntermediateDirectory)/up_utils.cpp$(DependSuffix): ../utils.cpp
-	@$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) -MG -MP -MT$(IntermediateDirectory)/up_utils.cpp$(ObjectSuffix) -MF$(IntermediateDirectory)/up_utils.cpp$(DependSuffix) -MM ../utils.cpp
-
-$(IntermediateDirectory)/up_utils.cpp$(PreprocessSuffix): ../utils.cpp
-	$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/up_utils.cpp$(PreprocessSuffix) ../utils.cpp
-
 $(IntermediateDirectory)/main.cpp$(ObjectSuffix): main.cpp $(IntermediateDirectory)/main.cpp$(DependSuffix)
 	$(CXX) $(IncludePCH) $(SourceSwitch) "/home/tom/git/misc/2022SBC/Software/Relay-l/Relay-l-arduino/test/main.cpp" $(CXXFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/main.cpp$(ObjectSuffix) $(IncludePath)
 $(IntermediateDirectory)/main.cpp$(DependSuffix): main.cpp
@@ -127,13 +119,13 @@ $(IntermediateDirectory)/unity.c$(DependSuffix): unity.c
 $(IntermediateDirectory)/unity.c$(PreprocessSuffix): unity.c
 	$(CC) $(CFLAGS) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/unity.c$(PreprocessSuffix) unity.c
 
-$(IntermediateDirectory)/test_event.cpp$(ObjectSuffix): test_event.cpp $(IntermediateDirectory)/test_event.cpp$(DependSuffix)
-	$(CXX) $(IncludePCH) $(SourceSwitch) "/home/tom/git/misc/2022SBC/Software/Relay-l/Relay-l-arduino/test/test_event.cpp" $(CXXFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/test_event.cpp$(ObjectSuffix) $(IncludePath)
-$(IntermediateDirectory)/test_event.cpp$(DependSuffix): test_event.cpp
-	@$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) -MG -MP -MT$(IntermediateDirectory)/test_event.cpp$(ObjectSuffix) -MF$(IntermediateDirectory)/test_event.cpp$(DependSuffix) -MM test_event.cpp
+$(IntermediateDirectory)/up_utils.cpp$(ObjectSuffix): ../utils.cpp $(IntermediateDirectory)/up_utils.cpp$(DependSuffix)
+	$(CXX) $(IncludePCH) $(SourceSwitch) "/home/tom/git/misc/2022SBC/Software/Relay-l/Relay-l-arduino/utils.cpp" $(CXXFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/up_utils.cpp$(ObjectSuffix) $(IncludePath)
+$(IntermediateDirectory)/up_utils.cpp$(DependSuffix): ../utils.cpp
+	@$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) -MG -MP -MT$(IntermediateDirectory)/up_utils.cpp$(ObjectSuffix) -MF$(IntermediateDirectory)/up_utils.cpp$(DependSuffix) -MM ../utils.cpp
 
-$(IntermediateDirectory)/test_event.cpp$(PreprocessSuffix): test_event.cpp
-	$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/test_event.cpp$(PreprocessSuffix) test_event.cpp
+$(IntermediateDirectory)/up_utils.cpp$(PreprocessSuffix): ../utils.cpp
+	$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/up_utils.cpp$(PreprocessSuffix) ../utils.cpp
 
 $(IntermediateDirectory)/up_event.cpp$(ObjectSuffix): ../event.cpp $(IntermediateDirectory)/up_event.cpp$(DependSuffix)
 	$(CXX) $(IncludePCH) $(SourceSwitch) "/home/tom/git/misc/2022SBC/Software/Relay-l/Relay-l-arduino/event.cpp" $(CXXFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/up_event.cpp$(ObjectSuffix) $(IncludePath)
@@ -142,6 +134,14 @@ $(IntermediateDirectory)/up_event.cpp$(DependSuffix): ../event.cpp
 
 $(IntermediateDirectory)/up_event.cpp$(PreprocessSuffix): ../event.cpp
 	$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/up_event.cpp$(PreprocessSuffix) ../event.cpp
+
+$(IntermediateDirectory)/test_event.cpp$(ObjectSuffix): test_event.cpp $(IntermediateDirectory)/test_event.cpp$(DependSuffix)
+	$(CXX) $(IncludePCH) $(SourceSwitch) "/home/tom/git/misc/2022SBC/Software/Relay-l/Relay-l-arduino/test/test_event.cpp" $(CXXFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/test_event.cpp$(ObjectSuffix) $(IncludePath)
+$(IntermediateDirectory)/test_event.cpp$(DependSuffix): test_event.cpp
+	@$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) -MG -MP -MT$(IntermediateDirectory)/test_event.cpp$(ObjectSuffix) -MF$(IntermediateDirectory)/test_event.cpp$(DependSuffix) -MM test_event.cpp
+
+$(IntermediateDirectory)/test_event.cpp$(PreprocessSuffix): test_event.cpp
+	$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/test_event.cpp$(PreprocessSuffix) test_event.cpp
 
 $(IntermediateDirectory)/support_test.cpp$(ObjectSuffix): support_test.cpp $(IntermediateDirectory)/support_test.cpp$(DependSuffix)
 	$(CXX) $(IncludePCH) $(SourceSwitch) "/home/tom/git/misc/2022SBC/Software/Relay-l/Relay-l-arduino/test/support_test.cpp" $(CXXFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/support_test.cpp$(ObjectSuffix) $(IncludePath)

@@ -8,14 +8,14 @@
 TT_BEGIN_INCLUDE()
 #include "utils.h"
 
+// Test our FIFO type.
+//
+
 // Need these available for test cases.
 #define QUEUE_DEPTH 4
 DECLARE_QUEUE_TYPE(Q, uint8_t, QUEUE_DEPTH)
 typedef bool (*QueuePutFunc)(QueueQ*, uint8_t*);
 TT_END_INCLUDE()
-
-// Test our FIFO type.
-//
 
 QueueQ q;
 uint8_t el;
@@ -165,58 +165,152 @@ void testCleared() {	// Queue init() also clears.
 	verify_full_empty_len(0);
 }
 
-TT_IGNORE_FROM_HERE()
-#if 0
+// Test our non-overflowing buffer type.
+//
+
+TT_BEGIN_INCLUDE()
+#define TEST_UTILS_BUF_SIZE 4
+TT_END_INCLUDE()
+DECLARE_BUFFER_TYPE(Buf, TEST_UTILS_BUF_SIZE)
+BufferBuf b;
+
+void testUtilsBufferSetup() {
+	bufferBufReset(&b);
+	memset(b.buf, 0xee, sizeof(b.buf));
+}
+TT_BEGIN_FIXTURE(testUtilsBufferSetup);
+
+static void verify_buffer_reset() {
+	TEST_ASSERT_EQUAL_UINT8(TEST_UTILS_BUF_SIZE, bufferBufFree(&b));
+	TEST_ASSERT_EQUAL_UINT8(0, bufferBufLen(&b));
+	TEST_ASSERT_FALSE(bufferBufOverflow(&b));
+}
+
 void testBufferInit() {
-	Buffer t(4);
-	TEST_ASSERT_EQUAL_UINT8(4, t.free());
-	TEST_ASSERT_EQUAL_UINT8(0, t.len());
-	TEST_ASSERT_FALSE(t.overflow());
+	verify_buffer_reset();
 }
 
-static uint8_t check[] = {'*', '1', '2', '3' };
+// Add single chars.
+void testBufferAddChar(int n) {
+	fori (n) {
+		bufferBufAdd(&b, 'a'+i);
+		TEST_ASSERT_EQUAL_UINT8(TEST_UTILS_BUF_SIZE-(i+1), bufferBufFree(&b));
+		TEST_ASSERT_EQUAL_UINT8(i+1, bufferBufLen(&b));
+		TEST_ASSERT_FALSE(bufferBufOverflow(&b));
+	}
+	fori (n)
+		TEST_ASSERT_EQUAL_UINT8('a'+i, b.buf[i]);
+}
+TT_TEST_CASE(testBufferAddChar(1));
+TT_TEST_CASE(testBufferAddChar(TEST_UTILS_BUF_SIZE-1));
+TT_TEST_CASE(testBufferAddChar(TEST_UTILS_BUF_SIZE));
 
-void testBufferAddChar() {
-	Buffer t(4);
-	t.add('*');
-	t.add('1');
-	t.add('2');
-	TEST_ASSERT_EQUAL_UINT8(1, t.free());
-	TEST_ASSERT_EQUAL_UINT8(3, t.len());
-	TEST_ASSERT_FALSE(t.overflow());
-	TEST_ASSERT_EQUAL_MEMORY(check, (const uint8_t*)t, t.len());
-}
-void testBufferAddCharFull() {
-	Buffer t(4);
-	t.add('*');
-	t.add('1');
-	t.add('2');
-	t.add('3');
-	TEST_ASSERT_EQUAL_UINT8(0, t.free());
-	TEST_ASSERT_EQUAL_UINT8(4, t.len());
-	TEST_ASSERT_FALSE(t.overflow());
-	TEST_ASSERT_EQUAL_MEMORY(check, (const uint8_t*)t, t.len());
-}
 void testBufferAddCharOverflow() {
-	Buffer t(4);
-	t.add('*');
-	t.add('1');
-	t.add('2');
-	t.add('3');
-	t.add('V');
-	TEST_ASSERT_EQUAL_UINT8(0, t.free());
-	TEST_ASSERT_EQUAL_UINT8(4, t.len());
-	TEST_ASSERT_TRUE(t.overflow());
-	TEST_ASSERT_EQUAL_MEMORY(check, (const uint8_t*)t, t.len());
-}
-void testBufferReset() {
-	Buffer t(4);
-	t.add('*');
-	t.add('1');
-	t.reset();
-	TEST_ASSERT_EQUAL_UINT8(4, t.free());
-	TEST_ASSERT_EQUAL_UINT8(0, t.len());
-	TEST_ASSERT_FALSE(t.overflow());
+	fori (TEST_UTILS_BUF_SIZE)
+		bufferBufAdd(&b, 'a'+i);
+	TEST_ASSERT_EQUAL_UINT8(0, bufferBufFree(&b));
+	TEST_ASSERT_FALSE(bufferBufOverflow(&b));
+
+	bufferBufAdd(&b, 'z');
+	TEST_ASSERT_EQUAL_UINT8(0, bufferBufFree(&b));
+	TEST_ASSERT_EQUAL_UINT8(TEST_UTILS_BUF_SIZE, bufferBufLen(&b));
+	TEST_ASSERT(bufferBufOverflow(&b));
+	fori (TEST_UTILS_BUF_SIZE)
+		TEST_ASSERT_EQUAL_UINT8('a'+i, b.buf[i]);
 }
 
-#endif
+// Add U16s.
+void testBufferAddU16(int n) {
+	fori (n) {
+		bufferBufAddU16(&b, 0xfedc+i);
+		TEST_ASSERT_EQUAL_UINT8(TEST_UTILS_BUF_SIZE-(i+1)*2, bufferBufFree(&b));
+		TEST_ASSERT_EQUAL_UINT8((i+1)*2, bufferBufLen(&b));
+		TEST_ASSERT_FALSE(bufferBufOverflow(&b));
+	}
+	fori (n)
+		TEST_ASSERT_EQUAL_UINT16(0xfedc+i, ((uint16_t*)(b.buf))[i]);
+}
+TT_TEST_CASE(testBufferAddU16(1));
+TT_TEST_CASE(testBufferAddU16(TEST_UTILS_BUF_SIZE/2-1));
+TT_TEST_CASE(testBufferAddU16(TEST_UTILS_BUF_SIZE/2));
+
+void testBufferAddU16Overflow() {
+	fori (TEST_UTILS_BUF_SIZE)
+		bufferBufAdd(&b, 'a'+i);
+
+	bufferBufAddU16(&b, 0x1234);
+	TEST_ASSERT_EQUAL_UINT8(0, bufferBufFree(&b));
+	TEST_ASSERT_EQUAL_UINT8(TEST_UTILS_BUF_SIZE, bufferBufLen(&b));
+	TEST_ASSERT(bufferBufOverflow(&b));
+	fori (TEST_UTILS_BUF_SIZE)
+		TEST_ASSERT_EQUAL_UINT8('a'+i, b.buf[i]);
+}
+
+// Add memory.
+void testBufferAddMem() {
+	const uint8_t t[] = { 12, 34, 56 };
+
+	bufferBufAddMem(&b, t, sizeof(t));
+	TEST_ASSERT_EQUAL_UINT8(TEST_UTILS_BUF_SIZE-sizeof(t), bufferBufFree(&b));
+	TEST_ASSERT_EQUAL_UINT8(sizeof(t), bufferBufLen(&b));
+	TEST_ASSERT_FALSE(bufferBufOverflow(&b));
+
+	bufferBufAddMem(&b, t, sizeof(t));
+	TEST_ASSERT_EQUAL_UINT8(0, bufferBufFree(&b));
+	TEST_ASSERT_EQUAL_UINT8(TEST_UTILS_BUF_SIZE, bufferBufLen(&b));
+	TEST_ASSERT(bufferBufOverflow(&b));
+
+	TEST_ASSERT_EQUAL_MEMORY(t, b.buf, sizeof(t));
+	TEST_ASSERT_EQUAL_MEMORY(t, b.buf+sizeof(t), TEST_UTILS_BUF_SIZE-sizeof(t));
+}
+
+void testUtilsBufferReset() {
+	fori (TEST_UTILS_BUF_SIZE+1)
+		bufferBufAdd(&b, 'a'+i);
+	TEST_ASSERT(bufferBufOverflow(&b));
+
+	bufferBufReset(&b);
+	verify_buffer_reset();
+}
+
+// Test strtoui()...
+//
+
+void testUtilsStrtoui(const char *fmtstr, unsigned long nn, unsigned base, bool rc_exp, unsigned n_exp, char end) {
+	unsigned n;
+	char *endp = NULL;
+	char str[40];
+	sprintf(str, fmtstr, nn);
+
+	TEST_ASSERT_EQUAL(rc_exp, utilsStrtoui(&n, str, NULL, base));
+	if (rc_exp)
+		TEST_ASSERT_EQUAL_UINT(n_exp, n);
+
+	TEST_ASSERT_EQUAL(rc_exp, utilsStrtoui(&n, str, &endp, base));
+	if (rc_exp)
+		TEST_ASSERT_EQUAL_UINT(n_exp, n);
+	TEST_ASSERT_EQUAL_CHAR(end, *endp);
+}
+// No numbers...
+TT_TEST_CASE(testUtilsStrtoui("", 0, 10, false, 0, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("*", 0,  10, false, 0, '*'));
+// Single digits...
+TT_TEST_CASE(testUtilsStrtoui("9", 0,  10, true, 9, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("1", 0,  2, true, 1, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("f", 0,  16, true, 15, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("F", 0,  16, true, 15, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("z", 0,  36, true, 35, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("Z", 0,  36, true, 35, '\0'));
+// Leading stuff...
+TT_TEST_CASE(testUtilsStrtoui("+9", 0,  10, true, 9, '\0'));
+TT_TEST_CASE(testUtilsStrtoui(" 9", 0,  10, true, 9, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("09", 0,  10, true, 9, '\0'));
+// At max...
+TT_TEST_CASE(testUtilsStrtoui("%lu", UINT_MAX,  10, true, UINT_MAX, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("%lx", UINT_MAX,  16, true, UINT_MAX, '\0'));
+// Overflow...
+TT_TEST_CASE(testUtilsStrtoui("%lu", (unsigned long)UINT_MAX+1,  10, false, 0, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("%lx", (unsigned long)UINT_MAX+1,  16, false, 0, '\0'));
+// Illegal digit...
+TT_TEST_CASE(testUtilsStrtoui("9a", 0,  10, true, 9, 'a'));
+TT_TEST_CASE(testUtilsStrtoui("a", 0,  10, false, 0, 'a'));

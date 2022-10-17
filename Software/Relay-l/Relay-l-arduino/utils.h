@@ -75,7 +75,7 @@ typedef struct {																											\
 	bool ovf;																												\
 } Buffer##name_;																											\
 static inline void buffer##name_##Reset(Buffer##name_* q) { q->p = q->buf; q->ovf = false; }								\
-static inline uint_least8_t buffer##name_##Size(Buffer##name_* q) { return (uint_least8_t)(size_);	}						\
+static inline uint_least8_t buffer##name_##Size(Buffer##name_* q) { (void)q; return (uint_least8_t)(size_);	}				\
 static inline bool buffer##name_##Overflow(Buffer##name_* q) { return q->ovf; }												\
 static inline uint_least8_t buffer##name_##Len(const Buffer##name_* q) { return (uint_least8_t)(q->p - q->buf); }			\
 static inline uint_least8_t buffer##name_##Free(const Buffer##name_* q) { return (uint_least8_t)(&q->buf[size_] - q->p); }	\
@@ -83,9 +83,13 @@ static inline void buffer##name_##Add(Buffer##name_* q, uint8_t x) { 											
 	if (buffer##name_##Free(q) > 0)	*q->p++ = x;																			\
 	else q->ovf = true;																										\
 }																															\
-static inline void buffer##name_##AddU16(Buffer##name_* q, uint16_t x) { 													\
-	buffer##name_##Add(q, (uint8_t)(x >> 8)); buffer##name_##Add(q, (uint8_t)(x));											\
+static inline void buffer##name_##AddMem(Buffer##name_* q, const void* m, uint8_t len) { 									\
+	if (len > buffer##name_##Free(q)) { q->ovf = true; len = buffer##name_##Free(q); }										\
+	memcpy(q->p, m, len); q->p += len;																						\
 }																															\
+static inline void buffer##name_##AddU16(Buffer##name_* q, uint16_t x) { 													\
+	buffer##name_##AddMem(q, &x, sizeof(uint16_t));																			\
+}
 
 // How many elements in an array?
 #define UTILS_ELEMENT_COUNT(x_) (sizeof(x_) / sizeof((x_)[0]))
@@ -257,9 +261,10 @@ uint16_t utilsFilter(T* accum, uint16_t input, uint8_t k, bool reset) {
 	return (uint16_t)(*accum >> k);
 }
 
-// Simple implementation of strtoul for unsigned ints. String may have leading whitespace and an optional leading '+'. Then digits up to one less than the
-//  base are converted, until the first illegal character or a nul is read. Then, if the result has not rolled over, the function returns true, and the result is set to n.
-//  If endptr is non-NULL, it is set to the first illegal character.
+/* Simple implementation of strtoul for unsigned ints. String may have leading whitespace and an optional leading '+'. Then digits up to one
+	less than the base are converted, until the first illegal character or a nul is read. Then, if the result has not rolled over, the
+	result is written to n. The function only returns true if at least one number character is seenand there is no overflow.
+	If endptr is non-NULL, it is set to the first illegal character. */
 bool utilsStrtoui(unsigned* n, const char *str, char **endptr, unsigned base);
 
 // Utils Sequencer -- generic driver to run an arbitrary sequence by calling a user function every so often with a canned argument.
