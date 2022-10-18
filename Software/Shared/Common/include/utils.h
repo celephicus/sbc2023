@@ -19,6 +19,7 @@ bool utilsIsTimerDone(T &then, T timeout) { return ((T)millis() - then) > timeou
 	Anyway here is simple code to make an uninterruptable section of code. Not as elegant as the ATOMIC_BLOCK in avr-libc,
 	see https://github.com/wizard97/SimplyAtomic the discussion on "is ATOMIC_BLOCK preferable to cli/sti?". */
 #if defined(__AVR__)
+ #include "avr/interrupt.h"
  extern uint8_t g_utils_critical_mutex;
  #define UTILS_DECLARE_CRITICAL_MUTEX() uint8_t g_utils_critical_mutex
  #define CRITICAL_START() do { g_utils_critical_mutex = SREG; cli(); } while(0)
