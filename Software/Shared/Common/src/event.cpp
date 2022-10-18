@@ -12,27 +12,19 @@
 
 // Progmem access, PSTR(), pgm_read_xxx().
 #if defined(AVR)
- #include <avr/pgmspace.h>	
+ #include <avr/pgmspace.h>
 #elif defined(ESP32)
- #include <pgmspace.h>	
-#else						
+ #include <pgmspace.h>
+#else
  #define PSTR(str_) (str_)
  #define PROGMEM /*empty */
  #define pgm_read_byte(_a) ((uint8_t)*(uint8_t*)(_a))
  #define pgm_read_word(_a) ((uint16_t)*(uint16_t*)(_a))
- #define pgm_read_ptr(x_) (const void*)(*(x_))					
+ #define pgm_read_ptr(x_) (const void*)(*(x_))
+ #define _BV(_x) (1U << (_x))
 #endif
 
-// Need project_config for event queue & trace buffer sizes.
-#ifndef TEST
- #include "project_config.h"
-#else
- #include "project_config.test.h"
-#endif
-#ifndef PROJECT_CONFIG_H__
-#error "no project config"
-#endif
-
+#include "project_config.h"		// Need project_config for event queue & trace buffer sizes.
 #include "utils.h"
 #include "event.h"
 
@@ -73,7 +65,7 @@ static bool event_publish(t_event ev, bool flag_front) {
 	if (EV_NIL == event_id(ev))
 		return true;
 	eventTraceWriteEv(ev);
-    {	
+    {
     	Critical lock;	// Need to lock event queue to ensure an ISR doesn't add an event between us checking and putting.
 		if (flag_front)
 			success = queueEventPush(&f_queue_event, &ev);
@@ -104,7 +96,7 @@ void eventTraceClear() {
 
 // Do we trace an event?
 static bool trace_event_p(uint8_t ev_id) {
-	return (ev_id < EVENT_TRACE_MASK_SIZE*8) && (eventGetTraceMask()[ev_id / 8] & ((uint8_t)bit(ev_id & 7)));
+	return (ev_id < EVENT_TRACE_MASK_SIZE*8) && (eventGetTraceMask()[ev_id / 8] & ((uint8_t)_BV(ev_id & 7)));
 }
 
 void eventTraceWriteEv(t_event ev) {
@@ -130,7 +122,7 @@ bool eventTraceRead(EventTraceItem* b) {
 
 void eventTraceMaskClear() { memset(eventGetTraceMask(), 0, EVENT_TRACE_MASK_SIZE); }
 void eventTraceMaskSet(uint8_t ev_id, bool f) {
-    utilsWriteFlags(&eventGetTraceMask()[ev_id / 8], (uint8_t)bit(ev_id & 7), f);
+    utilsWriteFlags(&eventGetTraceMask()[ev_id / 8], (uint8_t)_BV(ev_id & 7), f);
 }
 void eventTraceMaskSetList(const uint8_t* ev_ids, uint8_t count) {
     while (count-- > 0)

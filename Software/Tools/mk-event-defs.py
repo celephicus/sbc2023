@@ -1,3 +1,4 @@
+#! /usr/bin/python3
 import sys, re
 
 # Define events as a name, then a description.
