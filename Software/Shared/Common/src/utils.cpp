@@ -22,6 +22,9 @@ uint32_t l_test_millis;
 
 #include "utils.h"
 
+// One global instance of lock for Critical Sections. 
+UTILS_DECLARE_CRITICAL_MUTEX();
+
 // From https://github.com/brandondahler/retter.
 uint16_t utilsChecksumFletcher16(uint8_t const *data, size_t count) {
     uint16_t sum1 = 0, sum2 = 0;

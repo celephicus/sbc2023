@@ -7,10 +7,18 @@
 
 TT_BEGIN_INCLUDE()
 #include "utils.h"
+TT_END_INCLUDE()
+
+// Test little helpers...
+void testUtilsIsTypeSigned() {
+	TEST_ASSERT(utilsIsTypeSigned(int8_t));
+	TEST_ASSERT_FALSE(utilsIsTypeSigned(uint8_t));
+}
 
 // Test our FIFO type.
 //
 
+TT_BEGIN_INCLUDE()
 // Need these available for test cases.
 #define QUEUE_DEPTH 4
 DECLARE_QUEUE_TYPE(Q, uint8_t, QUEUE_DEPTH)

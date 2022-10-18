@@ -6,9 +6,6 @@
 #include "utils.h"
 #include "console.h"
 
-// Is an integer type signed, works for chars as well.
-#define utilsIsTypeSigned(T_) (((T_)(-1)) < (T_)0)
-
 // And check for compatibility of the two cell types.
 UTILS_STATIC_ASSERT(sizeof(console_cell_t) == sizeof(console_ucell_t));
 UTILS_STATIC_ASSERT(utilsIsTypeSigned(console_cell_t));
@@ -24,7 +21,7 @@ UTILS_STATIC_ASSERT(!utilsIsTypeSigned(console_ucell_t));
  #define CONSOLE_READ_FUNC_PTR(x_) pgm_read_dword(x_)		// 32 bit target.
 #else
  #define PSTR(str_) (str_)
- #define CONSOLE_READ_FUNC_PTR(x_) (*(x_))					// Generic target. 
+ #define CONSOLE_READ_FUNC_PTR(x_) (*(x_))					// Generic target.
 #endif
 
 // Stack size, we don't need much.
@@ -47,18 +44,18 @@ UTILS_STATIC_ASSERT(sizeof(void*) <= sizeof(console_ucell_t));
 // Unused static functions are OK. The linker will remove them.
 #pragma GCC diagnostic ignored "-Wunused-function"
 
-// All state is in a struct for easy viewing on a debugger. 
+// All state is in a struct for easy viewing on a debugger.
 // Struct to hold the console interpreter's state.
 #include <setjmp.h>
 typedef struct {
-	Stream* s;										// Stream object for IO. 
+	Stream* s;										// Stream object for IO.
 	console_cell_t dstack[CONSOLE_DATA_STACK_SIZE];	// Our stack, grows down in memory.
-	console_cell_t* sp;								// Stack pointer, points to topmost item. 
+	console_cell_t* sp;								// Stack pointer, points to topmost item.
 	jmp_buf jmpbuf;									// How we do aborts.
 	console_recogniser_func local_r;				// Local recogniser function.
 	uint8_t flags;
 	char inbuf[CONSOLE_INPUT_BUFFER_SIZE + 1];
-	uint8_t inbidx;	
+	uint8_t inbidx;
 } console_context_t;
 console_context_t g_console_ctx;
 
@@ -317,7 +314,7 @@ static const console_recogniser_func RECOGNISERS[] PROGMEM = {
 	console_r_string,
 	console_r_hex_string,
 	console_cmds_builtin,
-	local_r,			
+	local_r,
 	NULL
 };
 
@@ -374,7 +371,7 @@ static console_rc_t console_process(char* str) {
 			 // Silly mixed enumeral/numeral compare warning. Who knew that enumerals lived in enums?
 			 return (command_rc < (console_rc_t)CONSOLE_RC_OK) ? (console_rc_t)CONSOLE_RC_OK : command_rc;
 		}
-   
+
 		// If last command break out of loop.
 		if (at_end)
 			break;
@@ -417,7 +414,7 @@ console_rc_t consoleService() {
 				g_console_ctx.s->print(rc);
 			}
 			consolePrompt();									// In any case print a newline and prompt ready for the next line of input.
-			return rc;											// Exit, possibly leaving chars in the stream buffer to be read next time. 
+			return rc;											// Exit, possibly leaving chars in the stream buffer to be read next time.
 		}
 	}
 	return CONSOLE_RC_STATUS_ACCEPT_PENDING;
@@ -428,9 +425,9 @@ void consolePrint(uint8_t opt, console_cell_t x) {
 		case CFMT_NL:		g_console_ctx.s->print(F(CONSOLE_OUTPUT_NEWLINE_STR)); (void)x; return; 	// No separator.
 		default:			(void)x; return;															// Ignore, print nothing.
 		case CFMT_D:		g_console_ctx.s->print((console_cell_t)x, DEC); break;
-		case CFMT_U:		if (!(opt & CFMT_M_NO_LEAD)) g_console_ctx.s->print('+'); 
+		case CFMT_U:		if (!(opt & CFMT_M_NO_LEAD)) g_console_ctx.s->print('+');
 							g_console_ctx.s->print((console_ucell_t)x, DEC); break;
-		case CFMT_U_D:		if (!(opt & CFMT_M_NO_LEAD))  g_console_ctx.s->print('+'); 
+		case CFMT_U_D:		if (!(opt & CFMT_M_NO_LEAD))  g_console_ctx.s->print('+');
 							g_console_ctx.s->print(*(uint32_t*)x, DEC); break;
 		case CFMT_X:		if (!(opt & CFMT_M_NO_LEAD)) g_console_ctx.s->print('$');
 							for (console_ucell_t m = 0xf; CONSOLE_UCELL_MAX != m; m = (m << 4) | 0xf) {
@@ -445,7 +442,7 @@ void consolePrint(uint8_t opt, console_cell_t x) {
 							g_console_ctx.s->print((console_ucell_t)(x), HEX);
 							break;
 	}
-	if (!(opt & CFMT_M_NO_SEP))	
+	if (!(opt & CFMT_M_NO_SEP))
 		g_console_ctx.s->print(' ');			// Print a space.
 }
 

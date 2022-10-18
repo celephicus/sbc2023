@@ -1,19 +1,49 @@
 #ifndef UTILS_H__
 #define UTILS_H__
-
+#if 0
 // Mock millis() for testing.
 #ifdef TEST
 extern uint32_t millis();
 #endif
 
 // I can't believe how often I stuff up using millis() to time a period. So as usual, here's a function to do timeouts.
-uint32_t millis();
 template <typename T>
 void utilsStartTimer(T &then) { then = (T)millis(); }
 
 template <typename T>
 bool utilsIsTimerDone(T &then, T timeout) { return ((T)millis() - then) > timeout; }
+#endif
 
+/* I'm not sure this belongs here, but there is a need in event for critical sections, so here it is. I'd like to put it in dev,
+	which was where the more device specific stuff was intended to go.
+	Anyway here is simple code to make an uninterruptable section of code. Not as elegant as the ATOMIC_BLOCK in avr-libc,
+	see https://github.com/wizard97/SimplyAtomic the discussion on "is ATOMIC_BLOCK preferable to cli/sti?". */
+#if defined(__AVR__)
+ extern uint8_t g_utils_critical_mutex;
+ #define UTILS_DECLARE_CRITICAL_MUTEX() uint8_t g_utils_critical_mutex
+ #define CRITICAL_START() do { g_utils_critical_mutex = SREG; cli(); } while(0)
+  #define CRITICAL_END() do { SREG = g_utils_critical_mutex; } while(0)
+#elif defined(ARDUINO_ARCH_ESP32 )
+ #include "esp32-hal.h"
+ extern PRIVILEGED_DATA portMUX_TYPE g_utils_critical_mutex;
+ #define UTILS_DECLARE_CRITICAL_MUTEX() PRIVILEGED_DATA portMUX_TYPE g_utils_critical_mutex = portMUX_INITIALIZER_UNLOCKED
+ #define CRITICAL_START() portENTER_CRITICAL_ISR(&g_utils_critical_mutex)
+ #define CRITICAL_END() portEXIT_CRITICAL_ISR(&g_utils_critical_mutex)
+#elif defined(NO_CRITICAL_SECTIONS)
+ extern uint8_t g_utils_dummy_critical_mutex;
+ #define UTILS_DECLARE_CRITICAL_MUTEX() uint8_t g_utils_dummy_critical_mutex
+ #define CRITICAL_START() /*empty */
+ #define CRITICAL_END() /*empty */
+#else
+ #error "Unknown how to define Critical Sections."
+#endif
+	
+// C++ version, use ... { Critical c; *stuff* }, lock released on leaving block, even with a goto. 
+struct Critical {
+	Critical() { CRITICAL_START(); }
+	~Critical() { CRITICAL_END(); }
+};
+	
 // When something must be true at compile time...
 #define UTILS_STATIC_ASSERT(expr_) extern int error_static_assert_fail__[(expr_) ? 1 : -1] __attribute__((unused))
 
@@ -28,6 +58,9 @@ bool utilsIsTimerDone(T &then, T timeout) { return ((T)millis() - then) > timeou
 #define STR(s) STRX(s)
 #define STRX(s) #s
 #endif
+
+// Is an integer type signed, works for chars as well.
+#define utilsIsTypeSigned(T_) (((T_)(-1)) < (T_)0)
 
 // The worlds simplest scheduler, run a block every so often up to 32 seconds. Note that it does not recover well if you set delay to zero and then non-zero.
 // Stolen from a discussion on some Arduino forum.
@@ -263,7 +296,7 @@ uint16_t utilsFilter(T* accum, uint16_t input, uint8_t k, bool reset) {
 
 /* Simple implementation of strtoul for unsigned ints. String may have leading whitespace and an optional leading '+'. Then digits up to one
 	less than the base are converted, until the first illegal character or a nul is read. Then, if the result has not rolled over, the
-	result is written to n. The function only returns true if at least one number character is seenand there is no overflow.
+	result is written to n. The function only returns true if at least one number character is seen and there is no overflow.
 	If endptr is non-NULL, it is set to the first illegal character. */
 bool utilsStrtoui(unsigned* n, const char *str, char **endptr, unsigned base);
 

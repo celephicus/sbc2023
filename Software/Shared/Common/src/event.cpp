@@ -3,38 +3,27 @@
 #include <stdbool.h>
 #include <string.h>
 
-// millis()
-#if defined(AVR)
-#include <Arduino.h>
-#elif defined(ESP32)
+// Fake Arduino environment for testing millis()
+#if defined(TEST)
+ uint32_t millis();
 #else
-uint32_t millis();
+ #include <Arduino.h>
 #endif
 
-// Progmem access.
+// Progmem access, PSTR(), pgm_read_xxx().
 #if defined(AVR)
- #include <avr/pgmspace.h>	// Takes care of PSTR(), pgm_read_xxx().
+ #include <avr/pgmspace.h>	
 #elif defined(ESP32)
- #include <pgmspace.h>	// Takes care of PSTR() ,pgm_read_xxx()
- #define pgm_read_ptr(x_) (const void*)pgm_read_dword(x_)		// 32 bit target.
-#else
+ #include <pgmspace.h>	
+#else						
  #define PSTR(str_) (str_)
  #define PROGMEM /*empty */
  #define pgm_read_byte(_a) ((uint8_t)*(uint8_t*)(_a))
  #define pgm_read_word(_a) ((uint16_t)*(uint16_t*)(_a))
- #define pgm_read_ptr(x_) (const void*)(*(x_))					// Generic target.
+ #define pgm_read_ptr(x_) (const void*)(*(x_))					
 #endif
 
-// Atomic blocks
-#if defined(AVR)
- #include <util/atomic.h>
-#elif defined(ESP32 )
-#else
- #define ATOMIC_RESTORESTATE /*empty */
- #define ATOMIC_BLOCK(_a) /* empty */
- #define _BV(_x) (1U << (_x))
-#endif
-
+// Need project_config for event queue & trace buffer sizes.
 #ifndef TEST
  #include "project_config.h"
 #else
@@ -43,6 +32,7 @@ uint32_t millis();
 #ifndef PROJECT_CONFIG_H__
 #error "no project config"
 #endif
+
 #include "utils.h"
 #include "event.h"
 
@@ -83,7 +73,8 @@ static bool event_publish(t_event ev, bool flag_front) {
 	if (EV_NIL == event_id(ev))
 		return true;
 	eventTraceWriteEv(ev);
-    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {		// Need to lock event queue to ensure an ISR doesn't add an event between us checking and putting.
+    {	
+    	Critical lock;	// Need to lock event queue to ensure an ISR doesn't add an event between us checking and putting.
 		if (flag_front)
 			success = queueEventPush(&f_queue_event, &ev);
 		else
@@ -99,7 +90,7 @@ bool eventPublishEvFront(t_event ev) { return event_publish(ev, true); }
 t_event eventGet() {
     t_event ev;
 	bool available;
-    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { available = queueEventGet(&f_queue_event, &ev); }
+    { Critical lock; available = queueEventGet(&f_queue_event, &ev); }
 	return available ? ev : event_mk(EV_NIL);
 }
 
@@ -107,12 +98,13 @@ t_event eventGet() {
 //
 
 void eventTraceClear() {
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { queueTraceInit(&f_queue_trace); }
+	Critical lock;
+	queueTraceInit(&f_queue_trace);
 }
 
 // Do we trace an event?
 static bool trace_event_p(uint8_t ev_id) {
-	return (ev_id < EVENT_TRACE_MASK_SIZE*8) && (eventGetTraceMask()[ev_id / 8] & ((uint8_t)_BV(ev_id & 7)));
+	return (ev_id < EVENT_TRACE_MASK_SIZE*8) && (eventGetTraceMask()[ev_id / 8] & ((uint8_t)bit(ev_id & 7)));
 }
 
 void eventTraceWriteEv(t_event ev) {
@@ -120,7 +112,8 @@ void eventTraceWriteEv(t_event ev) {
         EventTraceItem item;
         item.timestamp = (uint32_t)millis();   // Safe to call millis() from ISR.
         item.event = ev;
-		ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+		{
+			Critical lock;
 			queueTracePutOverwrite(&f_queue_trace, &item);
 		}
     }
@@ -128,7 +121,8 @@ void eventTraceWriteEv(t_event ev) {
 
 bool eventTraceRead(EventTraceItem* b) {
     bool is_event_available;
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+	{
+		Critical lock;
 	    is_event_available = queueTraceGet(&f_queue_trace, b);
 	}
     return is_event_available;
@@ -136,7 +130,7 @@ bool eventTraceRead(EventTraceItem* b) {
 
 void eventTraceMaskClear() { memset(eventGetTraceMask(), 0, EVENT_TRACE_MASK_SIZE); }
 void eventTraceMaskSet(uint8_t ev_id, bool f) {
-    utilsWriteFlags(&eventGetTraceMask()[ev_id / 8], (uint8_t)_BV(ev_id & 7), f);
+    utilsWriteFlags(&eventGetTraceMask()[ev_id / 8], (uint8_t)bit(ev_id & 7), f);
 }
 void eventTraceMaskSetList(const uint8_t* ev_ids, uint8_t count) {
     while (count-- > 0)
