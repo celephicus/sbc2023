@@ -1,0 +1,8 @@
+# Custom project specific events.
+# Format <event-name> <comment>
+
+
+SCANNER_12V_IN_UNDERVOLT	DC power in volts low.
+SCANNER_BUS_UNDERVOLT		Bus volts low.
+MODBUS_MASTER_COMMS			Request from MODBUS master received, used for comms timeout.
+
