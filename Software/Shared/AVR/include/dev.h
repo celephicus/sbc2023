@@ -1,6 +1,7 @@
 #ifndef DEV_H__
 #define DEV_H__
 
+#if 0
 enum { DEV_ADC_MAX_VAL = 1023 };
 
 #define DEV_ADC_RESULT_NONE ((void*)1)	// Result pointer to not store result, e.g if waiting for the ADC to settle.
@@ -167,5 +168,5 @@ void devWatchdogPat(uint8_t m);
 
 // Check if restart was due to watchdog.
 static inline bool devWatchdogIsRestartWatchdog(uint16_t rst) { return !!(rst & _BV(WDRF)); }
-
+#endif
 #endif // DEV_H__

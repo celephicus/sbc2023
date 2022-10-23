@@ -254,6 +254,6 @@ const char* modbusGetCallbackEventDescription(uint8_t evt) {
 	static const char* const DESCS[COUNT_MODBUS_CB_EVT] PROGMEM = { // Declaration of the array of these strings.
 		MODBUS_CB_EVT_DEFS(MODBUS_CB_EVT_DEF_GEN_STR)
 	};
-	return (evt < COUNT_MODBUS_CB_EVT) ? (const char*)pgm_read_word(&DESCS[evt]) : PSTR("unknown");
+	return (evt < COUNT_MODBUS_CB_EVT) ? (const char*)pgm_read_ptr(&DESCS[evt]) : PSTR("unknown");
 }
 

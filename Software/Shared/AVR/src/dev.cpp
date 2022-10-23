@@ -1,21 +1,12 @@
 #include <Arduino.h>
-#include <avr/wdt.h>
 
 #include "project_config.h"
 #include "utils.h"
 #include "dev.h"
 
-#if 0
-#include <stdarg.h>
-#include <stdint.h>
+#ifdef __AVR__
 
-#include "debug.h"
-#include "types.h"
-#include "event.h"
-#include "regs.h"
-
-FILENUM(218);
-#endif
+#include <avr/wdt.h>
 
 static struct {
     const DevAdcChannelDef* current_adc_def;
@@ -207,3 +198,4 @@ uint16_t devWatchdogInit() {
 	
 	return restart;
 }
+#endif
