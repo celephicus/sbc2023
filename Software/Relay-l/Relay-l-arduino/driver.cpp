@@ -78,7 +78,9 @@ typedef struct {
 static NvData l_nv_data;
 
 // Defined in regs, declared here since we have the storage.
-uint16_t* regsGetRegs() { return l_nv_data.regs; }
+// Added since a call to regsGetRegs() for the ADC caused strange gcc error: In function 'global constructors keyed to 65535_... in Arduino.
+#define regs_storage l_nv_data.regs 
+uint16_t* regsGetRegs() { return regs_storage; }
 uint8_t* eventGetTraceMask() { return l_nv_data.trace_mask; }
 
 // The NV only managed the latter part of regs and whatever else is in the NvData struct.
@@ -119,13 +121,12 @@ static uint8_t nv_init() {
 // ADC read.
 //
 const DevAdcChannelDef g_adc_def_list[] PROGMEM = {
-	{ DEV_ADC_REF_AVCC | DEV_ADC_ARD_PIN_TO_CHAN(GPIO_PIN_VOLTS_MON_12V_IN),	&REGS[REGS_IDX_ADC_VOLTS_MON_12V_IN],	NULL },		
-	{ DEV_ADC_REF_AVCC | DEV_ADC_ARD_PIN_TO_CHAN(GPIO_PIN_VOLTS_MON_BUS),		&REGS[REGS_IDX_ADC_VOLTS_MON_BUS],		NULL },		
-	{ 0,																		DEV_ADC_RESULT_END,						NULL }
+	{ DEV_ADC_REF_AVCC | DEV_ADC_ARD_PIN_TO_CHAN(GPIO_PIN_VOLTS_MON_12V_IN),	&regs_storage[REGS_IDX_ADC_VOLTS_MON_12V_IN],	NULL },		
+	{ DEV_ADC_REF_AVCC | DEV_ADC_ARD_PIN_TO_CHAN(GPIO_PIN_VOLTS_MON_BUS),		&regs_storage[REGS_IDX_ADC_VOLTS_MON_BUS],		NULL },		
+	{ 0,																		DEV_ADC_RESULT_END,								NULL }
 };
 
-void adcDriverSetupFunc(void* setup_arg) {
-}
+void adcDriverSetupFunc(void* setup_arg) { /* empty */ }
 
 static void adc_init() {
 	devAdcInit(DEV_ADC_CLOCK_PRESCALE_128);  			// 16MHz / 128 = 125kHz.

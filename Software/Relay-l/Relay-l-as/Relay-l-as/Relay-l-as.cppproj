@@ -259,6 +259,10 @@ build.cmd
       <SubType>compile</SubType>
       <Link>Shared\Common\modbus.h</Link>
     </Compile>
+    <Compile Include="..\..\..\Shared\Common\include\sbc2022_modbus.h">
+      <SubType>compile</SubType>
+      <Link>Shared\Common\sbc2022_modbus.h</Link>
+    </Compile>
     <Compile Include="..\..\..\Shared\Common\include\utils.h">
       <SubType>compile</SubType>
       <Link>Shared\Common\utils.h</Link>
