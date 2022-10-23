@@ -2,9 +2,7 @@
 
 #include "project_config.h"
 #include "utils.h"
-#include "dev.h"
-
-#ifdef __AVR__
+#include "dev.h" 
 
 #include <avr/wdt.h>
 
@@ -198,4 +196,4 @@ uint16_t devWatchdogInit() {
 	
 	return restart;
 }
-#endif
+
