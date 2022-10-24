@@ -1,1 +1,3 @@
-**/src/
+# The contents of this dir are copied as required so ignore the lot.
+*
+!grab.cmd

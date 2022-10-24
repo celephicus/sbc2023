@@ -234,7 +234,7 @@
         <avrgcccpp.assembler.debugging.DebugLevel>Default (-Wa,-g)</avrgcccpp.assembler.debugging.DebugLevel>
       </AvrGccCpp>
     </ToolchainSettings>
-    <PreBuildEvent>cd ..\..\..\Relay-l-arduino\
+    <PreBuildEvent>cd ..\
 build.cmd
 </PreBuildEvent>
   </PropertyGroup>
@@ -247,6 +247,7 @@ build.cmd
       <SubType>compile</SubType>
       <Link>Shared\AVR\dev.cpp</Link>
     </Compile>
+	
     <Compile Include="..\..\..\Shared\Common\include\console.h">
       <SubType>compile</SubType>
       <Link>Shared\Common\console.h</Link>
@@ -291,31 +292,32 @@ build.cmd
       <SubType>compile</SubType>
       <Link>Shared\Common\regs.cpp</Link>
     </Compile>
-    <Compile Include="..\..\Relay-l-arduino\driver.cpp">
+    
+	<Compile Include="driver.cpp">
       <SubType>compile</SubType>
       <Link>driver.cpp</Link>
     </Compile>
-    <Compile Include="..\..\Relay-l-arduino\driver.h">
+    <Compile Include="driver.h">
       <SubType>compile</SubType>
       <Link>driver.h</Link>
     </Compile>
-    <Compile Include="..\..\Relay-l-arduino\event-defs.auto.h">
+    <Compile Include="event-defs.auto.h">
       <SubType>compile</SubType>
       <Link>event-defs.auto.h</Link>
     </Compile>
-    <Compile Include="..\..\Relay-l-arduino\project_config.h">
+    <Compile Include="project_config.h">
       <SubType>compile</SubType>
       <Link>project_config.h</Link>
     </Compile>
-    <Compile Include="..\..\Relay-l-arduino\regs.auto.h">
+    <Compile Include="regs.auto.h">
       <SubType>compile</SubType>
       <Link>regs.auto.h</Link>
     </Compile>
-    <Compile Include="..\..\Relay-l-arduino\Relay-gpio.h">
+    <Compile Include="Relay-gpio.h">
       <SubType>compile</SubType>
       <Link>Relay-gpio.h</Link>
     </Compile>
-    <Compile Include="Sketch.cpp">
+    <Compile Include="Relay-l-as.cpp">
       <SubType>compile</SubType>
     </Compile>
     <Content Include="readme.html">
