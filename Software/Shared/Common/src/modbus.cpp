@@ -171,14 +171,10 @@ void modbusService() {
 			if (is_master_waiting_response()) {		// Master waiting for response.
 				f_ctx.response_valid = verify_response(); 				// Decide if response is valid...
 				set_master_wait(0);
-				f_ctx.cb_resp((0 == f_ctx.response_valid) ? MODBUS_CB_EVT_RESP : MODBUS_CB_EVT_RESP_BAD);
+				f_ctx.cb_resp((MODBUS_RESPONSE_OK == f_ctx.response_valid) ? MODBUS_CB_EVT_RESP : MODBUS_CB_EVT_RESP_BAD);
 			}
-			else {						// Master NOT waiting, must be a request from someone, only flag if it is addressed to us. 
-				if (is_request_for_me(f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_SLAVE_ID]))
-					f_ctx.cb_resp(MODBUS_CB_EVT_REQ);
-				else
-					f_ctx.cb_resp(MODBUS_CB_EVT_REQ_X);
-			}
+			else 						// Master NOT waiting, must be a request from someone, so flag it.
+				f_ctx.cb_resp(is_request_for_me(f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_SLAVE_ID]) ? MODBUS_CB_EVT_REQ : MODBUS_CB_EVT_REQ_X);
 		}
 	}
 	
@@ -203,22 +199,26 @@ static uint8_t get_response_bytesize() {
 }
 
 static uint8_t verify_response() {	
-	if (f_ctx.expected_response_byte_size != bufferFrameLen(&f_ctx.buf_resp))		// Wrong response length.
-		return 1;
-	if (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_SLAVE_ID] != f_ctx.request.buf[MODBUS_FRAME_IDX_SLAVE_ID])						// Wrong slave id.
-		return 2;
-	if (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_FUNCTION] != f_ctx.request.buf[MODBUS_FRAME_IDX_FUNCTION])						// Wrong Function code.
-		return 3;
-	switch ( f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_FUNCTION]) {
+	if (f_ctx.expected_response_byte_size != bufferFrameLen(&f_ctx.buf_resp))							// Wrong response length.
+		return MODBUS_RESPONSE_BAD_LEN;
+	if (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_SLAVE_ID] != f_ctx.request.buf[MODBUS_FRAME_IDX_SLAVE_ID])	// Wrong slave id.
+		return MODBUS_RESPONSE_BAD_SLAVE_ID;
+	if (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_FUNCTION] != f_ctx.request.buf[MODBUS_FRAME_IDX_FUNCTION])	// Wrong Function code.
+		return MODBUS_RESPONSE_BAD_FUNCTION_CODE;
+		
+	// Now can check specifics for function code. 
+	switch (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_FUNCTION]) {
 		case MODBUS_FC_WRITE_SINGLE_REGISTER:
-			return (0 == memcmp(f_ctx.request.buf, f_ctx.buf_resp.buf, f_ctx.expected_response_byte_size)) ? 0 : 10;
+			if (memcmp(f_ctx.request.buf, f_ctx.buf_resp.buf, f_ctx.expected_response_byte_size))
+				return MODBUS_RESPONSE_CORRUPT;
 		case MODBUS_FC_READ_HOLDING_REGISTERS: // REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
 			if (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_DATA] != 2 * modbusGetU16(&f_ctx.request.buf[MODBUS_FRAME_IDX_DATA+2]))	// Wrong count.
-				return 20;
-			return 0;
+				return MODBUS_RESPONSE_CORRUPT;
 		default:
-			return 255;
+			return MODBUS_RESPONSE_UNKNOWN;
 	}
+	
+	return MODBUS_RESPONSE_OK;				// If we get here it must be OK.
 }
 
 static void appendCRC(uint8_t* buf, uint8_t sz) {
@@ -240,20 +240,14 @@ static void appendCRC(uint8_t* buf, uint8_t sz) {
   buf[1] = (uint8_t)(crc >> 8);     // high byte
 }
 
-// Macro that expands to a "C" identifier for the description string. 
-#define MODBUS_CB_EVT_DEF_GEN_STR(_name, desc_) \
-	CB_EVT_DESC_##_name,
-
-// Macro that expands to a string DEFINITION of the description.
-#define MODBUS_CB_EVT_DEF_GEN_STR_DEF(_name, desc_) \
-	static const char CB_EVT_DESC_##_name[] PROGMEM = #_name;
-
-// Now can define function for string descriptions.
 const char* modbusGetCallbackEventDescription(uint8_t evt) {
-	MODBUS_CB_EVT_DEFS(MODBUS_CB_EVT_DEF_GEN_STR_DEF)		// Declarations of the index name strings.
-	static const char* const DESCS[COUNT_MODBUS_CB_EVT] PROGMEM = { // Declaration of the array of these strings.
-		MODBUS_CB_EVT_DEFS(MODBUS_CB_EVT_DEF_GEN_STR)
-	};
+	static const char CB_EVT_DESC_0[] PROGMEM = "Master received correct response from slave.";
+	static const char CB_EVT_DESC_1[] PROGMEM = "Master received no response from slave.";	
+	static const char CB_EVT_DESC_2[] PROGMEM = "Master received corrupt response from slave.";
+	static const char CB_EVT_DESC_3[] PROGMEM = "Request for this slave.";		
+	static const char CB_EVT_DESC_4[] PROGMEM = "Request for another slave, not us.";	
+	static const char* const DESCS[COUNT_MODBUS_CB_EVT] PROGMEM = { CB_EVT_DESC_0, CB_EVT_DESC_1, CB_EVT_DESC_2, CB_EVT_DESC_3, CB_EVT_DESC_4 };
+	
 	return (evt < COUNT_MODBUS_CB_EVT) ? (const char*)pgm_read_ptr(&DESCS[evt]) : PSTR("unknown");
 }
 

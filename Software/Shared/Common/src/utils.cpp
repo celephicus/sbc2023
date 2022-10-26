@@ -132,8 +132,8 @@ static void seq_update(UtilsSeqCtx* seq) {
 		seq->loop_start = seq->hdr;				// Record address of instruction.
 		seq_update(seq);							// And execute it.
 	}
-    else
-        seq->action(seq->hdr);					// By default, just run the action.
+	else
+		seq->action(seq->hdr);					// By default, just run the action.
 
 	SEQ_ASSERT(SEQ_INVARIANT(seq));
 }
@@ -144,9 +144,9 @@ void utilsSeqStart(UtilsSeqCtx* seq, const UtilsSeqHdr* def, uint8_t item_size, 
 	seq->item_size = item_size;
 	seq->action = action;
 	if (NULL != seq->hdr)				// Often happens, just a shorthand for a default action.
-        seq_update(seq);
-    else
-        seq->action(NULL);
+		seq_update(seq);
+	else
+		seq->action(NULL);
 	SEQ_ASSERT(SEQ_INVARIANT(seq));
 }
 

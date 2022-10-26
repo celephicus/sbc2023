@@ -26,9 +26,18 @@ void modbusSetTimingDebugCb(modbus_timing_debug_cb cb);
 void modbusSetSlaveId(uint8_t id);
 uint8_t modbusGetSlaveId();
 
-// For debugging when we get a failed response, return code to determine why it failed.
+// For debugging when we get a failed response with CB event MODBUS_CB_EVT_RESP_BAD, call this to get a failure code. 
+enum {
+	MODBUS_RESPONSE_OK					= 0,
+	MODBUS_RESPONSE_BAD_LEN				= 1,	// Length not as expected.
+	MODBUS_RESPONSE_BAD_SLAVE_ID		= 2,	// Wrong slave replied.	
+	MODBUS_RESPONSE_BAD_FUNCTION_CODE	= 3,	// Function code wrong.
+	MODBUS_RESPONSE_CORRUPT				= 4,	// Response contents corrupted.
+	MODBUS_RESPONSE_UNKNOWN				= 255	// Unknown function code.
+};
 uint8_t modbusGetResponseValidCode();
 
+// Indices into a request or response frame.
 enum {
 	MODBUS_FRAME_IDX_SLAVE_ID,
 	MODBUS_FRAME_IDX_FUNCTION,
@@ -36,22 +45,16 @@ enum {
 };
 
 // Event IDs sent as callback from driver. 
-#define MODBUS_CB_EVT_DEFS(gen_)															\
-	gen_(RESP,						"Master received correct response from slave.")			\
-	gen_(RESP_NONE,					"Master received no response from slave.")				\
-	gen_(RESP_BAD,					"Master received corrupt response from slave.")			\
-	gen_(REQ,						"Request for this slave.")								\
-	gen_(REQ_X,						"Request for another slave, not us.")					\
-
-// Macro that expands to an item declaration in an enum...
-#define MODBUS_CB_EVT_DEF_GEN_ENUM_IDX(name_, desc_) \
-MODBUS_CB_EVT_##name_,
-
-// Declare callback event IDs. 
 enum {
-    MODBUS_CB_EVT_DEFS(MODBUS_CB_EVT_DEF_GEN_ENUM_IDX)
-    COUNT_MODBUS_CB_EVT
+	MODBUS_CB_EVT_RESP,			// Sent by MASTER, OK response received.
+	MODBUS_CB_EVT_RESP_NONE,	// Sent by MASTER, NO response received.
+	MODBUS_CB_EVT_RESP_BAD,		// Sent by MASTER, bad response received. Call modbusGetResponseValidCode() in handler to determine cause. 
+	MODBUS_CB_EVT_REQ,			// Sent by SLAVE, we have a request.
+	MODBUS_CB_EVT_REQ_X,
+	COUNT_MODBUS_CB_EVT
 };
+
+
 
 enum {
 	MODBUS_FC_READ_COILS                = 0x01,
