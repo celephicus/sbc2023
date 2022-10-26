@@ -43,7 +43,7 @@ void modbus_cb(uint8_t evt) {
 	const uint8_t resp_avail = modbusGetResponse(&frame_len, frame);
 
 	
-	gpioSpare1Write(true);
+	//gpioSpare1Write(true);
 	// Dump MODBUS...
 	if (REGS[REGS_IDX_ENABLES] & _BV(evt)) {
 		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("RECV: ")); 
@@ -102,13 +102,13 @@ void modbus_cb(uint8_t evt) {
 		}
 	}
 	*/
-	gpioSpare1Write(0);
+	//gpioSpare1Write(0);
 }
 
 // Stuff for debugging NODBUS timing.
 void modbus_timing_debug(uint8_t id, uint8_t s) {
 	switch (id) {
-//	case MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT: gpioSpare1Write(s); break;
+	case MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT: gpioSpare1Write(s); break;
 	case MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT: 	gpioSpare2Write(s); break;
 	case MODBUS_TIMING_DEBUG_EVENT_RX_FRAME: 	gpioSpare3Write(s); break;
 	}
@@ -121,6 +121,9 @@ static void modbus_init() {
 	modbusInit(Serial, GPIO_PIN_RS485_TX_EN, modbus_cb);
 	modbusSetTimingDebugCb(modbus_timing_debug);
 	bufferFrameReset(&f_modbus_autosend_buf);
+	gpioSpare1SetModeOutput();		// These are used by the RS485 debug cb.
+	gpioSpare2SetModeOutput();
+	gpioSpare3SetModeOutput();
 }
 static void modbus_service() {
 	modbusService();

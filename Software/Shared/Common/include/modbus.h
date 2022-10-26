@@ -16,7 +16,7 @@ void modbusInit(Stream& rs485, uint8_t tx_en, modbus_response_cb cb);
 // Callback function used for hardware debugging of timing. The `id' argument is event-type, `s' is state.
 enum {
 	MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT,	// Master waiting for a response.
-	MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT,
+	MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT,	// Master has started receiving a response and is waiting for a quiet period to signal end of frame. 
 	MODBUS_TIMING_DEBUG_EVENT_RX_FRAME,		// Frame received from bus. 
 };
 typedef void (*modbus_timing_debug_cb)(uint8_t id, uint8_t s);

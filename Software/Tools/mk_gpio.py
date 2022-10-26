@@ -55,7 +55,7 @@ unused = []
 for d in parser.data:
 	if not d['Func']:				# Ignore pins with no function.
 		continue
-	print(d)
+	# print(d)
 
 	if d['Group'] not in pins: # Ready to insert new group...
 		pins[d['Group']] = []

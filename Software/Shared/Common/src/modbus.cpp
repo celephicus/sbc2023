@@ -1,18 +1,18 @@
 #include <Arduino.h>
 #include "modbus.h"
 
-// TODO: Add timeout function with unit test. 
-#define TIMEOUT 50
+// TODO: RX timeout should be calculated.
+#define MASTER_RESPONSE_TIMEOUT_MS 50
 #define RX_TIMEOUT_MICROS 2000 // 2 character times 
 
 // Keep all our state in one place for easier viewing in debugger. 
 typedef struct {
-	uint8_t tx_en;
-	Stream* sRs485;
-	uint8_t slave_id;
-	modbus_response_cb cb_resp;
-	uint8_t expected_response_byte_size; 
-	uint16_t start_time;
+	uint8_t tx_en_pin;						// Arduino pin for enabling TX, also disables RX.
+	Stream* sRs485;							// Arduino stream for line.
+	uint8_t slave_id;						// Slave ID/address.
+	modbus_response_cb cb_resp;				// Callback to host.
+	uint8_t expected_response_byte_size;	// Set by modbusMasterSend() with the correct response size.
+	uint16_t start_time;					// Timestamp set by modbusMasterSend() for implementing master wait timeout. 
 	BufferFrame buf_resp;
 	BufferFrame request;
 	uint16_t rx_timestamp_micros;
@@ -28,79 +28,90 @@ static void timing_debug(uint8_t id, uint8_t s) {
 		f_ctx.debug_timing_cb(id, s);
 }
 
-// Added for debug to get reason why response was rejected.
-uint8_t modbusGetResponseValidCode() { return f_ctx.response_valid; }
-
-static void set_master_wait(uint8_t bytes) {
-	f_ctx.expected_response_byte_size = bytes;
-	timing_debug(MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT, (bytes > 0));
-}
-static bool is_master_waiting_response() {
-	return (f_ctx.expected_response_byte_size > 0);
-}
-
-static void restart_rx_frame_timer() {
+// Timer for RX, used to implement end of frame with no chars on the line, 
+static void restart_rx_frame_timeout() {
 	f_ctx.rx_timestamp_micros = (uint16_t)micros();
 	if (0 == f_ctx.rx_timestamp_micros)
 		f_ctx.rx_timestamp_micros = 1;
 	timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT, true);
 }
-static void stop_rx_frame_timeout() { 
-	f_ctx.rx_timestamp_micros = 0; 
+static void stop_rx_frame_timeout() {
+	f_ctx.rx_timestamp_micros = 0;
 	timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT, false);
 }
-static bool is_rx_frame_timeout() { 
+static bool is_rx_frame_timeout() {
 	if (
-	  (f_ctx.rx_timestamp_micros > 0) &&	// No timeout unless set.
-	  ((uint16_t)micros() - f_ctx.rx_timestamp_micros > RX_TIMEOUT_MICROS) 
+	(f_ctx.rx_timestamp_micros > 0) &&	// No timeout unless set.
+	((uint16_t)micros() - f_ctx.rx_timestamp_micros > RX_TIMEOUT_MICROS)
 	) {
-		stop_rx_frame_timeout();		// Prevent further spurious timeouts. 
+		stop_rx_frame_timeout();		// Prevent further spurious timeouts.
 		return true;
 	}
 	return false;
 }
 
-static void set_master_wait(uint8_t bytes);
+// Logic for master waiting for response from slave, master knows how many bytes are expected in response. It will set bytecount to zero if we send a silly frame, so don't start the timeout in this case. 
+static void start_master_wait(uint8_t bytecount) {
+	f_ctx.expected_response_byte_size = bytecount;
+	if (bytecount > 0U) {
+		f_ctx.start_time = (uint16_t)millis();
+		timing_debug(MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT, true);
+	}
+}
+static void clear_master_wait() { 
+	f_ctx.expected_response_byte_size = 0U;
+	timing_debug(MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT, false);
+}
+static bool is_master_waiting_response() { return (f_ctx.expected_response_byte_size > 0); }
+static bool is_master_wait_timeout() {
+	if (is_master_waiting_response() && ((uint16_t)millis() - f_ctx.start_time > MASTER_RESPONSE_TIMEOUT_MS)) {
+		clear_master_wait();
+		return true;
+	}
+	return false;
+}
+
+// Added for debug to get reason why response was rejected.
+uint8_t modbusGetResponseValidCode() { return f_ctx.response_valid; }
+
+
+
 static uint8_t get_response_bytesize();
-static void restart_rx_frame_timer();
-static void stop_rx_frame_timeout();
-static bool is_rx_frame_timeout();
 static uint8_t verify_response();
 static void appendCRC(uint8_t* buf, uint8_t sz);
 
-void modbusInit(Stream& rs485, uint8_t tx_en, modbus_response_cb cb) {
+void modbusInit(Stream& rs485, uint8_t tx_en_pin, modbus_response_cb cb) {
 	memset(&f_ctx, 0, sizeof(f_ctx));
 	bufferFrameReset(&f_ctx.buf_resp);
 	bufferFrameReset(&f_ctx.request);
-	f_ctx.tx_en = tx_en;
+	f_ctx.tx_en_pin = tx_en_pin;
 	f_ctx.sRs485 = &rs485;
 	f_ctx.cb_resp = cb;
-	digitalWrite(f_ctx.tx_en, LOW);
-	pinMode(f_ctx.tx_en, OUTPUT);
+	digitalWrite(f_ctx.tx_en_pin, LOW);
+	pinMode(f_ctx.tx_en_pin, OUTPUT);
 	while(f_ctx.sRs485->available() > 0) // Flush any received chars from buffer. 
 		(void)f_ctx.sRs485->read();
-	set_master_wait(0);
+	clear_master_wait();
 	stop_rx_frame_timeout();
 }
 void modbusSetSlaveId(uint8_t id) { f_ctx.slave_id = id; }
 uint8_t modbusGetSlaveId() { return f_ctx.slave_id; }
 
-static bool is_request_for_me(uint8_t id) {
+static bool is_request_for_me(uint8_t id) {		// Check ID in request frame.
 	return (id == f_ctx.slave_id) && (id >= 1) && (id < 248);
 }
 void modbusSendRaw(uint8_t* buf, uint8_t sz) {
-	digitalWrite(f_ctx.tx_en, HIGH);
+	digitalWrite(f_ctx.tx_en_pin, HIGH);
 	f_ctx.sRs485->write(buf, sz);
 	f_ctx.sRs485->flush();
-	digitalWrite(f_ctx.tx_en, LOW);
+	digitalWrite(f_ctx.tx_en_pin, LOW);
 }
 
 void modbusMasterSend(uint8_t* frame, uint8_t sz) {
 	modbusSlaveSend(frame, sz);
 	// TODO: Check for overflow.
 	memcpy(f_ctx.request.buf, frame, sz + 2);
-	set_master_wait(get_response_bytesize());
-	f_ctx.start_time = (uint16_t)millis();
+	start_master_wait(get_response_bytesize());
 }
 void modbusSlaveSend(uint8_t* frame, uint8_t sz) {
 	// TODO: keep master busy for interframe time after tx done. 
@@ -157,37 +168,34 @@ uint8_t modbusGetResponse(uint8_t* len, uint8_t* buf) {
 
 void modbusService() {
 	// Master may be waiting for a reply from a slave. On timeout, flag timeout to callback.
-	if (is_master_waiting_response()) {
-		if ((uint16_t)millis() - f_ctx.start_time > TIMEOUT) {
-			set_master_wait(0);
-			f_ctx.cb_resp(MODBUS_CB_EVT_RESP_NONE);
-		}
-	}
+	if (is_master_wait_timeout()) 
+		f_ctx.cb_resp(MODBUS_CB_EVT_RESP_NONE);
 	
 	// Service RX timer, timeout with data is a frame.
 	if (is_rx_frame_timeout()) {
 		timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_FRAME, true);
-		if (bufferFrameLen(&f_ctx.buf_resp) > 0) {	// Do we have data, might well get spurious timeouts.
-			if (is_master_waiting_response()) {		// Master waiting for response.
-				f_ctx.response_valid = verify_response(); 				// Decide if response is valid...
-				set_master_wait(0);
+		if (bufferFrameLen(&f_ctx.buf_resp) > 0) {			// Do we have data, might well get spurious timeouts.
+			if (is_master_waiting_response()) {				// Master waiting for response.
+				f_ctx.response_valid = verify_response(); 	// Decide if response is valid...
+				clear_master_wait();
 				f_ctx.cb_resp((MODBUS_RESPONSE_OK == f_ctx.response_valid) ? MODBUS_CB_EVT_RESP : MODBUS_CB_EVT_RESP_BAD);
 			}
 			else 						// Master NOT waiting, must be a request from someone, so flag it.
 				f_ctx.cb_resp(is_request_for_me(f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_SLAVE_ID]) ? MODBUS_CB_EVT_REQ : MODBUS_CB_EVT_REQ_X);
 		}
+		timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_FRAME, false);
 	}
 	
 	// Receive packet.
-	// TODO: receive multiple if available. 
+	// TODO: receive multiple if available. What does this even mean?
 	if (f_ctx.sRs485->available() > 0) {
 		const uint8_t c = f_ctx.sRs485->read();
-		restart_rx_frame_timer();
+		restart_rx_frame_timeout();
 		bufferFrameAdd(&f_ctx.buf_resp, c);
 	}
-	timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_FRAME, false);
 }
 
+// get_response_bytesize() & verify_response() both depend on what was requested, so both should have an entry for the particular function codes that will be used. 
 static uint8_t get_response_bytesize() {
 	switch (f_ctx.request.buf[MODBUS_FRAME_IDX_FUNCTION]) {
 		case MODBUS_FC_WRITE_SINGLE_REGISTER: // REQ: FC=6 addr:16 value:16 -- RESP: FC=6 addr:16 value:16
