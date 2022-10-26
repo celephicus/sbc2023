@@ -1,46 +1,72 @@
 import csv, sys, re, os
+import csv_parser
 
+# pin    sig       func desc     group     apin  ppin port note
+# D1/TXD,RS485_TXD,TXD0,RS485 TX,RS485 Bus,J7/12,31,  PD1, TXD/PCINT17,Bootloader
+
+class GPIOParse(csv_parser.CSVparse):
+	def __init__(self, fn):
+		csv_parser.CSVparse.__init__(self, fn)
+		self.COLUMN_NAMES = 'Pin Sig Func Description Group Apin Ppin Port AltFunc Comment'.split()
+	def preprocess(self, row):
+		pass
+	def validate_col_Pin(self, d):	
+		"Turn a pin name like D1/TXD -> '1'"
+		d = d.split('/')[0] 				# Get rid of possible alternate pin name after slash.
+		if d.startswith('D'): 				# Arduino pins might start with a D
+			d = d[1:]
+		return d
+	def validate_col_Sig(self, sig):	
+		'not a valid C identifier'
+		if sig:
+			sig = sig.upper()
+			assert(re.match(r'\w[\w\d]+$', sig))
+			self.add_extra('sigCC', ''.join([s.title() for s in sig.split('_')])) # Make CamelCase version of signal name so TX_EN -> TxEn
+		return sig
+	def validate_col_Description(self, desc):	
+		if not desc:
+			desc = 'None'
+		return desc
+	def validate_col_Group(self, d):	
+		if not d:	# Make group if not set.
+			d = 'None'
+		return d
+	def validate_col_Port(self, port):	
+		"expected either blank or port like `PA3'"
+		if port.startswith('P'):	
+			mport = re.match(r'P([A-D])([0-7])$', port)	# Parse out port, bit from like `PA3'.
+			assert mport
+			self.add_extra('io_port', mport.group(1))
+			self.add_extra('io_bit', int(mport.group(2)))
+		return port
+
+# Parse...		
+INFILE = sys.argv[1]
+parser = GPIOParse(INFILE)
+try:
+	parser.read()
+except csv_parser.CSVparseError as e:
+	sys.exit(e)
+
+# Postprocess a bit...
 pins = {}
 direct = []
 unused = []
+for d in parser.data:
+	if not d['Func']:				# Ignore pins with no function.
+		continue
+	print(d)
 
-infile = sys.argv[1]
-outfile = os.path.splitext(os.path.basename(infile))[0] + '.h'	# Write to current directory
-
-with open(infile, 'rt') as csvfile:
-	reader = csv.reader(csvfile)
-	for row in reader:
-		# pin    sig       func desc     group     apin  ppin port
-		# D1/TXD,RS485_TXD,TXD0,RS485 TX,RS485 Bus,J7/12,31,  PD1, TXD/PCINT17,Bootloader
-		try:
-			pin = row[0].split('/')[0] # Get rid of possible alternate pin name after slash.
-			sig, func, desc, group, apin, ppin, port = row[1:8]
-		except IndexError:
-			continue
-		if not func or row[0].startswith('#'): # Ignore blanks & comments 
-			continue
-		if not group:	# Make group if not set.
-			group = 'None'
-		if pin.startswith('D'): # Arduino pins might start with a D
-			pin = pin[1:]
-		comment = '// ' + desc if desc else ''	# Format description as comment.
-		sigCC = ''.join([s.title() for s in sig.split('_')]) # Make CamelCase version of signal name so TX_EN -> TxEn
-
-		mport = re.match(r'P([A-D])([0-7])$', port)	# Parse out port, bit from like `PA3'.
-		if mport:			# If no port def, ignore, will give error if tagged as `direct'. 
-			io_port, io_bit = mport.groups()
-		else:
-			io_port, io_bit = None, None
-			
-		if group not in pins: # Ready to insert new group...
-			pins[group] = []
-			
-		text = f'GPIO_PIN_{sig.upper()} = {pin},'	# Insert Arduino pin definition.
-		pins[group].append(f'{text:48}{comment}') # For example line above this is `GPIO_PIN_RS485_TXD = 1                   /* RS485 TX */'.
+	if d['Group'] not in pins: # Ready to insert new group...
+		pins[d['Group']] = []
 		
-		if 'direct' in func:	# Insert a bunch of inline functions to directly access the pin.
-			direct.append(f'''\
-{comment}			
+	text = f"GPIO_PIN_{d['Sig']} = {d['Pin']},"	# Insert Arduino pin definition.
+	pins[d['Group']].append(f"{text:48}// {d['Description']}") # For example line above this is `GPIO_PIN_RS485_TXD = 1                   // RS485 TX'.
+	
+	if 'direct' in d['Func']:	# Insert a bunch of inline functions to directly access the pin.
+		sigCC, io_port, io_bit = d['sigCC'], d['io_port'], d['io_bit']
+		direct.append(f'''\
+// {d['Sig']}: {d['Description']}			
 static inline void gpio{sigCC}SetModeOutput() {{ DDR{io_port} |= _BV({io_bit}); }}													
 static inline void gpio{sigCC}SetModeInput() {{ DDR{io_port} &= ~_BV({io_bit}); }}													
 static inline void gpio{sigCC}SetMode(bool fout) {{ if (fout) DDR{io_port} |= _BV({io_bit}); else DDR{io_port} &= ~_BV({io_bit}); }}
@@ -51,11 +77,12 @@ static inline void gpio{sigCC}Clear() {{ PORT{io_port} &= ~_BV({io_bit}); }}
 static inline void gpio{sigCC}Write(bool b) {{ if (b) PORT{io_port} |= _BV({io_bit}); else PORT{io_port} &= ~_BV({io_bit}); }}
 ''')		
 		
-		if 'unused' in func:		# List all unused pins
+		if 'unused' in d['Func']:		# List all unused pins
 			unused.append(pin)
 
+OUTFILE = os.path.splitext(os.path.basename(INFILE))[0] + '.h'	# Write to current directory
 try:
-	existing = open(outfile, 'rt').read()
+	existing = open(OUTFILE, 'rt').read()
 except FileNotFoundError:
 	existing = None
 	
@@ -64,7 +91,7 @@ text.append(f'''\
 #ifndef GPIO_LOCAL_H__
 #define GPIO_LOCAL_H__
 
-// This file is autogenerated from `{infile}'.
+// This file is autogenerated from `{INFILE}'.
 
 // Pin Assignments for Arduino Pro Mini
 enum {{   \
@@ -88,8 +115,7 @@ text.append('#endif		// GPIO_LOCAL_H__')
 
 text = '\n'.join(text)
 if text != existing:
-	print("Updated file %s." % outfile, file=sys.stderr)
-	open(outfile, 'wt').write(text)
+	print("Updated file %s." % OUTFILE, file=sys.stderr)
+	open(OUTFILE, 'wt').write(text)
 else:
-	print("Skipped file %s as unchanged." % outfile, file=sys.stderr)
-
+	print("Skipped file %s as unchanged." % OUTFILE, file=sys.stderr)
