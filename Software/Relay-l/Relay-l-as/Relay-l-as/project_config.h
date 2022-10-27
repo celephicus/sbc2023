@@ -5,7 +5,7 @@
 
 // Watchdog. 
 #define CFG_WATCHDOG_TIMEOUT WDTO_2S   
-#define CFG_WATCHDOG_ENABLE 0
+#define CFG_WATCHDOG_ENABLE 1
 #define CFG_WATCHDOG_MODULE_COUNT 0
 
 // Event & Trace queues.
@@ -21,10 +21,10 @@
 #define CFG_VER_MINOR 0
 
 // Build number incremented with each build by cfg-set-build.py script. 
-#define CFG_BUILD_NUMBER 251
+#define CFG_BUILD_NUMBER 288
 
 // Timestamp in ISO8601 format set by cfg-set-build.py script.
-#define CFG_BUILD_TIMESTAMP "20221026T195337"
+#define CFG_BUILD_TIMESTAMP "20221027T140559"
 
 // Do not edit below this line......
 

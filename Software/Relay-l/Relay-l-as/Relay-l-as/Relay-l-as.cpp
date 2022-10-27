@@ -42,26 +42,23 @@ void modbus_cb(uint8_t evt) {
 	uint8_t frame_len = RESP_SIZE;	// Must call modbusGetResponse() with buffer length set. 
 	const uint8_t resp_avail = modbusGetResponse(&frame_len, frame);
 
-	
-	//gpioSpare1Write(true);
+	gpioSpare1Write(true);
 	// Dump MODBUS...
 	if (REGS[REGS_IDX_ENABLES] & _BV(evt)) {
-		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("RECV: ")); 
+		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("RECV:")); 
 		consolePrint(CFMT_U, evt);
-		consolePrint(CFMT_STR_P, (console_cell_t)PSTR(" "));
-		consolePrint(CFMT_STR_P, (console_cell_t)modbusGetCallbackEventDescription(evt));
-		consolePrint(CFMT_STR_P, (console_cell_t)PSTR(": "));
 		if (MODBUS_RESPONSE_AVAILABLE == resp_avail) {
 			const uint8_t* p = frame;
-			while (frame_len-- > 0)
+			fori (frame_len)
 				consolePrint(CFMT_X2, *p++);
 		} 
 		if (MODBUS_RESPONSE_OVERFLOW == resp_avail)
-			consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OVERFLOW"));
+			consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OVF"));
 		consolePrint(CFMT_NL, 0);
 	}
 	
 	// Slaves get requests...
+	BufferFrame response;
  	if (MODBUS_CB_EVT_REQ == evt) {	// Only respond if we get a request. This will have our slave ID.
 		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
 			case MODBUS_FC_WRITE_SINGLE_REGISTER: {	// REQ: [FC=6 addr:16 value:16] -- RESP: [FC=6 addr:16 value:16]
@@ -73,19 +70,18 @@ void modbus_cb(uint8_t evt) {
 			case MODBUS_FC_READ_HOLDING_REGISTERS: { // REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
 				uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
 				uint16_t count   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
-				uint16_t value;
-				// TODO: check for overflow.
-				uint8_t response[RESP_SIZE];
-				response[MODBUS_FRAME_IDX_SLAVE_ID] = frame[MODBUS_FRAME_IDX_SLAVE_ID];
-				response[MODBUS_FRAME_IDX_FUNCTION] = frame[MODBUS_FRAME_IDX_FUNCTION];
-				response[MODBUS_FRAME_IDX_DATA + 0] = count * 2;	// count sent as 16 bits, but bytecount only 8 bits. 
-				uint8_t* rdata = &response[MODBUS_FRAME_IDX_DATA + 1];
-				while (count--) {
-					read_holding_register(address++, &value);
-					modbusSetU16(rdata, value);
-					rdata += 2;
+				bufferFrameReset(&response);
+				bufferFrameAddMem(&response, frame, 2);		// Copy ID & Function Code from request frame. 
+				uint16_t byte_count = count * 2;			// Count sent as 16 bits, but bytecount only 8 bits. 
+				if (byte_count < (uint16_t)bufferFrameFree(&response) - 2) { // Is space for data and CRC?
+					bufferFrameAdd(&response, (uint8_t)byte_count);
+					while (count--) {
+						uint16_t value;
+						read_holding_register(address++, &value);
+						bufferFrameAddU16(&response, value);
+					}
+					modbusSlaveSend(response.buf, bufferFrameLen(&response));
 				}
-				modbusSlaveSend(response, rdata - response);
 			} break;
 			default:
 				break;
@@ -102,13 +98,13 @@ void modbus_cb(uint8_t evt) {
 		}
 	}
 	*/
-	//gpioSpare1Write(0);
+	gpioSpare1Write(0);
 }
 
 // Stuff for debugging NODBUS timing.
 void modbus_timing_debug(uint8_t id, uint8_t s) {
 	switch (id) {
-	case MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT: gpioSpare1Write(s); break;
+	//case MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT: gpioSpare1Write(s); break;
 	case MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT: 	gpioSpare2Write(s); break;
 	case MODBUS_TIMING_DEBUG_EVENT_RX_FRAME: 	gpioSpare3Write(s); break;
 	}
@@ -145,7 +141,8 @@ static bool console_cmds_user(char* cmd) {
     case /** ?RLY **/ 0xb21d: consolePrint(CFMT_D, driverRelayRead()); break;
 
 	// MODBUS
-    case /** SLAVE **/ 0x1568: modbusSetSlaveId(console_u_pop()); break;
+    case /** SL **/ 0x74fa: modbusSetSlaveId(console_u_pop()); break;
+    case /** ?SL **/ 0x79e5: consolePrint(CFMT_D, modbusGetSlaveId()); break;
     case /** SEND-RAW **/ 0xf690: {
         uint8_t* d = (uint8_t*)console_u_pop(); uint8_t sz = *d; modbusSendRaw(d + 1, sz);
       } break;

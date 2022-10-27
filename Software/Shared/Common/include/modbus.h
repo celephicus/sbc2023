@@ -54,8 +54,7 @@ enum {
 	COUNT_MODBUS_CB_EVT
 };
 
-
-
+// MODBUS Function Codes.
 enum {
 	MODBUS_FC_READ_COILS                = 0x01,
 	MODBUS_FC_READ_DISCRETE_INPUTS      = 0x02,
@@ -71,12 +70,19 @@ enum {
 	MODBUS_FC_WRITE_AND_READ_REGISTERS  = 0x17,
 };
 
-void modbusSendRaw(uint8_t* buf, uint8_t sz);
-void modbusMasterSend(uint8_t* frame, uint8_t sz);
+// Send raw data to the line with no CRC or waiting for a response.
+void modbusSendRaw(const uint8_t* buf, uint8_t sz);
+
+// Send a correctly framed packet with CRC, used by slaves to send a response to the master. 
 void modbusSlaveSend(uint8_t* frame, uint8_t sz);
+
+// Send a correctly framed packet with CRC, and await a response.
+void modbusMasterSend(uint8_t* frame, uint8_t sz);
 
 void modbusHregWrite(uint8_t id, uint16_t address, uint16_t value);
 
+// Write to one of the Ebay MODBUS Relay Boards. The request is sent as <id> 06 00 <rly> <state> <delay> <crc1> <crc2>
+// Note that the relay index is 1 based. 
 enum {
 	MODBUS_RELAY_BOARD_CMD_CLOSE = 1,
 	MODBUS_RELAY_BOARD_CMD_OPEN,
@@ -104,7 +110,5 @@ uint8_t modbusGetResponse(uint8_t* len, uint8_t* buf);
 static inline uint16_t modbusGetU16(const uint8_t* v)  { return ((uint16_t)v[0] << 8) | (uint16_t)(v[1]); }
 static inline void modbusSetU16(uint8_t* v, uint16_t x)  { v[0] = (uint8_t)(x >> 8); v[1] = (uint8_t)x; }
 	
-const char* modbusGetCallbackEventDescription(uint8_t evt);
-
 #endif	// MODBUS_H__
 

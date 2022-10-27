@@ -14,10 +14,10 @@ typedef struct {
 	uint8_t expected_response_byte_size;	// Set by modbusMasterSend() with the correct response size.
 	uint16_t start_time;					// Timestamp set by modbusMasterSend() for implementing master wait timeout. 
 	BufferFrame buf_resp;
-	BufferFrame request;
+	BufferFrame buf_req;
 	uint16_t rx_timestamp_micros;
-	modbus_timing_debug_cb debug_timing_cb;
-	uint8_t response_valid;		// Result of verify_response for debugging.
+	modbus_timing_debug_cb debug_timing_cb;	// Callback function for debugging timing.
+	uint8_t response_valid;					// Result of verify_response() for debugging.
 } modbus_context_t;
 static modbus_context_t f_ctx;
 
@@ -74,8 +74,6 @@ static bool is_master_wait_timeout() {
 // Added for debug to get reason why response was rejected.
 uint8_t modbusGetResponseValidCode() { return f_ctx.response_valid; }
 
-
-
 static uint8_t get_response_bytesize();
 static uint8_t verify_response();
 static void appendCRC(uint8_t* buf, uint8_t sz);
@@ -83,7 +81,7 @@ static void appendCRC(uint8_t* buf, uint8_t sz);
 void modbusInit(Stream& rs485, uint8_t tx_en_pin, modbus_response_cb cb) {
 	memset(&f_ctx, 0, sizeof(f_ctx));
 	bufferFrameReset(&f_ctx.buf_resp);
-	bufferFrameReset(&f_ctx.request);
+	bufferFrameReset(&f_ctx.buf_req);
 	f_ctx.tx_en_pin = tx_en_pin;
 	f_ctx.sRs485 = &rs485;
 	f_ctx.cb_resp = cb;
@@ -100,25 +98,25 @@ uint8_t modbusGetSlaveId() { return f_ctx.slave_id; }
 static bool is_request_for_me(uint8_t id) {		// Check ID in request frame.
 	return (id == f_ctx.slave_id) && (id >= 1) && (id < 248);
 }
-void modbusSendRaw(uint8_t* buf, uint8_t sz) {
+
+void modbusSendRaw(const uint8_t* buf, uint8_t sz) {
 	digitalWrite(f_ctx.tx_en_pin, HIGH);
 	f_ctx.sRs485->write(buf, sz);
 	f_ctx.sRs485->flush();
 	digitalWrite(f_ctx.tx_en_pin, LOW);
 }
-
+void modbusSlaveSend(uint8_t* frame, uint8_t sz) {
+	// TODO: keep master busy for interframe time after tx done.
+	appendCRC(frame, sz);
+	while (modbusIsBusy())
+	modbusService();
+	modbusSendRaw(frame, sz + 2);
+}
 void modbusMasterSend(uint8_t* frame, uint8_t sz) {
 	modbusSlaveSend(frame, sz);
 	// TODO: Check for overflow.
-	memcpy(f_ctx.request.buf, frame, sz + 2);
+	memcpy(f_ctx.buf_req.buf, frame, sz + 2);
 	start_master_wait(get_response_bytesize());
-}
-void modbusSlaveSend(uint8_t* frame, uint8_t sz) {
-	// TODO: keep master busy for interframe time after tx done. 
-	appendCRC(frame, sz);
-	while (modbusIsBusy())
-		modbusService();
-	modbusSendRaw(frame, sz + 2);
 }
 
 // Helpers to send actual frames.
@@ -197,11 +195,11 @@ void modbusService() {
 
 // get_response_bytesize() & verify_response() both depend on what was requested, so both should have an entry for the particular function codes that will be used. 
 static uint8_t get_response_bytesize() {
-	switch (f_ctx.request.buf[MODBUS_FRAME_IDX_FUNCTION]) {
+	switch (f_ctx.buf_req.buf[MODBUS_FRAME_IDX_FUNCTION]) {
 		case MODBUS_FC_WRITE_SINGLE_REGISTER: // REQ: FC=6 addr:16 value:16 -- RESP: FC=6 addr:16 value:16
 			return 8;
 		case MODBUS_FC_READ_HOLDING_REGISTERS: // REQ: FC=3 addr:16 count:16(max 125) RESP: FC=3 byte-count value-0:16, ...
-			return 5 + modbusGetU16(&f_ctx.request.buf[MODBUS_FRAME_IDX_DATA+2]) * 2;
+			return 5 + modbusGetU16(&f_ctx.buf_req.buf[MODBUS_FRAME_IDX_DATA+2]) * 2;
 		default: return 0;
 	}
 }
@@ -209,24 +207,20 @@ static uint8_t get_response_bytesize() {
 static uint8_t verify_response() {	
 	if (f_ctx.expected_response_byte_size != bufferFrameLen(&f_ctx.buf_resp))							// Wrong response length.
 		return MODBUS_RESPONSE_BAD_LEN;
-	if (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_SLAVE_ID] != f_ctx.request.buf[MODBUS_FRAME_IDX_SLAVE_ID])	// Wrong slave id.
+	if (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_SLAVE_ID] != f_ctx.buf_req.buf[MODBUS_FRAME_IDX_SLAVE_ID])	// Wrong slave id.
 		return MODBUS_RESPONSE_BAD_SLAVE_ID;
-	if (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_FUNCTION] != f_ctx.request.buf[MODBUS_FRAME_IDX_FUNCTION])	// Wrong Function code.
+	if (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_FUNCTION] != f_ctx.buf_req.buf[MODBUS_FRAME_IDX_FUNCTION])	// Wrong Function code.
 		return MODBUS_RESPONSE_BAD_FUNCTION_CODE;
 		
 	// Now can check specifics for function code. 
 	switch (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_FUNCTION]) {
-		case MODBUS_FC_WRITE_SINGLE_REGISTER:
-			if (memcmp(f_ctx.request.buf, f_ctx.buf_resp.buf, f_ctx.expected_response_byte_size))
-				return MODBUS_RESPONSE_CORRUPT;
-		case MODBUS_FC_READ_HOLDING_REGISTERS: // REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
-			if (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_DATA] != 2 * modbusGetU16(&f_ctx.request.buf[MODBUS_FRAME_IDX_DATA+2]))	// Wrong count.
-				return MODBUS_RESPONSE_CORRUPT;
-		default:
-			return MODBUS_RESPONSE_UNKNOWN;
+		case MODBUS_FC_WRITE_SINGLE_REGISTER: // Just echoes request back.
+			return (memcmp(f_ctx.buf_req.buf, f_ctx.buf_resp.buf, f_ctx.expected_response_byte_size)) ? MODBUS_RESPONSE_CORRUPT : MODBUS_RESPONSE_OK;
+		case MODBUS_FC_READ_HOLDING_REGISTERS: // REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...] Check byte count matches request.
+			return (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_DATA] != 2 * modbusGetU16(&f_ctx.buf_req.buf[MODBUS_FRAME_IDX_DATA+2]))	? MODBUS_RESPONSE_CORRUPT : MODBUS_RESPONSE_OK;
 	}
 	
-	return MODBUS_RESPONSE_OK;				// If we get here it must be OK.
+	return MODBUS_RESPONSE_UNKNOWN;				// If we get here then we don't know what to do.
 }
 
 static void appendCRC(uint8_t* buf, uint8_t sz) {
@@ -247,15 +241,3 @@ static void appendCRC(uint8_t* buf, uint8_t sz) {
   buf[0] = (uint8_t)(crc & 0xFF);   //low byte
   buf[1] = (uint8_t)(crc >> 8);     // high byte
 }
-
-const char* modbusGetCallbackEventDescription(uint8_t evt) {
-	static const char CB_EVT_DESC_0[] PROGMEM = "Master received correct response from slave.";
-	static const char CB_EVT_DESC_1[] PROGMEM = "Master received no response from slave.";	
-	static const char CB_EVT_DESC_2[] PROGMEM = "Master received corrupt response from slave.";
-	static const char CB_EVT_DESC_3[] PROGMEM = "Request for this slave.";		
-	static const char CB_EVT_DESC_4[] PROGMEM = "Request for another slave, not us.";	
-	static const char* const DESCS[COUNT_MODBUS_CB_EVT] PROGMEM = { CB_EVT_DESC_0, CB_EVT_DESC_1, CB_EVT_DESC_2, CB_EVT_DESC_3, CB_EVT_DESC_4 };
-	
-	return (evt < COUNT_MODBUS_CB_EVT) ? (const char*)pgm_read_ptr(&DESCS[evt]) : PSTR("unknown");
-}
-

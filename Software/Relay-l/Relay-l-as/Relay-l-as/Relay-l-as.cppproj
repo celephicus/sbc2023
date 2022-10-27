@@ -209,7 +209,7 @@
       <Value>%24(ProjectDir)\..\ArduinoCore\include\variants\standard</Value>
       <Value>../../../../Shared/Common/include</Value>
       <Value>../../../../Shared/AVR/include</Value>
-      <Value>../../../Relay-l-arduino</Value>
+      <Value>..</Value>
     </ListValues>
   </avrgcccpp.compiler.directories.IncludePaths>
   <avrgcccpp.compiler.optimization.level>Optimize debugging experience (-Og)</avrgcccpp.compiler.optimization.level>
@@ -219,6 +219,7 @@
   <avrgcccpp.compiler.optimization.DebugLevel>Maximum (-g3)</avrgcccpp.compiler.optimization.DebugLevel>
   <avrgcccpp.compiler.warnings.AllWarnings>True</avrgcccpp.compiler.warnings.AllWarnings>
   <avrgcccpp.compiler.warnings.Undefined>True</avrgcccpp.compiler.warnings.Undefined>
+  <avrgcccpp.compiler.warnings.WarningsAsErrors>True</avrgcccpp.compiler.warnings.WarningsAsErrors>
   <avrgcccpp.compiler.miscellaneous.OtherFlags>-std=gnu++11</avrgcccpp.compiler.miscellaneous.OtherFlags>
   <avrgcccpp.linker.libraries.Libraries>
     <ListValues>
