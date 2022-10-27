@@ -1,0 +1,6 @@
+.codelite/
+.ctagsd/
+compile_commands.json
+Makefile
+test.txt
+test.mk
