@@ -13,8 +13,8 @@ typedef struct {
 	modbus_response_cb cb_resp;				// Callback to host.
 	uint8_t expected_response_byte_size;	// Set by modbusMasterSend() with the correct response size.
 	uint16_t start_time;					// Timestamp set by modbusMasterSend() for implementing master wait timeout. 
-	BufferFrame buf_resp;
-	BufferFrame buf_req;
+	BufferFrame buf_rx;						// Buffer used for receiving, requests if a slave, responses if a master.
+	BufferFrame buf_tx;						// Buffer used for TX with modbusSlaveSend() & modbusMasterSend().
 	uint16_t rx_timestamp_micros;
 	modbus_timing_debug_cb debug_timing_cb;	// Callback function for debugging timing.
 	uint8_t response_valid;					// Result of verify_response() for debugging.
@@ -76,12 +76,12 @@ uint8_t modbusGetResponseValidCode() { return f_ctx.response_valid; }
 
 static uint8_t get_response_bytesize();
 static uint8_t verify_response();
-static void appendCRC(uint8_t* buf, uint8_t sz);
+static void append_crc();
 
 void modbusInit(Stream& rs485, uint8_t tx_en_pin, modbus_response_cb cb) {
 	memset(&f_ctx, 0, sizeof(f_ctx));
-	bufferFrameReset(&f_ctx.buf_resp);
-	bufferFrameReset(&f_ctx.buf_req);
+	bufferFrameReset(&f_ctx.buf_rx);
+	bufferFrameReset(&f_ctx.buf_tx);
 	f_ctx.tx_en_pin = tx_en_pin;
 	f_ctx.sRs485 = &rs485;
 	f_ctx.cb_resp = cb;
@@ -105,17 +105,17 @@ void modbusSendRaw(const uint8_t* buf, uint8_t sz) {
 	f_ctx.sRs485->flush();
 	digitalWrite(f_ctx.tx_en_pin, LOW);
 }
-void modbusSlaveSend(uint8_t* frame, uint8_t sz) {
+void modbusSlaveSend(const uint8_t* frame, uint8_t sz) {
 	// TODO: keep master busy for interframe time after tx done.
-	appendCRC(frame, sz);
-	while (modbusIsBusy())
-	modbusService();
-	modbusSendRaw(frame, sz + 2);
+	bufferFrameReset(&f_ctx.buf_tx);
+	bufferFrameAddMem(&f_ctx.buf_tx, frame, sz);
+	append_crc();
+	while (modbusIsBusy())	// If we are still transmitting or waiting a response then keep doing it. 
+		modbusService();
+	modbusSendRaw(f_ctx.buf_tx.buf, bufferFrameLen(&f_ctx.buf_tx));
 }
-void modbusMasterSend(uint8_t* frame, uint8_t sz) {
+void modbusMasterSend(const uint8_t* frame, uint8_t sz) {
 	modbusSlaveSend(frame, sz);
-	// TODO: Check for overflow.
-	memcpy(f_ctx.buf_req.buf, frame, sz + 2);
 	start_master_wait(get_response_bytesize());
 }
 
@@ -145,7 +145,7 @@ bool modbusIsBusy() {
 }
 
 uint8_t modbusGetResponse(uint8_t* len, uint8_t* buf) {
-	const uint8_t resp_len = bufferFrameLen(&f_ctx.buf_resp);	// Get length of response 
+	const uint8_t resp_len = bufferFrameLen(&f_ctx.buf_rx);	// Get length of response 
 	uint8_t rc;
 	
 	if (0 == resp_len) 			// If no response available...
@@ -155,11 +155,11 @@ uint8_t modbusGetResponse(uint8_t* len, uint8_t* buf) {
 		rc = MODBUS_RESPONSE_OVERFLOW;	
 	else {
 		*len = resp_len;
-		memcpy(buf, f_ctx.buf_resp.buf, *len);
+		memcpy(buf, f_ctx.buf_rx.buf, *len);
 		rc = MODBUS_RESPONSE_AVAILABLE;
 	}
 	
-	bufferFrameReset(&f_ctx.buf_resp);
+	bufferFrameReset(&f_ctx.buf_rx);
 	return rc;
 	
 }
@@ -172,14 +172,14 @@ void modbusService() {
 	// Service RX timer, timeout with data is a frame.
 	if (is_rx_frame_timeout()) {
 		timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_FRAME, true);
-		if (bufferFrameLen(&f_ctx.buf_resp) > 0) {			// Do we have data, might well get spurious timeouts.
+		if (bufferFrameLen(&f_ctx.buf_rx) > 0) {			// Do we have data, might well get spurious timeouts.
 			if (is_master_waiting_response()) {				// Master waiting for response.
 				f_ctx.response_valid = verify_response(); 	// Decide if response is valid...
 				clear_master_wait();
 				f_ctx.cb_resp((MODBUS_RESPONSE_OK == f_ctx.response_valid) ? MODBUS_CB_EVT_RESP : MODBUS_CB_EVT_RESP_BAD);
 			}
 			else 						// Master NOT waiting, must be a request from someone, so flag it.
-				f_ctx.cb_resp(is_request_for_me(f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_SLAVE_ID]) ? MODBUS_CB_EVT_REQ : MODBUS_CB_EVT_REQ_X);
+				f_ctx.cb_resp(is_request_for_me(f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_SLAVE_ID]) ? MODBUS_CB_EVT_REQ : MODBUS_CB_EVT_REQ_X);
 		}
 		timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_FRAME, false);
 	}
@@ -189,55 +189,57 @@ void modbusService() {
 	if (f_ctx.sRs485->available() > 0) {
 		const uint8_t c = f_ctx.sRs485->read();
 		restart_rx_frame_timeout();
-		bufferFrameAdd(&f_ctx.buf_resp, c);
+		bufferFrameAdd(&f_ctx.buf_rx, c);
 	}
 }
 
 // get_response_bytesize() & verify_response() both depend on what was requested, so both should have an entry for the particular function codes that will be used. 
 static uint8_t get_response_bytesize() {
-	switch (f_ctx.buf_req.buf[MODBUS_FRAME_IDX_FUNCTION]) {
+	switch (f_ctx.buf_tx.buf[MODBUS_FRAME_IDX_FUNCTION]) {
 		case MODBUS_FC_WRITE_SINGLE_REGISTER: // REQ: FC=6 addr:16 value:16 -- RESP: FC=6 addr:16 value:16
 			return 8;
 		case MODBUS_FC_READ_HOLDING_REGISTERS: // REQ: FC=3 addr:16 count:16(max 125) RESP: FC=3 byte-count value-0:16, ...
-			return 5 + modbusGetU16(&f_ctx.buf_req.buf[MODBUS_FRAME_IDX_DATA+2]) * 2;
+			return 5 + modbusGetU16(&f_ctx.buf_tx.buf[MODBUS_FRAME_IDX_DATA+2]) * 2;
 		default: return 0;
 	}
 }
 
 static uint8_t verify_response() {	
-	if (f_ctx.expected_response_byte_size != bufferFrameLen(&f_ctx.buf_resp))							// Wrong response length.
+	if (f_ctx.expected_response_byte_size != bufferFrameLen(&f_ctx.buf_rx))							// Wrong response length.
 		return MODBUS_RESPONSE_BAD_LEN;
-	if (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_SLAVE_ID] != f_ctx.buf_req.buf[MODBUS_FRAME_IDX_SLAVE_ID])	// Wrong slave id.
+	if (f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_SLAVE_ID] != f_ctx.buf_tx.buf[MODBUS_FRAME_IDX_SLAVE_ID])	// Wrong slave id.
 		return MODBUS_RESPONSE_BAD_SLAVE_ID;
-	if (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_FUNCTION] != f_ctx.buf_req.buf[MODBUS_FRAME_IDX_FUNCTION])	// Wrong Function code.
+	if (f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_FUNCTION] != f_ctx.buf_tx.buf[MODBUS_FRAME_IDX_FUNCTION])	// Wrong Function code.
 		return MODBUS_RESPONSE_BAD_FUNCTION_CODE;
 		
 	// Now can check specifics for function code. 
-	switch (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_FUNCTION]) {
+	switch (f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_FUNCTION]) {
 		case MODBUS_FC_WRITE_SINGLE_REGISTER: // Just echoes request back.
-			return (memcmp(f_ctx.buf_req.buf, f_ctx.buf_resp.buf, f_ctx.expected_response_byte_size)) ? MODBUS_RESPONSE_CORRUPT : MODBUS_RESPONSE_OK;
+			return (memcmp(f_ctx.buf_tx.buf, f_ctx.buf_rx.buf, f_ctx.expected_response_byte_size)) ? MODBUS_RESPONSE_CORRUPT : MODBUS_RESPONSE_OK;
 		case MODBUS_FC_READ_HOLDING_REGISTERS: // REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...] Check byte count matches request.
-			return (f_ctx.buf_resp.buf[MODBUS_FRAME_IDX_DATA] != 2 * modbusGetU16(&f_ctx.buf_req.buf[MODBUS_FRAME_IDX_DATA+2]))	? MODBUS_RESPONSE_CORRUPT : MODBUS_RESPONSE_OK;
+			return (f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_DATA] != 2 * modbusGetU16(&f_ctx.buf_tx.buf[MODBUS_FRAME_IDX_DATA+2]))	? MODBUS_RESPONSE_CORRUPT : MODBUS_RESPONSE_OK;
 	}
 	
 	return MODBUS_RESPONSE_UNKNOWN;				// If we get here then we don't know what to do.
 }
 
-static void appendCRC(uint8_t* buf, uint8_t sz) {
-  uint16_t crc = 0xFFFF;
-  while (sz--) {
-    crc ^= (uint16_t)*buf++;  // XOR byte into least sig. byte of crc
+static void append_crc() {
+	uint16_t crc = 0xFFFF;
+	uint8_t *buf = f_ctx.buf_tx.buf;
+	uint8_t sz = bufferFrameLen(&f_ctx.buf_tx);
+	
+	while (sz--) {
+		crc ^= (uint16_t)*buf++;  // XOR byte into least sig. byte of crc
 
-    for (uint8_t i = 8; i != 0; i--) {    // Loop over each bit
-      if ((crc & 0x0001) != 0) {    // If the least significant bit (LSB) is set
-        crc >>= 1;                // Shift right and XOR 0xA001
-        crc ^= 0xA001;
-      }
-      else                          // Else least significant bit (LSB) is not set
-        crc >>= 1;                    // Just shift right
-    }
-  }
+		for (uint8_t i = 8; i != 0; i--) {    // Loop over each bit
+			if ((crc & 0x0001) != 0) {    // If the least significant bit (LSB) is set
+				crc >>= 1;                // Shift right and XOR 0xA001
+				crc ^= 0xA001;
+			}
+			else                          // Else least significant bit (LSB) is not set
+				crc >>= 1;                    // Just shift right
+			}
+		}
   
-  buf[0] = (uint8_t)(crc & 0xFF);   //low byte
-  buf[1] = (uint8_t)(crc >> 8);     // high byte
+	bufferFrameAddU16(&f_ctx.buf_tx, crc);
 }

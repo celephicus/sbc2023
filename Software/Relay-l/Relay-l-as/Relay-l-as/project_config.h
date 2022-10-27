@@ -21,10 +21,10 @@
 #define CFG_VER_MINOR 0
 
 // Build number incremented with each build by cfg-set-build.py script. 
-#define CFG_BUILD_NUMBER 288
+#define CFG_BUILD_NUMBER 292
 
 // Timestamp in ISO8601 format set by cfg-set-build.py script.
-#define CFG_BUILD_TIMESTAMP "20221027T140559"
+#define CFG_BUILD_TIMESTAMP "20221027T144802"
 
 // Do not edit below this line......
 

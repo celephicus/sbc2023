@@ -74,10 +74,10 @@ enum {
 void modbusSendRaw(const uint8_t* buf, uint8_t sz);
 
 // Send a correctly framed packet with CRC, used by slaves to send a response to the master. 
-void modbusSlaveSend(uint8_t* frame, uint8_t sz);
+void modbusSlaveSend(const uint8_t* frame, uint8_t sz);
 
 // Send a correctly framed packet with CRC, and await a response.
-void modbusMasterSend(uint8_t* frame, uint8_t sz);
+void modbusMasterSend(const uint8_t* frame, uint8_t sz);
 
 void modbusHregWrite(uint8_t id, uint16_t address, uint16_t value);
 
