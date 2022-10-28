@@ -47,7 +47,6 @@ typedef struct {
 	// RX: Master waits for response after sending request, slaves receive requests.
 	BufferFrame buf_rx;						// Buffer used for receiving, requests if a slave, responses if a master.
 	uint16_t rx_timestamp_micros;
-	uint8_t frame_valid;					// Result of verify_response() for debugging.
 } ModbusContext;
 static ModbusContext f_ctx;
 
@@ -143,40 +142,35 @@ bool modbusIsBusy() {
 // Generic frame checker, checks a few things in the frame.
 static uint8_t verify_rx_frame_valid() {	
 	if (bufferFrameOverflow(&f_ctx.buf_rx))			// If buffer overflow then just exit...
-		return MODBUS_RESPONSE_OVERFLOW;
+		return MODBUS_CB_EVT_INVALID_LEN;
 	
 	const uint8_t frame_len = bufferFrameLen(&f_ctx.buf_rx);
 	if (frame_len < 5)							// Frame too small.
-		return MODBUS_RESPONSE_INVALID_LEN;
+		return MODBUS_CB_EVT_INVALID_LEN;
 	if (!is_id_legal(f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_SLAVE_ID]))
-		return MODBUS_RESPONSE_INVALID_ID;
+		return MODBUS_CB_EVT_INVALID_ID;
 	if (modbusGetU16(&f_ctx.buf_rx.buf[frame_len - 2]) != get_crc(f_ctx.buf_rx.buf, frame_len - 2)) // Bad CRC...
-		return MODBUS_RESPONSE_INVALID_CRC;
-	return MODBUS_RESPONSE_OK;
+		return MODBUS_CB_EVT_INVALID_CRC;
+	return 0;
 }
 
-uint8_t modbusGetResponse(uint8_t* len, uint8_t* buf) {
+bool modbusGetResponse(uint8_t* len, uint8_t* buf) {
+	bool rc = true;
 	const uint8_t resp_len = bufferFrameLen(&f_ctx.buf_rx);	// Get length of response 
-	uint8_t rc = f_ctx.frame_valid;
-	
-	if (0 == resp_len) 					// If no response available...
-		return MODBUS_RESPONSE_NONE;
-		
 	if (resp_len > *len) 						// If truncate to host buffer ...
-		rc = MODBUS_RESPONSE_TRUNCATED;			// Lose error code:(
+		rc = false;			
 	else {
 		*len = resp_len;						// Only copy what we have to.
 		memcpy(buf, f_ctx.buf_rx.buf, *len);
 	}
 	bufferFrameReset(&f_ctx.buf_rx);
-	
 	return rc;
 }
 
 void modbusService() {
 	// Master may be waiting for a reply from a slave. On timeout, flag timeout to callback.
 	if (TIMER_IS_TIMEOUT_WITH_CB(&f_ctx.start_time, MASTER_RESPONSE_TIMEOUT_MICROS, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT)) 
-		f_ctx.cb_resp(MODBUS_CB_EVT_RESP_NONE);
+		f_ctx.cb_resp(MODBUS_CB_EVT_RESP_TIMEOUT);
 	
 	// Service RX timer, timeout with data is a frame.
 	if (TIMER_IS_TIMEOUT_WITH_CB(&f_ctx.rx_timestamp_micros, RX_TIMEOUT_MICROS, MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT)) {
@@ -184,21 +178,21 @@ void modbusService() {
 		if (bufferFrameLen(&f_ctx.buf_rx) > 0) {			// Do we have data, might well get spurious timeouts.
 			if (timer_is_active(&f_ctx.start_time)) {				// Master is waiting for response...
 				TIMER_STOP_WITH_CB(&f_ctx.start_time, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT);
-				f_ctx.frame_valid = verify_rx_frame_valid();		// Basic validity checks.
-				if (MODBUS_RESPONSE_OK == f_ctx.frame_valid)	{ 	// Do further checks as we know what the response should contain...
+				uint8_t response_valid = verify_rx_frame_valid();		// Basic validity checks.
+				if (0 == response_valid)	{ 	// Do further checks as we know what the response should contain...
 					if (f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_SLAVE_ID] != f_ctx.buf_tx.buf[MODBUS_FRAME_IDX_SLAVE_ID])	// Wrong slave id.
-						f_ctx.frame_valid = MODBUS_RESPONSE_BAD_SLAVE_ID;
+						response_valid = MODBUS_CB_EVT_RESP_BAD_SLAVE_ID;
 					else if (f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_FUNCTION] != f_ctx.buf_tx.buf[MODBUS_FRAME_IDX_FUNCTION])	// Wrong Function code.
-						f_ctx.frame_valid = MODBUS_RESPONSE_BAD_FUNC_CODE;
+						response_valid = MODBUS_CB_EVT_RESP_BAD_FUNC_CODE;
 				}
-				f_ctx.cb_resp((MODBUS_RESPONSE_OK == f_ctx.frame_valid) ? MODBUS_CB_EVT_RESP : MODBUS_CB_EVT_RESP_BAD);
+				f_ctx.cb_resp((0 == response_valid) ? MODBUS_CB_EVT_RESP_OK : response_valid);
 			}
 			else {						// Master NOT waiting, must be a request from someone, so flag it.
-				f_ctx.frame_valid = verify_rx_frame_valid();		// Basic validity checks.
-				if (MODBUS_RESPONSE_OK != f_ctx.frame_valid)
-					f_ctx.cb_resp(MODBUS_CB_EVT_REQ_BAD);
+				uint8_t request_valid = verify_rx_frame_valid();		// Basic validity checks.
+				if (0U != request_valid)
+					f_ctx.cb_resp(request_valid);
 				else
-					f_ctx.cb_resp((modbusGetSlaveId() == f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_SLAVE_ID]) ? MODBUS_CB_EVT_REQ : MODBUS_CB_EVT_REQ_X);
+					f_ctx.cb_resp((modbusGetSlaveId() == f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_SLAVE_ID]) ? MODBUS_CB_EVT_REQ_OK : MODBUS_CB_EVT_REQ_X);
 			}
 		}
 		timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_FRAME, false);

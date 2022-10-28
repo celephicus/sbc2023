@@ -33,31 +33,24 @@ enum {
 	MODBUS_FRAME_IDX_DATA,
 };
 
-// Event IDs sent as callback from driver. 
+// Event IDs sent as callback from driver. Codes from 0xx are generic, 1xx are slave only, 2xx are master. 
 enum {
-	MODBUS_CB_EVT_RESP		= 0,	// Sent by MASTER, OK response received.
-	MODBUS_CB_EVT_RESP_NONE	= 1,	// Sent by MASTER, NO response received.
-	MODBUS_CB_EVT_RESP_BAD	= 2,	// Sent by MASTER, bad response received. Call modbusGetResponse() in handler to determine cause. 
-	MODBUS_CB_EVT_REQ		= 3,	// Sent by SLAVE, we have a request for our slave ID.
-	MODBUS_CB_EVT_REQ_X		= 4,	// Sent by SLAVE, we have a request for another slave ID.
-	MODBUS_CB_EVT_REQ_BAD	= 5,	// Sent by SLAVE, bad request received.
-	COUNT_MODBUS_CB_EVT
+	MODBUS_CB_EVT_INVALID_CRC			= 1,	// Request/response CRC incorrect.
+	MODBUS_CB_EVT_OVERFLOW				= 2,	// Request/response overflowed internal buffer.
+	MODBUS_CB_EVT_INVALID_LEN			= 3,	// Request/response length too small.
+	MODBUS_CB_EVT_INVALID_ID			= 4,	// Request/response slave ID invalid.
+	
+	MODBUS_CB_EVT_RESP_OK				= 200,	// Sent by MASTER, response received with ID & Function Code matching request, with correct CRC.
+	MODBUS_CB_EVT_RESP_TIMEOUT			= 201,	// Sent by MASTER, NO response received.
+	MODBUS_CB_EVT_RESP_BAD_SLAVE_ID		= 202,	// Sent by MASTER, slave ID in response did not match request, unusual...
+	MODBUS_CB_EVT_RESP_BAD_FUNC_CODE	= 203,	//  Sent by MASTER, response Function Code wrong.
+	
+	MODBUS_CB_EVT_REQ_OK				= 100,	// Sent by SLAVE, request received with out slave ID, with correct CRC.
+	MODBUS_CB_EVT_REQ_X					= 101,	// Sent by SLAVE, we have a request for another slave ID.
 };
 
-// Call in event handler to get a response from the slave, len set to length of client buffer before call. On return len is set to number of bytes 
-//  copied. Return code should be checked!
-enum {
-	MODBUS_RESPONSE_NONE			= 0,	// No response available, probably an error.
-	MODBUS_RESPONSE_OK				= 1,	// Request/response with correct ID, Function Code and CRC.
-	MODBUS_RESPONSE_TRUNCATED		= 2,	// Supplied buffer not big enough.
-	MODBUS_RESPONSE_BAD_SLAVE_ID	= 3,	// Response had wrong slave ID.	
-	MODBUS_RESPONSE_BAD_FUNC_CODE	= 4,	// Response Function Code wrong.
-	MODBUS_RESPONSE_INVALID_CRC		= 5,	// Request/response CRC incorrect.
-	MODBUS_RESPONSE_OVERFLOW		= 6,	// Request/response overflowed internal buffer.
-	MODBUS_RESPONSE_INVALID_LEN		= 7,	// Request/response length too small.
-	MODBUS_RESPONSE_INVALID_ID		= 8,	// Request/response slave ID invalid.
-};
-uint8_t modbusGetResponse(uint8_t* len, uint8_t* buf);
+// Get response, returns false if buffer too small for data. On return len is set to number of bytes copied.
+bool modbusGetResponse(uint8_t* len, uint8_t* buf);
 
 // MODBUS Function Codes.
 enum {

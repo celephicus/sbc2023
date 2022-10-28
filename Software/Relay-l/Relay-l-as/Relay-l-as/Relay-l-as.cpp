@@ -36,40 +36,32 @@ static uint8_t write_holding_register(uint16_t address, uint16_t value) {
 	}
 	return 1;
 }
-#if 0
-	// Master check response from slave. 
-				if (5 + modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA+2]) * 2 == frame_len) {
-	switch (f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_FUNCTION]) {
-		case MODBUS_FC_WRITE_SINGLE_REGISTER: // Just echoes request back.
-			return (memcmp(f_ctx.buf_tx.buf, f_ctx.buf_rx.buf, f_ctx.expected_response_byte_size)) ? MODBUS_RESPONSE_CORRUPT : MODBUS_RESPONSE_OK;
-		case MODBUS_FC_READ_HOLDING_REGISTERS: // REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...] Check byte count matches request.
-			return (f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_DATA] != 2 * modbusGetU16(&f_ctx.buf_tx.buf[MODBUS_FRAME_IDX_DATA+2]))	? MODBUS_RESPONSE_CORRUPT : MODBUS_RESPONSE_OK;
-	}
-#endif
+
 void modbus_cb(uint8_t evt) { 
 	uint8_t frame[RESP_SIZE];
 	uint8_t frame_len = RESP_SIZE;	// Must call modbusGetResponse() with buffer length set. 
-	const uint8_t resp_avail = modbusGetResponse(&frame_len, frame);
+	const bool resp_ovf = modbusGetResponse(&frame_len, frame);
 
 	//gpioSpare1Write(true);
 	// Dump MODBUS...
 	if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS) {
 		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("RECV:")); 
 		consolePrint(CFMT_U, evt);
-		consolePrint(CFMT_U, resp_avail);
 		if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_DATA) {
 			const uint8_t* p = frame;
 			fori (frame_len)
 				consolePrint(CFMT_X2, *p++);
+			if (resp_ovf)
+				consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OVF"));
 		}
 		consolePrint(CFMT_NL, 0);
 	}
 	
 	// Slaves get requests...
-	BufferFrame response;
- 	if ((MODBUS_CB_EVT_REQ == evt) && (MODBUS_RESPONSE_OK == resp_avail)) {	// Only respond if we get a request. This will have our slave ID.
+ 	if (MODBUS_CB_EVT_REQ_OK == evt) {					// Only respond if we get a request. This will have our slave ID.
+		BufferFrame response;
 		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
-			case MODBUS_FC_WRITE_SINGLE_REGISTER: {	// REQ: [FC=6 addr:16 value:16] -- RESP: [FC=6 addr:16 value:16]
+			case MODBUS_FC_WRITE_SINGLE_REGISTER: {	// REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
 				if (8 == frame_len) {
 					const uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
 					const uint16_t value   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
@@ -77,7 +69,7 @@ void modbus_cb(uint8_t evt) {
 					modbusSlaveSend(frame, frame_len - 2);	// Less 2 for CRC as send appends it. 
 				}
 			} break;
-			case MODBUS_FC_READ_HOLDING_REGISTERS: { // REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
+			case MODBUS_FC_READ_HOLDING_REGISTERS: { // REQ: [ID FC=3 addr:16 count:16(max 125)] RESP: [ID FC=3 byte-count value-0:16, ...]
 				if (8 == frame_len) {
 					uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
 					uint16_t count   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
@@ -95,25 +87,40 @@ void modbus_cb(uint8_t evt) {
 					}
 				}
 			} break;
-			default:
-				break;
 		}
 	}
-	/*
-	if (MODBUS_CB_EVT_RESP == evt) {
+			
+	// Master gets responses...
+	if (MODBUS_CB_EVT_RESP_OK == evt) {
+		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("Response ID:"));
+		consolePrint(CFMT_D|CFMT_M_NO_SEP, frame[MODBUS_FRAME_IDX_FUNCTION]);
+		consolePrint(CFMT_C, ':');
 		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
-			case MODBUS_FC_READ_HOLDING_REGISTERS: { // REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
-				if (rem) 
-					tilt_angle = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 1]);
+			case MODBUS_FC_READ_HOLDING_REGISTERS: { // REQ: [ID FC=3 addr:16 count:16(max 125)] RESP: [ID FC=3 byte-count value-0:16, ...]
+				uint8_t byte_count = frame[MODBUS_FRAME_IDX_DATA];
+				if (((byte_count & 1) == 0) && (frame_len == byte_count + 5)) {
+					for (uint8_t idx = 0; idx < byte_count; idx += 2)
+						consolePrint(CFMT_U, modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA+1+idx]));
+				}
+				else
+					consolePrint(CFMT_STR_P, (console_cell_t)PSTR("corrupt"));
+				} break;
+			case MODBUS_FC_WRITE_SINGLE_REGISTER: // REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
+				if (6 == frame_len)
+					consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OK"));
+				else
+					consolePrint(CFMT_STR_P, (console_cell_t)PSTR("corrupt"));
 				break;
+			default:
+				consolePrint(CFMT_STR_P, (console_cell_t)PSTR("Unknown response"));
 			}
-		}
+		consolePrint(CFMT_NL, 0);
 	}
-	*/
+	
 	//gpioSpare1Write(0);
 }
 
-// Stuff for debugging NODBUS timing.
+// Stuff for debugging MODBUS timing.
 void modbus_timing_debug(uint8_t id, uint8_t s) {
 	switch (id) {
 	case MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT: gpioSpare1Write(s); break;

@@ -74,8 +74,8 @@ enum {
 	CFMT_STR_P,		// Print second arg as pointer to string in PROGMEM.
 	CFMT_C,			// Print second arg as char.
 	CFMT_X2, 		// Print as 2 hex digits.
-	CFMT_M_NO_LEAD = 0x40,	// AND with option to _NOT_ print a leading `+' or `$'.
-	CFMT_M_NO_SEP = 0x80	// AND with option to _NOT_ print a trailing space.
+	CFMT_M_NO_LEAD = 0x40,	// OR with option to _NOT_ print a leading `+' or `$'.
+	CFMT_M_NO_SEP = 0x80	// OR with option to _NOT_ print a trailing space.
 };
 void consolePrint(uint8_t opt, console_cell_t x);
 
