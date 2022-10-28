@@ -22,20 +22,9 @@ enum {
 typedef void (*modbus_timing_debug_cb)(uint8_t id, uint8_t s);
 void modbusSetTimingDebugCb(modbus_timing_debug_cb cb);
 
-// Slave ID, in range 1..247 inclusive.
+// Slave ID, in range 1..247 inclusive. Set to zero on init, so it will never respond to requests even malformed ones directed to ID 0.
 void modbusSetSlaveId(uint8_t id);
 uint8_t modbusGetSlaveId();
-
-// For debugging when we get a failed response with CB event MODBUS_CB_EVT_RESP_BAD, call this to get a failure code. 
-enum {
-	MODBUS_RESPONSE_OK					= 0,
-	MODBUS_RESPONSE_BAD_LEN				= 1,	// Length not as expected.
-	MODBUS_RESPONSE_BAD_SLAVE_ID		= 2,	// Wrong slave replied.	
-	MODBUS_RESPONSE_BAD_FUNCTION_CODE	= 3,	// Function code wrong.
-	MODBUS_RESPONSE_CORRUPT				= 4,	// Response contents corrupted.
-	MODBUS_RESPONSE_UNKNOWN				= 255	// Unknown function code.
-};
-uint8_t modbusGetResponseValidCode();
 
 // Indices into a request or response frame.
 enum {
@@ -46,13 +35,29 @@ enum {
 
 // Event IDs sent as callback from driver. 
 enum {
-	MODBUS_CB_EVT_RESP,			// Sent by MASTER, OK response received.
-	MODBUS_CB_EVT_RESP_NONE,	// Sent by MASTER, NO response received.
-	MODBUS_CB_EVT_RESP_BAD,		// Sent by MASTER, bad response received. Call modbusGetResponseValidCode() in handler to determine cause. 
-	MODBUS_CB_EVT_REQ,			// Sent by SLAVE, we have a request.
-	MODBUS_CB_EVT_REQ_X,
+	MODBUS_CB_EVT_RESP		= 0,	// Sent by MASTER, OK response received.
+	MODBUS_CB_EVT_RESP_NONE	= 1,	// Sent by MASTER, NO response received.
+	MODBUS_CB_EVT_RESP_BAD	= 2,	// Sent by MASTER, bad response received. Call modbusGetResponse() in handler to determine cause. 
+	MODBUS_CB_EVT_REQ		= 3,	// Sent by SLAVE, we have a request for our slave ID.
+	MODBUS_CB_EVT_REQ_X		= 4,	// Sent by SLAVE, we have a request for another slave ID.
+	MODBUS_CB_EVT_REQ_BAD	= 5,	// Sent by SLAVE, bad request received.
 	COUNT_MODBUS_CB_EVT
 };
+
+// Call in event handler to get a response from the slave, len set to length of client buffer before call. On return len is set to number of bytes 
+//  copied. Return code should be checked!
+enum {
+	MODBUS_RESPONSE_NONE			= 0,	// No response available, probably an error.
+	MODBUS_RESPONSE_OK				= 1,	// Request/response with correct ID, Function Code and CRC.
+	MODBUS_RESPONSE_TRUNCATED		= 2,	// Supplied buffer not big enough.
+	MODBUS_RESPONSE_BAD_SLAVE_ID	= 3,	// Response had wrong slave ID.	
+	MODBUS_RESPONSE_BAD_FUNC_CODE	= 4,	// Response Function Code wrong.
+	MODBUS_RESPONSE_INVALID_CRC		= 5,	// Request/response CRC incorrect.
+	MODBUS_RESPONSE_OVERFLOW		= 6,	// Request/response overflowed internal buffer.
+	MODBUS_RESPONSE_INVALID_LEN		= 7,	// Request/response length too small.
+	MODBUS_RESPONSE_INVALID_ID		= 8,	// Request/response slave ID invalid.
+};
+uint8_t modbusGetResponse(uint8_t* len, uint8_t* buf);
 
 // MODBUS Function Codes.
 enum {
@@ -76,8 +81,10 @@ void modbusSendRaw(const uint8_t* buf, uint8_t sz);
 // Send a correctly framed packet with CRC, used by slaves to send a response to the master. 
 void modbusSlaveSend(const uint8_t* frame, uint8_t sz);
 
-// Send a correctly framed packet with CRC, and await a response.
-void modbusMasterSend(const uint8_t* frame, uint8_t sz);
+// Send a correctly framed packet with CRC, and await a response of the specified size, or any size if zero.
+// Giving an explicit size alows the master to get the response more quickly, as it can read that number of charcters from the wire,
+//  rather than waiting for a quiet time to signal end of response frame. 
+void modbusMasterSend(const uint8_t* frame, uint8_t sz, uint8_t resp_sz=0U);
 
 void modbusHregWrite(uint8_t id, uint16_t address, uint16_t value);
 
@@ -97,14 +104,6 @@ bool modbusIsBusy();
 
 // Call in mainloop frequently to service the driver.
 void modbusService();
-
-// Call in event handler to get a response from the slave, len set to length of client buffer before call. If there is a response available, true is returned and len is set to number of bytes copied, zero implies overflow.
-enum {
-	MODBUS_RESPONSE_NONE,
-	MODBUS_RESPONSE_AVAILABLE,
-	MODBUS_RESPONSE_OVERFLOW,
-};
-uint8_t modbusGetResponse(uint8_t* len, uint8_t* buf);
 
 // Setters/getters for modbus 16 bit format.
 static inline uint16_t modbusGetU16(const uint8_t* v)  { return ((uint16_t)v[0] << 8) | (uint16_t)(v[1]); }

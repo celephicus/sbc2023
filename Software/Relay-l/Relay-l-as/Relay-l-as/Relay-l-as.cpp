@@ -36,51 +36,63 @@ static uint8_t write_holding_register(uint16_t address, uint16_t value) {
 	}
 	return 1;
 }
-
+#if 0
+	// Master check response from slave. 
+				if (5 + modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA+2]) * 2 == frame_len) {
+	switch (f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_FUNCTION]) {
+		case MODBUS_FC_WRITE_SINGLE_REGISTER: // Just echoes request back.
+			return (memcmp(f_ctx.buf_tx.buf, f_ctx.buf_rx.buf, f_ctx.expected_response_byte_size)) ? MODBUS_RESPONSE_CORRUPT : MODBUS_RESPONSE_OK;
+		case MODBUS_FC_READ_HOLDING_REGISTERS: // REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...] Check byte count matches request.
+			return (f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_DATA] != 2 * modbusGetU16(&f_ctx.buf_tx.buf[MODBUS_FRAME_IDX_DATA+2]))	? MODBUS_RESPONSE_CORRUPT : MODBUS_RESPONSE_OK;
+	}
+#endif
 void modbus_cb(uint8_t evt) { 
 	uint8_t frame[RESP_SIZE];
 	uint8_t frame_len = RESP_SIZE;	// Must call modbusGetResponse() with buffer length set. 
 	const uint8_t resp_avail = modbusGetResponse(&frame_len, frame);
 
-	gpioSpare1Write(true);
+	//gpioSpare1Write(true);
 	// Dump MODBUS...
-	if (REGS[REGS_IDX_ENABLES] & _BV(evt)) {
+	if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS) {
 		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("RECV:")); 
 		consolePrint(CFMT_U, evt);
-		if (MODBUS_RESPONSE_AVAILABLE == resp_avail) {
+		consolePrint(CFMT_U, resp_avail);
+		if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_DATA) {
 			const uint8_t* p = frame;
 			fori (frame_len)
 				consolePrint(CFMT_X2, *p++);
-		} 
-		if (MODBUS_RESPONSE_OVERFLOW == resp_avail)
-			consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OVF"));
+		}
 		consolePrint(CFMT_NL, 0);
 	}
 	
 	// Slaves get requests...
 	BufferFrame response;
- 	if (MODBUS_CB_EVT_REQ == evt) {	// Only respond if we get a request. This will have our slave ID.
+ 	if ((MODBUS_CB_EVT_REQ == evt) && (MODBUS_RESPONSE_OK == resp_avail)) {	// Only respond if we get a request. This will have our slave ID.
 		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
 			case MODBUS_FC_WRITE_SINGLE_REGISTER: {	// REQ: [FC=6 addr:16 value:16] -- RESP: [FC=6 addr:16 value:16]
-				const uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
-				const uint16_t value   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
-				write_holding_register(address, value);
-				modbusSlaveSend(frame, frame_len - 2);	// Less 2 for CRC as send appends it. 
+				if (8 == frame_len) {
+					const uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
+					const uint16_t value   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
+					write_holding_register(address, value);
+					modbusSlaveSend(frame, frame_len - 2);	// Less 2 for CRC as send appends it. 
+				}
 			} break;
 			case MODBUS_FC_READ_HOLDING_REGISTERS: { // REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
-				uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
-				uint16_t count   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
-				bufferFrameReset(&response);
-				bufferFrameAddMem(&response, frame, 2);		// Copy ID & Function Code from request frame. 
-				uint16_t byte_count = count * 2;			// Count sent as 16 bits, but bytecount only 8 bits. 
-				if (byte_count < (uint16_t)bufferFrameFree(&response) - 2) { // Is space for data and CRC?
-					bufferFrameAdd(&response, (uint8_t)byte_count);
-					while (count--) {
-						uint16_t value;
-						read_holding_register(address++, &value);
-						bufferFrameAddU16(&response, value);
+				if (8 == frame_len) {
+					uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
+					uint16_t count   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
+					bufferFrameReset(&response);
+					bufferFrameAddMem(&response, frame, 2);		// Copy ID & Function Code from request frame. 
+					uint16_t byte_count = count * 2;			// Count sent as 16 bits, but bytecount only 8 bits. 
+					if (byte_count < (uint16_t)bufferFrameFree(&response) - 2) { // Is space for data and CRC?
+						bufferFrameAdd(&response, (uint8_t)byte_count);
+						while (count--) {
+							uint16_t value;
+							read_holding_register(address++, &value);
+							bufferFrameAddU16(&response, value);
+						}
+						modbusSlaveSend(response.buf, bufferFrameLen(&response));
 					}
-					modbusSlaveSend(response.buf, bufferFrameLen(&response));
 				}
 			} break;
 			default:
@@ -98,13 +110,13 @@ void modbus_cb(uint8_t evt) {
 		}
 	}
 	*/
-	gpioSpare1Write(0);
+	//gpioSpare1Write(0);
 }
 
 // Stuff for debugging NODBUS timing.
 void modbus_timing_debug(uint8_t id, uint8_t s) {
 	switch (id) {
-	//case MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT: gpioSpare1Write(s); break;
+	case MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT: gpioSpare1Write(s); break;
 	case MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT: 	gpioSpare2Write(s); break;
 	case MODBUS_TIMING_DEBUG_EVENT_RX_FRAME: 	gpioSpare3Write(s); break;
 	}

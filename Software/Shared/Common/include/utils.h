@@ -122,7 +122,7 @@ static inline void buffer##name_##AddMem(Buffer##name_* q, const void* m, uint8_
 	memcpy(q->p, m, len); q->p += len;																						\
 }																															\
 static inline void buffer##name_##AddU16(Buffer##name_* q, uint16_t x) { 													\
-	buffer##name_##AddMem(q, &x, sizeof(uint16_t));																			\
+	buffer##name_##Add(q, x>>8); buffer##name_##Add(q, x);																	\
 }
 
 // How many elements in an array?

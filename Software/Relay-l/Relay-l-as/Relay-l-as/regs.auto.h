@@ -14,7 +14,7 @@ enum {
 // Define the start of the NV regs. The region is from this index up to the end of the register array.
 #define REGS_START_NV_IDX REGS_IDX_ENABLES
 
-#define REGS_NV_DEFAULT_VALS 0xff
+#define REGS_NV_DEFAULT_VALS 0x0003
 
 // Define which regs to print in hex. Note that since we only have 16 bits of mask all hex flags must be in the first 16.
 #define REGS_PRINT_HEX_MASK (_BV(REGS_IDX_FLAGS)|_BV(REGS_IDX_RESTART)|_BV(REGS_IDX_ENABLES))
@@ -30,9 +30,10 @@ enum {
 
 // Flags/masks for reg ENABLES.
 enum {
-	REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS = (int)0xff,
-	REGS_ENABLES_MASK_DUMP_REGS = (int)0x100,
-	REGS_ENABLES_MASK_DUMP_REGS_FAST = (int)0x200,
+	REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS = (int)0x1,
+	REGS_ENABLES_MASK_DUMP_MODBUS_DATA = (int)0x2,
+	REGS_ENABLES_MASK_DUMP_REGS = (int)0x4,
+	REGS_ENABLES_MASK_DUMP_REGS_FAST = (int)0x8,
 };
 
 #define DECLARE_REGS_NAMES()                                                \
@@ -82,7 +83,8 @@ enum {
     "\r\n EEPROM_READ_BAD_1: 0x8 (EEPROM bank 1 corrupt.)"                              \
     "\r\n WATCHDOG_RESTART: 0x8000 (Whoops.)"                                           \
     "\r\nEnables:"                                                                      \
-    "\r\n DUMP_MODBUS_EVENTS: 0xff (Dump MODBUS event, flag bits map to MODBUS event Ids.)"\
-    "\r\n DUMP_REGS: 0x100 (Regs values dump to console)"                               \
-    "\r\n DUMP_REGS_FAST: 0x200 (Dump at 5/s rather than 1/s)"                          \
+    "\r\n DUMP_MODBUS_EVENTS: 0x1 (Dump MODBUS event value.)"                           \
+    "\r\n DUMP_MODBUS_DATA: 0x2 (Dump MODBUS data.)"                                    \
+    "\r\n DUMP_REGS: 0x4 (Regs values dump to console)"                                 \
+    "\r\n DUMP_REGS_FAST: 0x8 (Dump at 5/s rather than 1/s)"                            \
 
