@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <SoftwareSerial.h>
-#include <util/atomic.h>
 
 #include "project_config.h"
 #include "Relay-gpio.h"
@@ -198,9 +197,12 @@ static bool console_cmds_user(char* cmd) {
 	// Regs
     case /** ?V **/ 0x688c: fori(COUNT_REGS) { regsPrintValue(i); } break;
     case /** V **/ 0xb5f3: 
-	    { const uint8_t idx = console_u_pop(); const uint8_t v = console_u_pop(); 
-		    if (idx < COUNT_REGS) 
-		    	ATOMIC_BLOCK(ATOMIC_FORCEON) { REGS[idx] = v; } // Might be interrupted by an ISR part way through.
+	    { const uint8_t idx = console_u_pop(); const uint16_t v = (uint16_t)console_u_pop(); 
+		    if (idx < COUNT_REGS) {
+				CRITICAL_START(); 
+				REGS[idx] = v; // Might be interrupted by an ISR part way through.
+				CRITICAL_END();
+			}
 		} break; 
 	case /** ??V **/ 0x85d3: {
 		fori (COUNT_REGS) {
@@ -246,11 +248,9 @@ static bool console_cmds_user(char* cmd) {
 		consolePrint(CFMT_STR_P, (console_cell_t)eventGetEventDesc(i));
 		consolePrint(CFMT_NL, 0);
 	} break;
-
     case /** STM **/ 0x116f: /* (f ev-id) */ { const uint8_t ev_id = console_u_pop(); eventTraceMaskSet(ev_id, !!console_u_pop()); } break;
-
-#if 0	
-
+		
+	// Arduino pin access...
     case /** PIN **/ 0x1012: {
         uint8_t pin = console_u_pop();
         digitalWrite(pin, console_u_pop());
@@ -259,7 +259,6 @@ static bool console_cmds_user(char* cmd) {
         uint8_t pin = console_u_pop();
         pinMode(pin, console_u_pop());
       } break;
-#endif	
     default: return false;
   }
   return true;
