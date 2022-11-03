@@ -26,10 +26,10 @@ static void led_set_pattern(const led_pattern_def_t* def) {
 	utilsSeqStart(&f_led_seq, (const UtilsSeqHdr*)def, sizeof(led_pattern_def_t), led_action_func); 
 }
 
-static const led_pattern_def_t LED_PATTERN_OK[] PROGMEM = 				{ {2, 0}, {UTILS_SEQ_END, 1}, };
+static const led_pattern_def_t LED_PATTERN_OK[] 			 PROGMEM = 	{ {2, 0}, 			{UTILS_SEQ_END, 1}, };
 static const led_pattern_def_t LED_PATTERN_DC_IN_VOLTS_LOW[] PROGMEM = 	{ {20, 1}, {20, 0}, {UTILS_SEQ_REPEAT, 0}, };
-static const led_pattern_def_t LED_PATTERN_BUS_VOLTS_LOW[] PROGMEM = 	{ {5, 1},	{5, 0}, {UTILS_SEQ_REPEAT, 0}, };
-static const led_pattern_def_t LED_PATTERN_NO_COMMS[] PROGMEM = 		{ {50, 1},	{5, 0}, {UTILS_SEQ_REPEAT, 0}, };
+static const led_pattern_def_t LED_PATTERN_BUS_VOLTS_LOW[] 	 PROGMEM = 	{ {5, 1},  {5, 0}, 	{UTILS_SEQ_REPEAT, 0}, };
+static const led_pattern_def_t LED_PATTERN_NO_COMMS[] 		 PROGMEM = 	{ {50, 1}, {5, 0}, 	{UTILS_SEQ_REPEAT, 0}, };
 
 static const led_pattern_def_t* const LED_PATTERNS[] PROGMEM = { 
 	LED_PATTERN_OK, LED_PATTERN_DC_IN_VOLTS_LOW, LED_PATTERN_BUS_VOLTS_LOW, LED_PATTERN_NO_COMMS, 
@@ -61,7 +61,7 @@ void driverRelayWrite(uint8_t v) {
 	f_relay_data = v;
 	digitalWrite(GPIO_PIN_RSEL, 0);
 	shiftOut(GPIO_PIN_RDAT, GPIO_PIN_RCLK, MSBFIRST , v);
-	 digitalWrite(GPIO_PIN_RSEL, 1);
+	digitalWrite(GPIO_PIN_RSEL, 1);
 }
 
 // Non-volatile objects.
@@ -134,6 +134,45 @@ static void adc_init() {
 }
 static void adc_start() { devAdcStartConversions(); }
 
+// Scanner, send events when values cross thresholds.
+//
+
+static uint16_t scaler_12v_mon(uint16_t raw) { return utilsRescaleU16(raw, 1023, 15000); }
+static uint8_t scanner_thold_12v_mon(uint8_t tstate, uint16_t val) {  return val < (tstate ? 11500 : 1100); }
+static uint16_t scanner_get_action_delay_default() { return 20; }
+static uint8_t get_flag(const void* arg) { return !!(regsFlags() & (uint16_t)arg); }
+static void set_flag(void* arg, uint8_t tstate) { regsWriteMaskFlags((uint16_t)arg, tstate); }
+static void publish_event(const void* arg, uint8_t tstate) {
+}
+static const thold_scanner_def_t SCANDEFS[] PROGMEM = {
+	{	// DRIVER_SCAN_MASK_DC_IN_UNDERVOLT
+		&REGS[REGS_IDX_ADC_VOLTS_MON_12V_IN],
+		&REGS[REGS_IDX_VOLTS_MON_12V_IN], scaler_12v_mon,
+		scanner_thold_12v_mon,
+		scanner_get_action_delay_default,
+		get_flag, set_flag, (void*)REGS_FLAGS_MASK_DC_IN_VOLTS_LOW,
+		publish_event,
+		(const void*)EV_SCANNER_12V_IN_UNDERVOLT
+	},
+	{	// DRIVER_SCAN_MASK_BUS_UNDERVOLT
+		&REGS[REGS_IDX_ADC_VOLTS_MON_BUS],
+		&REGS[REGS_IDX_VOLTS_MON_BUS], scaler_12v_mon,
+		scanner_thold_12v_mon,
+		scanner_get_action_delay_default,
+		get_flag, set_flag, (void*)REGS_FLAGS_MASK_BUS_VOLTS_LOW,
+		publish_event,
+		(const void*)EV_SCANNER_BUS_UNDERVOLT
+	},
+	//
+};
+
+thold_scanner_context_t f_scan_contexts[UTILS_ELEMENT_COUNT(SCANDEFS)];
+
+static void scanner_init() { tholdScanInit(SCANDEFS, f_scan_contexts, UTILS_ELEMENT_COUNT(SCANDEFS)); }
+static void scanner_scan() { tholdScanSample(SCANDEFS, f_scan_contexts, UTILS_ELEMENT_COUNT(SCANDEFS)); }
+void driverRescan(uint16_t mask) { tholdScanRescan(SCANDEFS, f_scan_contexts, UTILS_ELEMENT_COUNT(SCANDEFS), mask); }
+
+
 // Externals
 void driverInit() {
 	// All objects in the NV (inc. regs) must have been setup before this call. 
@@ -142,9 +181,8 @@ void driverInit() {
 	regsWriteMaskFlags(REGS_FLAGS_MASK_EEPROM_READ_BAD_1, nv_status&2);
 	led_init();
 	adc_init();
-	//scanner_init();
+	scanner_init();
 	relay_driver_init();
-	//init_switches();
 }
 
 void driverService() {
@@ -153,8 +191,8 @@ void driverService() {
 		led_service();		
 	}
 	relay_driver_pat_watchdog();
-//	if (devAdcIsConversionDone())		// Run scanner when all ADC channels converted. 
-//		scanner_scan();
+	if (devAdcIsConversionDone())		// Run scanner when all ADC channels converted. 
+		scanner_scan();
 }
 
 #if 0
@@ -163,110 +201,4 @@ void driverService() {
 
 uint16_t threadGetTicks() { return (uint16_t)millis(); }
 
-// Scanner, send events when values cross thresholds.
-//
-
-static uint16_t scaler_12v_mon(uint16_t raw) { return utilsRescaleU16(raw, 1023, 15000); }
-static uint8_t scanner_thold_12v_mon(uint8_t tstate, uint16_t val) {  return val < (tstate ? 11500 : 1100); }
-
-static uint16_t scanner_get_action_delay_default() { return 20; }
-
-static const thold_scanner_def_t SCANDEFS[] PROGMEM = {
-	{	// DRIVER_SCAN_MASK_DC_IN_UNDERVOLT
-		REGS_IDX_ADC_VOLTS_MON_12V_IN,
-		REGS_IDX_VOLTS_MON_12V_IN, scaler_12v_mon, 
-		scanner_thold_12v_mon,
-		scanner_get_action_delay_default,
-		tholdScanGetTstateFlag, tholdScanSetTstateFlag, (void*)REGS_FLAGS_MASK_DC_IN_VOLTS_LOW,
-		EV_12V_IN_UNDERVOLT
-	},
-	{	// DRIVER_SCAN_MASK_BUS_UNDERVOLT
-		REGS_IDX_ADC_VOLTS_MON_BUS,
-		REGS_IDX_VOLTS_MON_BUS, scaler_12v_mon, 
-		scanner_thold_12v_mon,
-		scanner_get_action_delay_default,
-		tholdScanGetTstateFlag, tholdScanSetTstateFlag, (void*)REGS_FLAGS_MASK_BUS_VOLTS_LOW,
-		EV_BUS_UNDERVOLT
-	},
-	// 
-};
-
-thold_scanner_context_t f_scan_contexts[ELEMENT_COUNT(SCANDEFS)];
-
-static void scanner_init() { tholdScanInit(SCANDEFS, f_scan_contexts, ELEMENT_COUNT(SCANDEFS)); }
-static void scanner_scan() { tholdScanSample(SCANDEFS, f_scan_contexts, ELEMENT_COUNT(SCANDEFS)); }
-void driverRescan(uint16_t mask) { tholdScanRescan(SCANDEFS, f_scan_contexts, ELEMENT_COUNT(SCANDEFS), mask); }
-
-// Switches.
-//
-static uint8_t get_sw_action_delay_buttons() { return (uint8_t)REGS[REGS_IDX_SW_ACTION_DELAY_TICKS]; }
-static uint8_t get_sw_action_delay_cancel_sw() { return 1; }
-static const sw_scan_def_t SWITCHES[] PROGMEM = { 
-	// These switches are easy, with a simple intention delay.
-	{ GPIO_PIN_SW_CALL,				true,	get_sw_action_delay_buttons,	REGS_FLAGS_MASK_SW_CALL,			EV_SW_CALL,				},
-	{ GPIO_PIN_SW_CALL_TOUCH,		false,	get_sw_action_delay_buttons,	REGS_FLAGS_MASK_SW_TOUCH_CALL,		EV_SW_CALL_TOUCH,		},
-	{ GPIO_PIN_SW_CANCEL,			true,	get_sw_action_delay_cancel_sw,	REGS_FLAGS_MASK_SW_CANCEL,			EV_SW_CANCEL,			},
-
-	// Has no intention delay, makes sure that we always get an event from the exit enable input before the alert sw input. 
-	{ GPIO_PIN_SW_BED_EXIT_ENABLE,	true,	NULL,							REGS_FLAGS_MASK_SW_BED_EXIT_ENABLE, EV_SW_BED_EXIT_ENABLE,	},
-	
-	// Alert has button delay, for use as a bed exit alarm we use a state machine to handle arming. 
-	{ GPIO_PIN_SW_ALERT,			true,	get_sw_action_delay_buttons,	REGS_FLAGS_MASK_SW_ALERT,			EV_SW_ALERT				},
-};
-
-static sw_scan_context_t f_sw_contexts[ELEMENT_COUNT(SWITCHES)];
-static thread_control_t f_tc_sw;
-
-static void reset_switches() {
-	swScanReset(SWITCHES, f_sw_contexts, ELEMENT_COUNT(SWITCHES));
-}
-
-static void init_switches() {
-	// Active high pullup enable for switches.
-	pinMode(GPIO_PIN_SW_DRIVE, OUTPUT);
-	digitalWrite(GPIO_PIN_SW_DRIVE, 1); 		// Set active. 
-	delay(10);									// Wait to come up. 
-	
-	// Will send startup events if switch active. 
-	swScanInit(SWITCHES, f_sw_contexts, ELEMENT_COUNT(SWITCHES));
-	
-	digitalWrite(GPIO_PIN_SW_DRIVE, 0);			// Set pullup enable inactive. 
-	threadInit(&f_tc_sw);						// Thread does sampling. 
-}
-
-enum {
-	SW_SAMPLE_PERIOD_MS = 100,
-	SW_DRIVE_DURATION_MS = 1,
-};
-static int8_t thread_sw(void* arg) {
-	(void)arg;
-	THREAD_NO_YIELD_BEGIN(); 
-	while (1) {		// Forever loop.
-		if (!(regsGetFlags() & REGS_FLAGS_MASK_INHIBIT_SW_SCAN)) {
-			digitalWrite(GPIO_PIN_SW_DRIVE, 1);
-			THREAD_DELAY(SW_DRIVE_DURATION_MS);
-		
-			adc_start();  // Start ADC scan, handled by irupts.
-			swScanSample(SWITCHES, f_sw_contexts, ELEMENT_COUNT(SWITCHES));	 // Scan switches as well.
-			while (adcDriverIsRunning())		// Wait for ADC to finish.
-				;
-			digitalWrite(GPIO_PIN_SW_DRIVE, 0);
-			scanner_scan();
-		}
-		
-		THREAD_DELAY(SW_SAMPLE_PERIOD_MS - SW_DRIVE_DURATION_MS);
-	}
-	THREAD_END();
-}
-void driverEnableSwitchScan(bool e) {
-	if (e) 
-		reset_switches();
-
-	regsWriteMaskFlags(REGS_FLAGS_MASK_INHIBIT_SW_SCAN, !e);
-}
-
-static void service_switches() { threadRun(&f_tc_sw, thread_sw, NULL); };
-
-
-DRIVER_LED_DEFS(DRIVER_GEN_LED_DEF)
 #endif

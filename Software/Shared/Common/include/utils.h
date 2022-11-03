@@ -257,26 +257,20 @@ T utilsRescale(T input_value, T max_input, T max_output) {
 #define utilsRescaleU16 utilsRescale<uint16_t, uint32_t>
 
 /* Multiple threshold comparator, use like this:
+	static const uint16_t PROGMEM THRESHOLDS[] = { 50, 100, 500 };
+	enum { HYSTERESIS = 20 };
+	uint8_t level;
 
-static const uint16_t PROGMEM THRESHOLDS[] = { 50, 100, 500 };
-enum { HYSTERESIS = 20 };
-uint8_t level;
-
-After executing
-	multiThreshold(THRESHOLDS,  ELEMENT_COUNT(THRESHOLDS),	HYSTERESIS, &level, x);
-
-	as x ranges from 0 .. 600 .. 0, level changes so:
-
-0..49	0
-50.. 99 1
-100..499 2
-500..600 3
-600.. 480 3
-479.. 80 2
-79..30 1
-29..0 0
-
-Returns true if the level has changed.
+   After executing `multiThreshold(THRESHOLDS,  ELEMENT_COUNT(THRESHOLDS),	HYSTERESIS, &level, x)', as x ranges from 0 .. 600 .. 0, level changes so,
+    with the function returning true if level has changed.
+	0..49	  0
+	50.. 99   1
+	100..499  2
+	500..600  3
+	600.. 480 3
+	479.. 80  2
+	79..30    1
+	29..0     0
 */
 bool utilsMultiThreshold(const uint16_t* thresholds, uint8_t count, uint16_t hysteresis, uint8_t* level, uint16_t val);
 
@@ -301,35 +295,32 @@ uint16_t utilsFilter(T* accum, uint16_t input, uint8_t k, bool reset) {
 	If endptr is non-NULL, it is set to the first illegal character. */
 bool utilsStrtoui(unsigned* n, const char *str, char **endptr, unsigned base);
 
-// Utils Sequencer -- generic driver to run an arbitrary sequence by calling a user function every so often with a canned argument.
+/* Utils Sequencer -- generic driver to run an arbitrary sequence by calling a user function every so often with a canned argument.
+	Example - play a tune with the play() function.
+	typedef struct {		// Subclass of sequencer header with some extra info to control the `thing' being sequenced.
+		UtilsSeqHdr hdr;
+		uint16_t pitch;
+	} PlayDef;
 
-/* Example - play a tune.
-typedef struct {		// Subclass of sequencer header with some extra info to control the `thing' being sequenced.
-	UtilsSeqHdr hdr;
-	uint16_t pitch;
-} PlayDef;
+	static UtilsSeqCtx f_seq;	// Keeps track of the sequencer state.
 
-static UtilsSeqCtx f_seq;	// Keeps track of the sequencer state.
+	static void play_action_func(const UtilsSeqHdr* hdr) {
+		const PlayDef* def = (const PlayDef*)hdr;		// Downcast to subclass.
+		if (NULL != hdr) play(pgm_read_word(&hdr->pitch));
+		else play(OFF);
+	}
 
-static void play_action_func(const UtilsSeqHdr* hdr) {
-	const PlayDef* def = (const PlayDef*)hdr;		// Downcast to subclass.
-	if (NULL != hdr) play(pgm_read_word(&hdr->pitch));
-	else play(OFF);
-}
-
-bool playIsBusy() { return utilsSeqIsBusy(&f_seq); }
-void playStart(const PlayDef* def) { utilsSeqStart(&f_seq, def, sizeof(PlayDef), play_action_func); }
-void playService() { utilsSeqService(&f_seq); }
+	bool playIsBusy() { return utilsSeqIsBusy(&f_seq); }
+	void playStart(const PlayDef* def) { utilsSeqStart(&f_seq, def, sizeof(PlayDef), play_action_func); }
+	void playService() { utilsSeqService(&f_seq); }
 */
 
 /* The header of the action type, defines the action for the sequencer. A struct must have this as the first member, the action function downcasts the
    argument to the derived type and extracts the values.
-   If the last duration value is UTILS_SEQ_END then the action function is called for the associated data, and then the sequence ends. This allows a LED say
-   to display a colour sequence, then hold on a colour.
+   If the last duration value is UTILS_SEQ_END then the action function is called for the associated data, and then the sequence ends. This allows for 
+   example a LED to display a colour sequence, then hold on a colour.
    If the last duration value is UTILS_SEQ_REPEAT then the action function is NOT called for the associated data, and the sequence restarts.
-   UTILS_SEQ_LOOP(N) & UTILS_SEQ_LOOP_END allow a bit of the sequence to be repeated N times.
-*/
-
+   UTILS_SEQ_LOOP(N) & UTILS_SEQ_LOOP_END allow a bit of the sequence to be repeated N times. */
 typedef uint16_t utils_seq_duration_t;
 const utils_seq_duration_t UTILS_SEQ_END = 			0U;
 const utils_seq_duration_t UTILS_SEQ_REPEAT = 		0xffff;
@@ -337,7 +328,7 @@ const utils_seq_duration_t UTILS_SEQ_LOOP_MASK = 	0x8000;
 #define					   UTILS_SEQ_LOOP(n_) 		(UTILS_SEQ_LOOP_MASK | (n_))
 const utils_seq_duration_t UTILS_SEQ_LOOP_END = 	0xfffe;
 
-// We encode what we want the sequencer to do in the duration.
+// We encode what we want the sequencer to do in the duration member. Note that it cannot have the MSB set. 
 typedef struct {
 	utils_seq_duration_t duration;
 } UtilsSeqHdr;
@@ -345,6 +336,7 @@ typedef struct {
 // Casts UtilsSeqHdr to subtype, extracts values and actions them. If handed a NULL pointer then turn off the thing.
 typedef void (*sequencer_action_func)(const UtilsSeqHdr*);
 
+// Context that holds the current state of a sequencer. 
 typedef struct {
 	const UtilsSeqHdr* base;
 	const UtilsSeqHdr* hdr;
@@ -355,10 +347,45 @@ typedef struct {
 	utils_seq_duration_t timer;
 } UtilsSeqCtx;
 
+// Check if the sequencer is running or halted. 
 bool utilsSeqIsBusy(const UtilsSeqCtx* seq);
 
+// Start running a sequence. Call with a NULL definition to stop. 
 void utilsSeqStart(UtilsSeqCtx* seq, const UtilsSeqHdr* def, uint8_t item_size, sequencer_action_func action);
 
 void utilsSeqService(UtilsSeqCtx* seq);
+
+/* Generic scanner -- check value in regs, usually an ADC channel, scale it and send events when value crosses a threshold.
+	Thresholds divide the input range into regions, each of which has an index starting from zero, the t-state. The threshold function is called
+	 with the current t-state to implement hysteresis. */
+
+typedef uint16_t (*thold_scanner_scaler_func_t)(uint16_t value);
+typedef uint8_t (*thold_scanner_threshold_func_t)(uint8_t tstate, uint16_t value); 	// Outputs a t_state, a zero based value. 
+typedef uint16_t (*thold_scanner_action_delay_func_t)();				// Returns number of ticks before update is published. 
+typedef uint8_t (*thold_scanner_get_tstate_func_t)(const void* arg);
+typedef void (*thold_scanner_set_tstate_func_t)(void* arg, uint8_t value);
+typedef void (*thold_scanner_publish_func_t)(const void* arg, uint8_t value);
+typedef struct {
+    const uint16_t* input_reg;              		// Input register, usually ADC.
+    uint16_t* scaled_reg;             				// Output register for scaled value. 
+    thold_scanner_scaler_func_t scaler;         	// Scaling function, if NULL no scaling
+    thold_scanner_threshold_func_t do_thold;    	// Thresholding function, returns small zero based value
+    thold_scanner_action_delay_func_t delay_get;  	// Function returning delay before tstate update is published. Null implies no delay. 
+    thold_scanner_get_tstate_func_t tstate_get;		// Return the current tstate.
+    thold_scanner_set_tstate_func_t tstate_set; 	// Set the new tstate. 
+    const void* tstate_func_arg;        			// Argument supplied to value_set & value_get funcs. 
+    thold_scanner_publish_func_t publish;           // Function called on thresholded value change. 
+	const void* publish_func_arg;    				// Argument supplied to publish func. 
+} thold_scanner_def_t;
+
+typedef struct {
+	uint16_t check_tstate;						// 16 bit!
+	uint16_t action_timer;
+	bool init_done;
+} thold_scanner_context_t;
+
+void tholdScanInit(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count);
+void tholdScanSample(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count);
+void tholdScanRescan(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count, uint16_t mask);
 
 #endif
