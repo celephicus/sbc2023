@@ -166,20 +166,15 @@ void tholdScanInit(const thold_scanner_def_t* defs, thold_scanner_context_t* ctx
 	memset(ctxs, 0U, sizeof(thold_scanner_context_t) * count);					// Clear the entire ctx array.
 
     fori (count) {
-		thold_scanner_set_tstate_func_t tstate_set = (thold_scanner_set_tstate_func_t)pgm_read_word(&defs[i].tstate_set);
-
 		// Check all values that we can here.
         ASSERT(NULL != pgm_read_ptr(&defs[i].input_reg));
-        ASSERT(NULL != pgm_read_ptr(&defs[i].scaled_reg));
+        ASSERT( (NULL == pgm_read_ptr(&defs[i].scaler)) || (NULL != pgm_read_ptr(&defs[i].scaled_reg)) ); // If scaler func set then output reg must be set.
 		ASSERT(NULL != (thold_scanner_threshold_func_t)pgm_read_ptr(&defs[i].do_thold));
-		ASSERT(NULL != (thold_scanner_action_delay_func_t)pgm_read_ptr(&defs[i].delay_get));
+		// delay_get may be NULL for no delay. 
 		ASSERT(NULL != (thold_scanner_get_tstate_func_t)pgm_read_ptr(&defs[i].tstate_get));
-		ASSERT(NULL != tstate_set);
-  
-		// Initialise tstate to the only value we know is legal. 
-		// ctxs[i].new_tstate = 256U;		// Force update after action delay times out. This value will not fit in 8 bits, so it will always flag as not equal. 
-        void* const tstate_func_arg = (void*)pgm_read_ptr(&defs[i].tstate_func_arg);
-		tstate_set(tstate_func_arg, 0U); 	
+		ASSERT(NULL != (thold_scanner_set_tstate_func_t)pgm_read_ptr(&defs[i].tstate_set));
+		// tstate_func_arg may be NULL.
+		// publish & publish_func_arg may be NULL.
     }
 }
 
@@ -203,7 +198,7 @@ static void do_update_actions(const thold_scanner_def_t* def, thold_scanner_cont
 	if (0U == ctx->action_timer) 			// Check timer, might be loaded with zero for immediate update. 
 		thold_scan_set_new_tstate(def, ctx, ts);
 	else 
-		ctx->check_tstate = (uint16_t)ts;
+		ctx->tstate = ts;
 }
 
 void tholdScanSample(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count) {
@@ -241,7 +236,7 @@ void tholdScanSample(const thold_scanner_def_t* defs, thold_scanner_context_t* c
 			}
 			else {
 				ASSERT(ctxs[i].action_timer >= 1);
-				if (ctxs[i].check_tstate != new_tstate)   				// Check if the tstate has changed from last time we started the action timer.
+				if (ctxs[i].tstate != new_tstate)   				// Check if the tstate has changed from last time we started the action timer.
 					do_update_actions(&defs[i], &ctxs[i], new_tstate);
 				else if (0U == --ctxs[i].action_timer) 				// Check for timeout. 
 					thold_scan_set_new_tstate(&defs[i], &ctxs[i], new_tstate);

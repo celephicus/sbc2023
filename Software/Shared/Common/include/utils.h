@@ -373,13 +373,13 @@ typedef struct {
     thold_scanner_action_delay_func_t delay_get;  	// Function returning delay before tstate update is published. Null implies no delay. 
     thold_scanner_get_tstate_func_t tstate_get;		// Return the current tstate.
     thold_scanner_set_tstate_func_t tstate_set; 	// Set the new tstate. 
-    const void* tstate_func_arg;        			// Argument supplied to value_set & value_get funcs. 
+    void* tstate_func_arg;        					// Argument supplied to value_set & value_get funcs. 
     thold_scanner_publish_func_t publish;           // Function called on thresholded value change. 
 	const void* publish_func_arg;    				// Argument supplied to publish func. 
 } thold_scanner_def_t;
 
 typedef struct {
-	uint16_t check_tstate;						// 16 bit!
+	uint8_t tstate;						
 	uint16_t action_timer;
 	bool init_done;
 } thold_scanner_context_t;
