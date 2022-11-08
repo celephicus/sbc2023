@@ -16,13 +16,13 @@ class Codegen:
 	def dedent(self, cols=4): self.indent(-cols)
 	
 	def message(self, m):
-		print(m, end=' ', file=sys.stderr)
+		print(m, end='', file=sys.stderr)
 	def error(self, msg):
 		self.message(f"Error: {msg}\n")
 		sys.exit(1)
 
 	def begin(self, reader=None):
-		self.message(f"{self.script}: reading input file `{self.infile}'...")
+		self.message(f"{self.script}: reading input file `{self.infile}'... ")
 		try:
 			with open(self.infile, 'rt') as f:
 				if reader is None:

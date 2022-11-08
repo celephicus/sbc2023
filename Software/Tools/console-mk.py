@@ -2,6 +2,7 @@
 # 	case /** . **/ 0xb58b: console_print_signed_decimal(); break;										
 # Lines that match `/** <PRINTABLE-CHARS> **/ 0x<hex-chars>:' have the hex chars replaced with a hash of the printable chars.
 import re, sys, glob
+import codegen
 
 def subber_hash(m):
     HASH_START, HASH_MULT = 5381, 33 # No basis for these numbers, they just seem to work.
@@ -13,14 +14,9 @@ def subber_hash(m):
     return '/** %s **/ 0x%04x' % (w, h)  
 
 for infile in glob.glob(sys.argv[1], recursive=True):
-	text = open(infile, 'rt').read()
-	existing = text
+	cg = codegen.Codegen(infile)
+	text = cg.begin()
 
-	text = re.sub(r'/\*\*\s*(\S+)\s*\*\*/\s*(0[x])?([0-9a-z]*)', subber_hash, text, flags=re.I)
-		
-	if text != existing:    
-		print("Updated file %s." % infile, file=sys.stderr)
-		open(infile, 'wt').write(text)
-	else:
-		print("Skipped file %s as unchanged." % infile, file=sys.stderr)
+	cg.add(re.sub(r'/\*\*\s*(\S+)\s*\*\*/\s*(0[x])?([0-9a-f]*)', subber_hash, text, flags=re.I))
+	cg.end()
 		
