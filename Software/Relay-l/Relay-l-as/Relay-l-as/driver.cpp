@@ -6,9 +6,151 @@
 #include "event.h"
 #include "regs.h"
 #include "dev.h"
+#include "modbus.h"
+#include "console.h"
 #include "driver.h"
+#include "sbc2022_modbus.h"
+FILENUM(2);
 
-// These objects are declared here in order that the NV driver can write them to EEPROM as one block. 
+// MODBUS
+//
+static uint8_t f_modbus_master_comms_timer;
+const uint16_t MODBUS_MASTER_COMMS_TIMEOUT_TICKS = 20;
+static void modbus_master_comms_timer_restart() {
+	f_modbus_master_comms_timer = MODBUS_MASTER_COMMS_TIMEOUT_TICKS;
+	regsWriteMaskFlags(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS, false);
+}
+static void modbus_master_comms_timer_service() {
+	if ((f_modbus_master_comms_timer > 0U) && (0U == -- f_modbus_master_comms_timer))
+		regsWriteMaskFlags(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS, true);
+}
+
+static uint8_t read_holding_register(uint16_t address, uint16_t* value) {
+	if (address < COUNT_REGS) {
+		*value = REGS[address];
+		return 0;
+	}
+	if (SBC2022_MODBUS_REGISTER_RELAY == address) {
+		*value = driverRelayRead();
+		return 0;
+	}
+	*value = (uint16_t)-1;
+	return 1;
+}
+static uint8_t write_holding_register(uint16_t address, uint16_t value) {
+	if (SBC2022_MODBUS_REGISTER_RELAY == address) {
+		driverRelayWrite(value);
+		modbus_master_comms_timer_restart();
+		return 0;
+	}
+	return 1;
+}
+
+void modbus_cb(uint8_t evt) {
+	uint8_t frame[RESP_SIZE];
+	uint8_t frame_len = RESP_SIZE;	// Must call modbusGetResponse() with buffer length set.
+	const bool resp_ovf = modbusGetResponse(&frame_len, frame);
+
+	//gpioSpare1Write(true);
+	// Dump MODBUS...
+	if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS) {
+		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("RECV:"));
+		consolePrint(CFMT_U, evt);
+		if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_DATA) {
+			const uint8_t* p = frame;
+			fori (frame_len)
+			consolePrint(CFMT_X2, *p++);
+			if (resp_ovf)
+			consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OVF"));
+		}
+		consolePrint(CFMT_NL, 0);
+	}
+	
+	// Slaves get requests...
+	if (MODBUS_CB_EVT_REQ_OK == evt) {					// Only respond if we get a request. This will have our slave ID.
+		BufferFrame response;
+		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
+			case MODBUS_FC_WRITE_SINGLE_REGISTER: {	// REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
+				if (8 == frame_len) {
+					const uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
+					const uint16_t value   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
+					write_holding_register(address, value);
+					modbusSlaveSend(frame, frame_len - 2);	// Less 2 for CRC as send appends it.
+				}
+			} break;
+			case MODBUS_FC_READ_HOLDING_REGISTERS: { // REQ: [ID FC=3 addr:16 count:16(max 125)] RESP: [ID FC=3 byte-count value-0:16, ...]
+				if (8 == frame_len) {
+					uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
+					uint16_t count   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
+					bufferFrameReset(&response);
+					bufferFrameAddMem(&response, frame, 2);		// Copy ID & Function Code from request frame.
+					uint16_t byte_count = count * 2;			// Count sent as 16 bits, but bytecount only 8 bits.
+					if (byte_count < (uint16_t)bufferFrameFree(&response) - 2) { // Is space for data and CRC?
+						bufferFrameAdd(&response, (uint8_t)byte_count);
+						while (count--) {
+							uint16_t value;
+							read_holding_register(address++, &value);
+							bufferFrameAddU16(&response, value);
+						}
+						modbusSlaveSend(response.buf, bufferFrameLen(&response));
+					}
+				}
+			} break;
+		}
+	}
+	
+	// Master gets responses...
+	if (MODBUS_CB_EVT_RESP_OK == evt) {
+		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("Response ID:"));
+		consolePrint(CFMT_D|CFMT_M_NO_SEP, frame[MODBUS_FRAME_IDX_FUNCTION]);
+		consolePrint(CFMT_C, ':');
+		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
+			case MODBUS_FC_READ_HOLDING_REGISTERS: { // REQ: [ID FC=3 addr:16 count:16(max 125)] RESP: [ID FC=3 byte-count value-0:16, ...]
+				uint8_t byte_count = frame[MODBUS_FRAME_IDX_DATA];
+				if (((byte_count & 1) == 0) && (frame_len == byte_count + 5)) {
+					for (uint8_t idx = 0; idx < byte_count; idx += 2)
+					consolePrint(CFMT_U, modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA+1+idx]));
+				}
+				else
+				consolePrint(CFMT_STR_P, (console_cell_t)PSTR("corrupt"));
+			} break;
+			case MODBUS_FC_WRITE_SINGLE_REGISTER: // REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
+			if (6 == frame_len)
+			consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OK"));
+			else
+			consolePrint(CFMT_STR_P, (console_cell_t)PSTR("corrupt"));
+			break;
+			default:
+			consolePrint(CFMT_STR_P, (console_cell_t)PSTR("Unknown response"));
+		}
+		consolePrint(CFMT_NL, 0);
+	}
+	
+	//gpioSpare1Write(0);
+}
+
+// Stuff for debugging MODBUS timing.
+void modbus_timing_debug(uint8_t id, uint8_t s) {
+	switch (id) {
+		case MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT: gpioSpare1Write(s); break;
+		case MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT: 	gpioSpare2Write(s); break;
+		case MODBUS_TIMING_DEBUG_EVENT_RX_FRAME: 	gpioSpare3Write(s); break;
+	}
+}
+
+static void modbus_init() {
+	Serial.begin(9600);
+	modbusInit(Serial, GPIO_PIN_RS485_TX_EN, modbus_cb);
+	modbusSetTimingDebugCb(modbus_timing_debug);
+	gpioSpare1SetModeOutput();		// These are used by the RS485 debug cb.
+	gpioSpare2SetModeOutput();
+	gpioSpare3SetModeOutput();
+}
+static void modbus_service() {
+	modbusService();
+	utilsRunEvery(100)
+		modbus_master_comms_timer_service();
+}
 
 // Driver for the blinky LED.
 //
@@ -134,44 +276,117 @@ static void adc_init() {
 }
 static void adc_start() { devAdcStartConversions(); }
 
-// Scanner, send events when values cross thresholds.
-//
-
 static uint16_t scaler_12v_mon(uint16_t raw) { return utilsRescaleU16(raw, 1023, 15000); }
-static uint8_t scanner_thold_12v_mon(uint8_t tstate, uint16_t val) {  return val < (tstate ? 11500 : 1100); }
-static uint16_t scanner_get_action_delay_default() { return 20; }
-static uint8_t get_flag(const void* arg) { return !!(regsFlags() & (uint16_t)arg); }
-static void set_flag(void* arg, uint8_t tstate) { regsWriteMaskFlags((uint16_t)arg, tstate); }
-static void publish_event(const void* arg, uint8_t tstate) {
+static void adc_do_scaling() {
+	// No need for critical section as we have waited for the ADC ISR to sample new values into the input registers, now it is idle.
+	REGS[REGS_IDX_VOLTS_MON_12V_IN] = scaler_12v_mon(REGS[REGS_IDX_ADC_VOLTS_MON_12V_IN]);
+	REGS[REGS_IDX_VOLTS_MON_BUS] = scaler_12v_mon(REGS[REGS_IDX_ADC_VOLTS_MON_BUS]);
 }
+
+// Threshold scanner
+typedef bool (*thold_scanner_threshold_func_t)(bool tstate, uint16_t value); 	// Get new tstate, from value, and current tstate for implementing hysteresis.
+typedef uint16_t (*thold_scanner_action_delay_func_t)();				// Returns number of ticks before update is published.
+typedef struct {	// Define a single scan, always const.
+	uint16_t flags_mask;
+	const void* publish_func_arg;    				// Argument supplied to callback function. 
+    const uint16_t* input_reg;              		// Input register, usually scaled ADC.
+    thold_scanner_threshold_func_t threshold;    	// Thresholding function, returns small zero based value
+    thold_scanner_action_delay_func_t delay_get;  	// Function returning delay before tstate update is published. Null implies no delay. 
+} thold_scanner_def_t;
+
+typedef struct {	// Holds current state of a scan.
+	uint16_t action_timer;
+} thold_scanner_state_t;
+
+typedef void (*thold_scanner_update_cb)(uint16_t mask, const void* arg);	// Callback that a scan has changed state. 
+
+void tholdScanInit(const thold_scanner_def_t* def, thold_scanner_state_t* sst, uint8_t count, thold_scanner_update_cb cb) {
+	memset(sst, 0U, sizeof(thold_scanner_state_t) * count);					// Clear the entire array pf state objects.
+
+	while (count-- > 0U) {
+		const uint16_t mask =  pgm_read_word(&def->flags_mask);
+		// Check all values that we can here.
+        ASSERT(0 != mask);
+		// publish_func_arg may be NULL.
+        ASSERT(NULL != pgm_read_ptr(&def->input_reg));
+		ASSERT(NULL != (thold_scanner_threshold_func_t)pgm_read_ptr(&def->threshold));
+		// delay_get may be NULL for no delay. 
+		if (NULL != cb)
+			cb(mask, pgm_read_ptr(&def->publish_func_arg));
+		def += 1, sst += 1;
+    }
+}
+
+static void thold_scan_publish_update(uint16_t mask, void* cb_arg, thold_scanner_update_cb cb, bool tstate) {
+	regsWriteMaskFlags(mask, tstate);
+	if (NULL != cb)
+		cb(mask, cb_arg);
+}
+
+void tholdScanSample(const thold_scanner_def_t* def, thold_scanner_state_t* sst, uint8_t count, thold_scanner_update_cb cb) {
+	while (count-- > 0U) {
+		const uint16_t mask =  pgm_read_word(&def->flags_mask);
+        const uint16_t input_val = *(const uint16_t*)pgm_read_ptr(&def->input_reg);	        // Read input value from register. 
+		
+		// Get new state by thresholding the input value with a custom function, which is supplied the old tstate so it can set the threshold hysteresis. 
+		const bool current_tstate = regsFlags() & mask;	// Get current tstate.
+        const bool new_tstate = ((thold_scanner_threshold_func_t)pgm_read_ptr(&def->threshold))(current_tstate, input_val);
+
+		if (current_tstate != new_tstate)  {		 						// If the tstate has changed...
+			const thold_scanner_action_delay_func_t delay_get = (thold_scanner_action_delay_func_t)pgm_read_ptr(&def->delay_get);
+			sst->action_timer = (NULL != delay_get) ? delay_get() : 0U;
+			if (0U == sst->action_timer)			// Check, might be loaded with zero for immediate update. 
+				thold_scan_publish_update(mask, pgm_read_ptr(&def->publish_func_arg), cb, new_tstate);
+		}
+		else if ((sst->action_timer > 0U) && (0U == --sst->action_timer)) 	// If state has not changed but timer has timed out, update as stable during delay.
+			thold_scan_publish_update(mask, pgm_read_ptr(&def->publish_func_arg), cb, new_tstate);
+		def += 1, sst += 1;
+    }
+}
+
+void tholdScanRescan(const thold_scanner_def_t* def, thold_scanner_state_t* sst, uint8_t count, thold_scanner_update_cb cb, uint16_t scan_mask) {
+	while (count-- > 0U) {
+		const uint16_t mask =  pgm_read_word(&def->flags_mask);
+        if (scan_mask & mask) {     // Do we have a set bit in mask?
+			thold_scan_publish_update(mask, pgm_read_ptr(&def->publish_func_arg), cb, regsFlags() & mask);
+			sst->action_timer = 0U;		// Since we've just updated, reset timer to prevent doing it again if it times out. 
+			
+			// Early exit if we've done our mask. 
+			scan_mask &= ~mask;
+			if (0U == scan_mask)
+				break;
+		}
+		def += 1, sst += 1;
+    }
+}
+
+static bool scanner_thold_12v_mon(bool tstate, uint16_t val) {  return val < (tstate ? 11500 : 1100); }
+static uint16_t scanner_get_delay() { return 10; }
 static const thold_scanner_def_t SCANDEFS[] PROGMEM = {
-	{	// DRIVER_SCAN_MASK_DC_IN_UNDERVOLT
-		&REGS[REGS_IDX_ADC_VOLTS_MON_12V_IN],
-		&REGS[REGS_IDX_VOLTS_MON_12V_IN], scaler_12v_mon,
+	{	
+		REGS_FLAGS_MASK_DC_IN_VOLTS_LOW, (const void*)DRIVER_LED_PATTERN_DC_IN_VOLTS_LOW,
+		&REGS[REGS_IDX_VOLTS_MON_12V_IN],
 		scanner_thold_12v_mon,
-		scanner_get_action_delay_default,
-		get_flag, set_flag, (void*)REGS_FLAGS_MASK_DC_IN_VOLTS_LOW,
-		publish_event,
-		(const void*)EV_SCANNER_12V_IN_UNDERVOLT
+		scanner_get_delay,
 	},
-	{	// DRIVER_SCAN_MASK_BUS_UNDERVOLT
-		&REGS[REGS_IDX_ADC_VOLTS_MON_BUS],
-		&REGS[REGS_IDX_VOLTS_MON_BUS], scaler_12v_mon,
+	{	
+		REGS_FLAGS_MASK_BUS_VOLTS_LOW, (const void*)DRIVER_LED_PATTERN_BUS_VOLTS_LOW,
+		&REGS[REGS_IDX_VOLTS_MON_BUS], 
 		scanner_thold_12v_mon,
-		scanner_get_action_delay_default,
-		get_flag, set_flag, (void*)REGS_FLAGS_MASK_BUS_VOLTS_LOW,
-		publish_event,
-		(const void*)EV_SCANNER_BUS_UNDERVOLT
+		scanner_get_delay,
 	},
-	//
 };
 
-thold_scanner_context_t f_scan_contexts[UTILS_ELEMENT_COUNT(SCANDEFS)];
+static void thold_scanner_cb(uint16_t mask, const void* arg) {
+	(void)mask;
+	(void)arg;
+}
+	
+thold_scanner_state_t f_scan_states[UTILS_ELEMENT_COUNT(SCANDEFS)];
 
-static void scanner_init() { tholdScanInit(SCANDEFS, f_scan_contexts, UTILS_ELEMENT_COUNT(SCANDEFS)); }
-static void scanner_scan() { tholdScanSample(SCANDEFS, f_scan_contexts, UTILS_ELEMENT_COUNT(SCANDEFS)); }
-void driverRescan(uint16_t mask) { tholdScanRescan(SCANDEFS, f_scan_contexts, UTILS_ELEMENT_COUNT(SCANDEFS), mask); }
-
+static void scanner_init() { tholdScanInit(SCANDEFS, f_scan_states, UTILS_ELEMENT_COUNT(SCANDEFS), thold_scanner_cb); }
+static void scanner_scan() { tholdScanSample(SCANDEFS, f_scan_states, UTILS_ELEMENT_COUNT(SCANDEFS), thold_scanner_cb); }
+void driverRescan(uint16_t mask) { tholdScanRescan(SCANDEFS, f_scan_states, UTILS_ELEMENT_COUNT(SCANDEFS), thold_scanner_cb, mask); }
 
 // Externals
 void driverInit() {
@@ -183,22 +398,22 @@ void driverInit() {
 	adc_init();
 	scanner_init();
 	relay_driver_init();
+	modbus_init();
 }
 
 void driverService() {
+	modbus_service();
 	utilsRunEvery(50) { 
 		adc_start();					
 		led_service();		
 	}
 	relay_driver_pat_watchdog();
-	if (devAdcIsConversionDone())		// Run scanner when all ADC channels converted. 
+	if (devAdcIsConversionDone()) {		// Run scanner when all ADC channels converted. 
+		adc_do_scaling();
 		scanner_scan();
+	}
 }
 
 #if 0
-// Not defined so debug will just loop and do nothing.
-// void commonDebugLocal(int fileno, int lineno, int errorno) { while(1) { wdt(); } }
-
 uint16_t threadGetTicks() { return (uint16_t)millis(); }
-
 #endif

@@ -20,6 +20,7 @@ uint32_t l_test_millis;
 #endif
 
 #include "utils.h"
+FILENUM(100);
 
 // One global instance of lock for Critical Sections. 
 UTILS_DECLARE_CRITICAL_MUTEX();
@@ -45,22 +46,22 @@ uint16_t utilsChecksumFletcher16(uint8_t const *data, size_t count) {
     return (sum2 << 8) | sum1;
 }
 
-void utilsChecksumEepromInit(utils_checksum_eeprom_state_t* s) {
+void utilsChecksumEepromInit(UtilsChecksumEepromState* s) {
     s->sum1 = 0x12;
     s->sum2 = 0x34;
 }
-void utilsChecksumEepromUpdate(utils_checksum_eeprom_state_t* s, const void *data, size_t count) {
+void utilsChecksumEepromUpdate(UtilsChecksumEepromState* s, const void *data, size_t count) {
 	const uint8_t* cdata = (const uint8_t*)data;
     while (count-- > 0) {
         s->sum1 += *cdata++;
         s->sum2 += s->sum1;
     }
 }
-uint16_t utilsChecksumEepromGet(utils_checksum_eeprom_state_t* s) {
+uint16_t utilsChecksumEepromGet(UtilsChecksumEepromState* s) {
     return ((s->sum2) << 8) | (s->sum1);
 }
 uint16_t utilsChecksumEeprom(const void *data, size_t count) {
-    utils_checksum_eeprom_state_t s;
+    UtilsChecksumEepromState s;
 
     utilsChecksumEepromInit(&s);
     utilsChecksumEepromUpdate(&s, data, count);
@@ -88,7 +89,7 @@ bool utilsMultiThreshold(const uint16_t* thresholds, uint8_t count, uint16_t hys
 
 bool utilsSeqIsBusy(const UtilsSeqCtx* seq) { return (NULL != seq->hdr); }
 
-UTILS_STATIC_ASSERT(sizeof(utils_seq_duration_t) == 2);  // Make sure that we use the correct pgm_read_xxx macro.
+UTILS_STATIC_ASSERT(sizeof(t_utils_seq_duration) == 2);  // Make sure that we use the correct pgm_read_xxx macro.
 static void seq_load_timer(UtilsSeqCtx* seq) {	// Load timer with start value.
 	seq->timer = pgm_read_word(&seq->hdr->duration);
 }
@@ -125,7 +126,7 @@ static void seq_update(UtilsSeqCtx* seq) {
 		seq_update(seq);						// Whatever we did, execute it.
 	}
     else if (UTILS_SEQ_LOOP_MASK & seq->timer) {
-		seq->loop_counter = utilsLimitMin((utils_seq_duration_t)1U, (utils_seq_duration_t)((seq->timer & ~UTILS_SEQ_LOOP_MASK) - 1));
+		seq->loop_counter = utilsLimitMin((t_utils_seq_duration)1U, (t_utils_seq_duration)((seq->timer & ~UTILS_SEQ_LOOP_MASK) - 1));
 		seq_next_def(seq);						// Advance to next instruction since we will have to execute it.
 		seq->loop_start = seq->hdr;				// Record address of instruction.
 		seq_update(seq);						// And execute it.
@@ -158,24 +159,23 @@ void utilsSeqService(UtilsSeqCtx* seq) {
 		}
 	}
 }
-
+#if 0
 // General purpose scaler & thresholder & warning generator. 
-#define ASSERT(cond_) /* empty */
 
 void tholdScanInit(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count) {
 	memset(ctxs, 0U, sizeof(thold_scanner_context_t) * count);					// Clear the entire ctx array.
 
-    fori (count) {
+	fori (count) {
 		// Check all values that we can here.
-        ASSERT(NULL != pgm_read_ptr(&defs[i].input_reg));
-        ASSERT( (NULL == pgm_read_ptr(&defs[i].scaler)) || (NULL != pgm_read_ptr(&defs[i].scaled_reg)) ); // If scaler func set then output reg must be set.
+		ASSERT(NULL != pgm_read_ptr(&defs[i].input_reg));
+		ASSERT( (NULL == pgm_read_ptr(&defs[i].scaler)) || (NULL != pgm_read_ptr(&defs[i].scaled_reg)) ); // If scaler func set then output reg must be set.
 		ASSERT(NULL != (thold_scanner_threshold_func_t)pgm_read_ptr(&defs[i].do_thold));
 		// delay_get may be NULL for no delay. 
 		ASSERT(NULL != (thold_scanner_get_tstate_func_t)pgm_read_ptr(&defs[i].tstate_get));
 		ASSERT(NULL != (thold_scanner_set_tstate_func_t)pgm_read_ptr(&defs[i].tstate_set));
 		// tstate_func_arg may be NULL.
 		// publish & publish_func_arg may be NULL.
-    }
+	}
 }
 
 static void thold_scan_publish_update(const thold_scanner_def_t* def, uint8_t tstate) {
@@ -202,27 +202,27 @@ static void do_update_actions(const thold_scanner_def_t* def, thold_scanner_cont
 }
 
 void tholdScanSample(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count) {
-    fori (count) {
-        // Read input value from register. 
-        const uint16_t* input_reg = (const uint16_t*)pgm_read_ptr(&defs[i].input_reg);	
-        uint16_t input_val;
+	fori (count) {
+		// Read input value from register. 
+		const uint16_t* input_reg = (const uint16_t*)pgm_read_ptr(&defs[i].input_reg);	
+		uint16_t input_val;
 		CRITICAL_START();
 		input_val = *input_reg;		// Assume input reg updated by ISR. 
-        CRITICAL_END();
+		CRITICAL_END();
 		
 		// If we have a scaling function defined, use it to scale the input value (result replaces input) and write result to output register. 
 		thold_scanner_scaler_func_t scaler = (thold_scanner_scaler_func_t)pgm_read_ptr(&defs[i].scaler);
-        if (NULL != scaler) {
-            input_val = scaler(input_val);
-            uint16_t* scaled_reg = (uint16_t*)pgm_read_ptr(&defs[i].scaled_reg);	
-            *scaled_reg = input_val;
-        }
+		if (NULL != scaler) {
+			input_val = scaler(input_val);
+			uint16_t* scaled_reg = (uint16_t*)pgm_read_ptr(&defs[i].scaled_reg);	
+			*scaled_reg = input_val;
+		}
 		
 		// Get new state by thresholding the input value with a custom function, which is supplied the old tstate so it can set the threshold hysteresis. 
 		const thold_scanner_get_tstate_func_t tstate_get = (thold_scanner_get_tstate_func_t)pgm_read_ptr(&defs[i].tstate_get);  
 		const void* const tstate_func_arg = (const void*)pgm_read_ptr(&defs[i].tstate_func_arg);
 		const uint8_t current_tstate = tstate_get(tstate_func_arg);	// Get current tstate.
-        const uint8_t new_tstate = ((thold_scanner_threshold_func_t)pgm_read_ptr(&defs[i].do_thold))(current_tstate, input_val);
+		const uint8_t new_tstate = ((thold_scanner_threshold_func_t)pgm_read_ptr(&defs[i].do_thold))(current_tstate, input_val);
 
 		// If the initial update flag is clear then we have to fake a change in the tstate to get the initial update of "unknown" to the current tstate. 
 		if (!ctxs[i].init_done) {										// Are we running for the first time?
@@ -241,14 +241,14 @@ void tholdScanSample(const thold_scanner_def_t* defs, thold_scanner_context_t* c
 				else if (0U == --ctxs[i].action_timer) 				// Check for timeout. 
 					thold_scan_set_new_tstate(&defs[i], &ctxs[i], new_tstate);
 			}	
-        }
-    }
+		}
+	}
 }
 
 void tholdScanRescan(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count, uint16_t mask) {
-    uint16_t m = 1U;
-    fori (count) {
-        if (m & mask) {     // Do we have a set bit in mask?
+	uint16_t m = 1U;
+	fori (count) {
+		if (m & mask) {     // Do we have a set bit in mask?
 			const void* const tstate_func_arg = (const void*)pgm_read_ptr(&defs[i].tstate_func_arg);
 			const thold_scanner_get_tstate_func_t tstate_get = (thold_scanner_get_tstate_func_t)pgm_read_ptr(&defs[i].tstate_get);  
 			// No need to validate, already done in tholdScanSample().
@@ -261,8 +261,9 @@ void tholdScanRescan(const thold_scanner_def_t* defs, thold_scanner_context_t* c
 				break;
 			m <<= 1;
 		}
-    }
+	}
 }
+#endif
 
 // Minimal implementation of strtoul for an unsigned. Heavily adapted from AVR libc.
 bool utilsStrtoui(unsigned* n, const char* str, char** endptr, unsigned base) {

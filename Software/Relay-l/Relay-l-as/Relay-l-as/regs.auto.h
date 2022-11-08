@@ -23,8 +23,9 @@ enum {
 enum {
 	REGS_FLAGS_MASK_DC_IN_VOLTS_LOW = (int)0x1,
 	REGS_FLAGS_MASK_BUS_VOLTS_LOW = (int)0x2,
-	REGS_FLAGS_MASK_EEPROM_READ_BAD_0 = (int)0x4,
-	REGS_FLAGS_MASK_EEPROM_READ_BAD_1 = (int)0x8,
+	REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS = (int)0x4,
+	REGS_FLAGS_MASK_EEPROM_READ_BAD_0 = (int)0x2000,
+	REGS_FLAGS_MASK_EEPROM_READ_BAD_1 = (int)0x4000,
 	REGS_FLAGS_MASK_WATCHDOG_RESTART = (int)0x8000,
 };
 
@@ -79,8 +80,9 @@ enum {
     "\r\nFlags:"                                                                        \
     "\r\n DC_IN_VOLTS_LOW: 0x1 (External DC power volts low,)"                          \
     "\r\n BUS_VOLTS_LOW: 0x2 (Bus volts low,)"                                          \
-    "\r\n EEPROM_READ_BAD_0: 0x4 (EEPROM bank 0 corrupt.)"                              \
-    "\r\n EEPROM_READ_BAD_1: 0x8 (EEPROM bank 1 corrupt.)"                              \
+    "\r\n MODBUS_MASTER_NO_COMMS: 0x4 (No comms from MODBUS master)"                    \
+    "\r\n EEPROM_READ_BAD_0: 0x2000 (EEPROM bank 0 corrupt.)"                           \
+    "\r\n EEPROM_READ_BAD_1: 0x4000 (EEPROM bank 1 corrupt.)"                           \
     "\r\n WATCHDOG_RESTART: 0x8000 (Whoops.)"                                           \
     "\r\nEnables:"                                                                      \
     "\r\n DUMP_MODBUS_EVENTS: 0x1 (Dump MODBUS event value.)"                           \

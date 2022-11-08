@@ -138,10 +138,10 @@ static inline void buffer##name_##AddU16(Buffer##name_* q, uint16_t x) { 							
 uint16_t utilsChecksumFletcher16(uint8_t const *data, size_t count);
 
 // Simple very fast checksum for EEPROM, guaranteed to note changing values to 0x00 or 0xff, which are the most likely errors.
-typedef struct { uint8_t sum1, sum2; } utils_checksum_eeprom_state_t;
-void utilsChecksumEepromInit(utils_checksum_eeprom_state_t* s);
-void utilsChecksumEepromUpdate(utils_checksum_eeprom_state_t* s, const void *data, size_t count);
-uint16_t utilsChecksumEepromGet(utils_checksum_eeprom_state_t* s);
+typedef struct { uint8_t sum1, sum2; } UtilsChecksumEepromState;
+void utilsChecksumEepromInit(UtilsChecksumEepromState* s);
+void utilsChecksumEepromUpdate(UtilsChecksumEepromState* s, const void *data, size_t count);
+uint16_t utilsChecksumEepromGet(UtilsChecksumEepromState* s);
 
 // Simple version of the above.
 uint16_t utilsChecksumEeprom(const void *data, size_t count);
@@ -321,16 +321,16 @@ bool utilsStrtoui(unsigned* n, const char *str, char **endptr, unsigned base);
    example a LED to display a colour sequence, then hold on a colour.
    If the last duration value is UTILS_SEQ_REPEAT then the action function is NOT called for the associated data, and the sequence restarts.
    UTILS_SEQ_LOOP(N) & UTILS_SEQ_LOOP_END allow a bit of the sequence to be repeated N times. */
-typedef uint16_t utils_seq_duration_t;
-const utils_seq_duration_t UTILS_SEQ_END = 			0U;
-const utils_seq_duration_t UTILS_SEQ_REPEAT = 		0xffff;
-const utils_seq_duration_t UTILS_SEQ_LOOP_MASK = 	0x8000;
+typedef uint16_t t_utils_seq_duration;
+const t_utils_seq_duration UTILS_SEQ_END = 			0U;
+const t_utils_seq_duration UTILS_SEQ_REPEAT = 		0xffff;
+const t_utils_seq_duration UTILS_SEQ_LOOP_MASK = 	0x8000;
 #define					   UTILS_SEQ_LOOP(n_) 		(UTILS_SEQ_LOOP_MASK | (n_))
-const utils_seq_duration_t UTILS_SEQ_LOOP_END = 	0xfffe;
+const t_utils_seq_duration UTILS_SEQ_LOOP_END = 	0xfffe;
 
 // We encode what we want the sequencer to do in the duration member. Note that it cannot have the MSB set. 
 typedef struct {
-	utils_seq_duration_t duration;
+	t_utils_seq_duration duration;
 } UtilsSeqHdr;
 
 // Casts UtilsSeqHdr to subtype, extracts values and actions them. If handed a NULL pointer then turn off the thing.
@@ -341,10 +341,10 @@ typedef struct {
 	const UtilsSeqHdr* base;
 	const UtilsSeqHdr* hdr;
 	const UtilsSeqHdr* loop_start;
-	utils_seq_duration_t loop_counter;
+	t_utils_seq_duration loop_counter;
 	uint8_t item_size;		// Size of derived type that has a UtilsSeqHdr as first item.
 	sequencer_action_func action;
-	utils_seq_duration_t timer;
+	t_utils_seq_duration timer;
 } UtilsSeqCtx;
 
 // Check if the sequencer is running or halted. 
@@ -355,6 +355,7 @@ void utilsSeqStart(UtilsSeqCtx* seq, const UtilsSeqHdr* def, uint8_t item_size, 
 
 void utilsSeqService(UtilsSeqCtx* seq);
 
+#if 0
 /* Generic scanner -- check value in regs, usually an ADC channel, scale it and send events when value crosses a threshold.
 	Thresholds divide the input range into regions, each of which has an index starting from zero, the t-state. The threshold function is called
 	 with the current t-state to implement hysteresis. */
@@ -387,5 +388,73 @@ typedef struct {
 void tholdScanInit(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count);
 void tholdScanSample(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count);
 void tholdScanRescan(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count, uint16_t mask);
+#endif
+// Runtime assertions
+//
+
+// From Niall Murphy article "Assert Yourself". Gives each file a guaranteed unique number by misusing the linker. Usage: FILENUM(33);
+#define FILENUM(num_) 									\
+    void filenum_##num_##_(void) __attribute__ ((unused));	\
+    void filenum_##num_##_(void) {}							\
+    enum { F_NUM = (num_) }
+
+// Define this somewhere, it can be used to log a runtime error, and should not return.
+void debugRuntimeError(int fileno, int lineno, int errorno) __attribute__ ((noreturn));
+
+// Convenience function to raise a runtime error...
+#define RUNTIME_ERROR(_errorno) debugRuntimeError(F_NUM, __LINE__, (_errorno))
+
+// Check a condition and raise a runtime error if it is not true.
+#define ALLEGE(_cond) if (_cond) {} else { RUNTIME_ERROR(0); }
+
+// Our assert macro does not print the condition that failed, contrary to the usual version. This is intentional, it conserves
+// string space on the target, and the user just has to report the file & line numbers.
+#ifndef NDEBUG  /* A release build defines this macro, a debug build does not. */ 
+#define ASSERT(cond_) do { 			\
+    if (!(cond_))  					\
+        RUNTIME_ERROR(0); 			\
+} while (0)
+#else   
+    #define ASSERT(cond_) do { /* empty */ } while (0)
+#endif
+
+#if 0
+/* Trace macros, used for printing verbose formatted output, probably not on small targets.  Designed to compile out if required. 
+   If CFG_DEBUG_GET_TRACE_LEVEL is constant then the optimiser will remove calls. Else it can be made a register.
+   Trace levels are stolen from the Python logging lib. */   
+   
+#if CFG_WANT_DEBUG_TRACE
+#if !defined(CFG_DEBUG_GET_TRACE_LEVEL) || !defined(CFG_DEBUG_TRACE_OUTPUT)
+#error "CFG_DEBUG_GET_TRACE_LEVEL() & CFG_DEBUG_TRACE_OUTPUT() must be defined if using TRACE()"
+#endif
+
+// Dump trace info with no extra text if level >= current level.
+#define TRACE_RAW(_level, _fmt, ...)  \
+  do { if (CFG_DEBUG_GET_TRACE_LEVEL() >= (_level)) CFG_DEBUG_TRACE_OUTPUT("\r\nTRACE: "  _fmt,  ## __VA_ARGS__); } while (0)
+	
+// Trace with file number & line info.
+#define TRACE(_level, _type, _fmt, ...) \
+  TRACE_RAW(_level, "%u:" STR(__LINE__) " " _type ": " _fmt, F_NUM, ## __VA_ARGS__); 
+
+#else
+#define TRACE(_level, _type, _fmt, ...) 	((void)0)
+#define TRACE_RAW(_fmt, ...)		 	((void)0)
+#endif 
+
+enum {
+	DEBUG_TRACE_LEVEL_CRITICAL =	50,		// Something really bad has happened. You will not go to space today.
+	DEBUG_TRACE_LEVEL_ERROR = 		40,		// Something has failed, but maybe we can keep going.
+	DEBUG_TRACE_LEVEL_WARNING = 	30,		// Something isn't right.
+	DEBUG_TRACE_LEVEL_INFO = 		20,		// Something interesting has happened.
+	DEBUG_TRACE_LEVEL_DEBUG = 		10,		// Something interesting to programmers only...
+};
+
+#define TRACE_XXX(_xxx, _fmt, ...) TRACE(CONCAT(DEBUG_TRACE_LEVEL_, _xxx), #_xxx, _fmt, ## __VA_ARGS__) 
+#define TRACE_CRITICAL(_fmt, ...) 	TRACE_XXX(CRITICAL, _fmt, ## __VA_ARGS__)
+#define TRACE_ERROR(_fmt, ...) 		TRACE_XXX(ERROR, _fmt, ## __VA_ARGS__)
+#define TRACE_WARNING(_fmt, ...) 	TRACE_XXX(WARNING, _fmt, ## __VA_ARGS__)
+#define TRACE_INFO(_fmt, ...) 		TRACE_XXX(INFO, _fmt, ## __VA_ARGS__)
+#define TRACE_DEBUG(_fmt, ...) 		TRACE_XXX(DEBUG, _fmt, ## __VA_ARGS__)
+#endif
 
 #endif

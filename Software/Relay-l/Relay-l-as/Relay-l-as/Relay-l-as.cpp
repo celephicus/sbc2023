@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <SoftwareSerial.h>
+#include <avr/wdt.h>
 
 #include "project_config.h"
 #include "Relay-gpio.h"
@@ -11,141 +12,9 @@
 #include "modbus.h"
 #include "driver.h"
 #include "sbc2022_modbus.h"
+#include "sm_supervisor.h"
+FILENUM(1);
 
-
-// MODBUS
-//
-static uint8_t read_holding_register(uint16_t address, uint16_t* value) { 
-	if (address < COUNT_REGS) {
-		*value = REGS[address];
-		return 0;
-	}
-	if (SBC2022_MODBUS_REGISTER_RELAY == address) {
-		*value = driverRelayRead();
-		return 0;
-	}
-	*value = (uint16_t)-1;
-	return 1;
-}
-static uint8_t write_holding_register(uint16_t address, uint16_t value) { 
-	if (SBC2022_MODBUS_REGISTER_RELAY == address) {
-		driverRelayWrite(value);
-		//eventPublish(EV_MODBUS_MASTER_COMMS);
-		return 0;
-	}
-	return 1;
-}
-
-void modbus_cb(uint8_t evt) { 
-	uint8_t frame[RESP_SIZE];
-	uint8_t frame_len = RESP_SIZE;	// Must call modbusGetResponse() with buffer length set. 
-	const bool resp_ovf = modbusGetResponse(&frame_len, frame);
-
-	//gpioSpare1Write(true);
-	// Dump MODBUS...
-	if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS) {
-		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("RECV:")); 
-		consolePrint(CFMT_U, evt);
-		if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_DATA) {
-			const uint8_t* p = frame;
-			fori (frame_len)
-				consolePrint(CFMT_X2, *p++);
-			if (resp_ovf)
-				consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OVF"));
-		}
-		consolePrint(CFMT_NL, 0);
-	}
-	
-	// Slaves get requests...
- 	if (MODBUS_CB_EVT_REQ_OK == evt) {					// Only respond if we get a request. This will have our slave ID.
-		BufferFrame response;
-		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
-			case MODBUS_FC_WRITE_SINGLE_REGISTER: {	// REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
-				if (8 == frame_len) {
-					const uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
-					const uint16_t value   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
-					write_holding_register(address, value);
-					modbusSlaveSend(frame, frame_len - 2);	// Less 2 for CRC as send appends it. 
-				}
-			} break;
-			case MODBUS_FC_READ_HOLDING_REGISTERS: { // REQ: [ID FC=3 addr:16 count:16(max 125)] RESP: [ID FC=3 byte-count value-0:16, ...]
-				if (8 == frame_len) {
-					uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
-					uint16_t count   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
-					bufferFrameReset(&response);
-					bufferFrameAddMem(&response, frame, 2);		// Copy ID & Function Code from request frame. 
-					uint16_t byte_count = count * 2;			// Count sent as 16 bits, but bytecount only 8 bits. 
-					if (byte_count < (uint16_t)bufferFrameFree(&response) - 2) { // Is space for data and CRC?
-						bufferFrameAdd(&response, (uint8_t)byte_count);
-						while (count--) {
-							uint16_t value;
-							read_holding_register(address++, &value);
-							bufferFrameAddU16(&response, value);
-						}
-						modbusSlaveSend(response.buf, bufferFrameLen(&response));
-					}
-				}
-			} break;
-		}
-	}
-			
-	// Master gets responses...
-	if (MODBUS_CB_EVT_RESP_OK == evt) {
-		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("Response ID:"));
-		consolePrint(CFMT_D|CFMT_M_NO_SEP, frame[MODBUS_FRAME_IDX_FUNCTION]);
-		consolePrint(CFMT_C, ':');
-		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
-			case MODBUS_FC_READ_HOLDING_REGISTERS: { // REQ: [ID FC=3 addr:16 count:16(max 125)] RESP: [ID FC=3 byte-count value-0:16, ...]
-				uint8_t byte_count = frame[MODBUS_FRAME_IDX_DATA];
-				if (((byte_count & 1) == 0) && (frame_len == byte_count + 5)) {
-					for (uint8_t idx = 0; idx < byte_count; idx += 2)
-						consolePrint(CFMT_U, modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA+1+idx]));
-				}
-				else
-					consolePrint(CFMT_STR_P, (console_cell_t)PSTR("corrupt"));
-				} break;
-			case MODBUS_FC_WRITE_SINGLE_REGISTER: // REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
-				if (6 == frame_len)
-					consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OK"));
-				else
-					consolePrint(CFMT_STR_P, (console_cell_t)PSTR("corrupt"));
-				break;
-			default:
-				consolePrint(CFMT_STR_P, (console_cell_t)PSTR("Unknown response"));
-			}
-		consolePrint(CFMT_NL, 0);
-	}
-	
-	//gpioSpare1Write(0);
-}
-
-// Stuff for debugging MODBUS timing.
-void modbus_timing_debug(uint8_t id, uint8_t s) {
-	switch (id) {
-	case MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT: gpioSpare1Write(s); break;
-	case MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT: 	gpioSpare2Write(s); break;
-	case MODBUS_TIMING_DEBUG_EVENT_RX_FRAME: 	gpioSpare3Write(s); break;
-	}
-}		
-
-static BufferFrame f_modbus_autosend_buf;
-
-static void modbus_init() {
-	Serial.begin(9600);
-	modbusInit(Serial, GPIO_PIN_RS485_TX_EN, modbus_cb);
-	modbusSetTimingDebugCb(modbus_timing_debug);
-	bufferFrameReset(&f_modbus_autosend_buf);
-	gpioSpare1SetModeOutput();		// These are used by the RS485 debug cb.
-	gpioSpare2SetModeOutput();
-	gpioSpare3SetModeOutput();
-}
-static void modbus_service() {
-	modbusService();
-	utilsRunEvery(1000) {
-		if (bufferFrameLen(&f_modbus_autosend_buf))
-			modbusMasterSend(f_modbus_autosend_buf.buf, bufferFrameLen(&f_modbus_autosend_buf));
-	}
-}
 
 // Console
 static void print_banner() { consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CFG_BANNER_STR)); }	
@@ -172,10 +41,6 @@ static bool console_cmds_user(char* cmd) {
         uint8_t rly = console_u_pop();
         modbusRelayBoardWrite(slave_id, rly, console_u_pop());
       } break;
-	case /** AUTO-SEND **/ 0x97fb: { 
-	    const uint8_t* d = (const uint8_t*)console_u_pop(); 
-		if (d) memcpy(f_modbus_autosend_buf.buf, d, *d+1); else bufferFrameReset(&f_modbus_autosend_buf);
-	  } break;
 
     case /** WRITE **/ 0xa8f8: { // (val addr sl -) REQ: [FC=6 addr:16 value:16] -- RESP: [FC=6 addr:16 value:16]
 		uint8_t req[RESP_SIZE];
@@ -226,8 +91,9 @@ static bool console_cmds_user(char* cmd) {
 	// Runtime errors...
     case /** RESTART **/ 0x7092: while (1) continue; break;
     case /** CLI **/ 0xd063: cli(); break;
-//    case /** ABORT **/ 0xfeaf: RUNTIME_ERROR(console_u_pop()); break;
-
+    case /** ABORT **/ 0xfeaf: RUNTIME_ERROR(console_u_pop()); break;
+	case /** ASSERT **/ 0x5007: ASSERT(console_u_pop()); break;
+	
 	// EEPROM data
 	case /** NV-DEFAULT **/ 0xfcdb: driverNvSetDefaults(); break;
 	case /** NV-W **/ 0xa8c7: driverNvWrite(); break;
@@ -311,6 +177,8 @@ static bool service_event_trace() {
 	return false;
 }
 
+static SmSupervisorContext sm_supervisor_context;
+
 void setup() {
 	const uint16_t restart_rc = devWatchdogInit();
 	regsSetDefaultRange(0, REGS_START_NV_IDX);		// Set volatile registers. 
@@ -318,23 +186,51 @@ void setup() {
 	eventInit();
 	REGS[REGS_IDX_RESTART] = restart_rc;
 	console_init();
-	modbus_init();
+  	eventSmInit(smSupervisor, (EventSmContextBase*)&sm_supervisor_context, 0);
 }
 
+static void service_blinky_led_warnings() {
+	if (regsFlags() & REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS)
+		driverSetLedPattern(DRIVER_LED_PATTERN_NO_COMMS);
+	else if (regsFlags() & REGS_FLAGS_MASK_DC_IN_VOLTS_LOW)
+		driverSetLedPattern(DRIVER_LED_PATTERN_DC_IN_VOLTS_LOW);
+	else if (regsFlags() & REGS_FLAGS_MASK_BUS_VOLTS_LOW)
+		driverSetLedPattern(DRIVER_LED_PATTERN_BUS_VOLTS_LOW);
+	else
+		driverSetLedPattern(DRIVER_LED_PATTERN_OK);
+}
 void loop() {
 	devWatchdogPat(DEV_WATCHDOG_MASK_MAINLOOP);
 	consoleService();
-	modbus_service();
 	driverService();
 	utilsRunEvery(100) {				// Basic 100ms timebase.
 		service_regs_dump();
+		eventSmTimerService();
+		service_blinky_led_warnings();
 	}
 	service_event_trace();
 
 	// Dispatch events. 
     t_event ev;
 	while (EV_NIL != (ev = eventGet())) {   // Read events until there are no more left.
-		(void)ev;
+	  	eventSmService(smSupervisor, (EventSmContextBase*)&sm_supervisor_context, ev);
+	}
+}
+
+void debugRuntimeError(int fileno, int lineno, int errorno) {
+	wdt_reset();
+	
+	// Write a message to the serial port.
+	consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CONSOLE_OUTPUT_NEWLINE_STR CONSOLE_OUTPUT_NEWLINE_STR "Abort:"));
+	consolePrint(CFMT_U, (console_ucell_t)fileno);
+	consolePrint(CFMT_U, (console_ucell_t)lineno);
+	consolePrint(CFMT_U, (console_ucell_t)errorno);
+	consolePrint(CFMT_NL, 0);
+	
+	// Sit & spin.
+	while (1) {
+		// TODO: Make everything safe.
+		wdt_reset();
 	}
 }
 
@@ -382,16 +278,12 @@ public:
 	}	
 };
 
-static SmSupervisorContext sm_supervisor_context;
-
 void setup() {
 	commonInit();
 	modbusSetSlaveId(SBC2022_MODBUS_SLAVE_ADDRESS_RELAY);
 	console_init();
 	driverInit();
   
-  	eventInitSm(smSupervisor, (EventSmContextBase*)&sm_supervisor_context, 0);
-
 	pinMode(GPIO_PIN_SPARE_1, OUTPUT);
 	pinMode(GPIO_PIN_SPARE_2, OUTPUT);
 	pinMode(GPIO_PIN_SPARE_3, OUTPUT);
@@ -410,7 +302,6 @@ void loop() {
 		eventTimerService();
 	}
 	
-		eventServiceSm(smSupervisor, (EventSmContextBase*)&sm_supervisor_context, &ev);
 	}
 }
 #endif
