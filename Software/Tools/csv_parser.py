@@ -10,11 +10,8 @@ class CSVparseError(Exception):
 	pass
 	
 class CSVparse:
-	def __init__(self, fn):
-		self.fn = fn
-		self.lineno = 0
-		self.data = []
-		
+	def __init__(self):
+		pass
 	def _validate_default(self, d):					# Default validator does nothing.
 		return d
 	def error_msg(self, type, msg):					# Called from read, formats an error message.
@@ -40,8 +37,13 @@ class CSVparse:
 	def preprocess(self, row):
 		pass
 		
-	def read(self):
-		with open(self.fn, 'rt') as csvfile:
+	def read(self, file):
+		"Init with filename or file object."
+		self.file = file
+		self.fn = self.file if isinstance(self.file, str) else self.file.name
+		self.lineno = 0
+		self.data = []
+		with open(self.fn, 'rt') if isinstance(file, str) else file as csvfile:
 			reader = csv.reader(csvfile)
 			for self.lineno, row in enumerate(reader, start=1):
 				#print('\n', row, end='')
@@ -85,8 +87,8 @@ class CSVparse:
 				
 if __name__ == "__main__":				
 	class TParse(CSVparse):
-		def __init__(self, fn):
-			CSVparse.__init__(self, fn)
+		def __init__(self):
+			CSVparse.__init__(self)
 			self.COLUMN_NAMES = 'Foo Bar'.split()
 		def validate_col_Foo(self, d):
 			return int(d)
@@ -102,11 +104,19 @@ if __name__ == "__main__":
 4,5,6
 s,7
 ''')
-
-	tparser = TParse(INFILE)
+	print("filename")
+	tparser = TParse()
 	try:
-		tparser.read()
+		tparser.read(INFILE)
 	except CSVparseError as e:
 		print(e)
 	print(tparser.data)
 	
+	print("file object")
+	tparser = TParse()
+	r = tparser.read
+	try:
+		r(open(INFILE, 'rt'))
+	except CSVparseError as e:
+		print(e)
+	print(tparser.data)
