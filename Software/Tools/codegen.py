@@ -34,26 +34,42 @@ class Codegen:
 		except Exception as exc:
 			self.error(f"exception {exc} during reading `{self.infile}'.")
 
-	def add(self, stuff, eat_nl=False):
+	def add(self, stuff, eat_nl=False, add_nl=None, trailer='', col_width=0):
 		"""Add either a string that will be split into lines, or a list of lines to the contents of the output file. Indentation will be added. 
-			If eat_nl true then a preceding blank line will be removed."""
+			If eat_nl true then a preceding blank line will be removed.
+			If add_nl is negative a newline will be added before the contents, if positive it will be added after. If zero then you get both.
+			Optional arg trailer sets string to be appended. Optional arg col_width left justifies all of the line apart from the traier."""
 		if eat_nl and self.contents and (not self.contents[-1] or self.contents[-1].isspace()):
 			self.contents.pop()
+		if not stuff: stuff = ' '  # Make sure that if nothing else we get a blank line.
 		if isinstance(stuff, str):
 			stuff = stuff.splitlines()
-		self.contents += [' '*self.indent_cols + x for x in stuff]
+		if add_nl is not None and add_nl <= 0: self.add_nl()
+		self.contents += [(' '*self.indent_cols + x).ljust(col_width) + trailer for x in stuff]
+		if add_nl is not None and add_nl >= 0: self.add_nl()
+
 	def add_include_guard(self):
 		self.add(f"""\
 #ifndef {self.include_guard}
 #define {self.include_guard}
-""")
-		self.add_nl()
+""", add_nl=+1)
 		self.trailers.append(f"\n#endif   // {self.include_guard}")
-	def add_comment(self, comment):
-		self.add(['// ' + x for x in comment.splitlines()])
+	def add_comment(self, comment, *args, **kwargs):
+		self.add(['// ' + x for x in comment.splitlines()], *args, **kwargs)
 	def add_nl(self):
 		self.contents.append('')
 		
+	def add_avr_array_strings(self, name, strs, col=88):
+		"Sometimes I hate AVRs, this nonsense is necessary to declare an array of const strings."
+		def add(s): self.add(s, trailer='\\', col_width=col)
+		add(f"#define DECLARE_{name.upper()}()")
+		for n, r in enumerate(strs):
+			add(f' static const char {name.upper()}_{n}[] PROGMEM = "{r}";')
+		add('')
+		add(' static const char* const {name.upper()}[] PROGMEM = {')
+		for n, r in enumerate(strs):
+			add(f'   {name.upper()}_{n},')
+
 	def end(self):	
 		while self.trailers:
 			self.add(self.trailers.pop())
@@ -167,8 +183,7 @@ foo     // bar''')
 	cg.add_include_guard()
 	cg.add_comment('Contents of input file.')
 	cg.add(x)
-	cg.add_comment('Comment, then newline.')
-	cg.add_nl()
+	cg.add_comment('Comment, then newline.', addnl=+1)
 	cg.add_comment('End')
 	cg.end()
 	
