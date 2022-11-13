@@ -82,14 +82,14 @@ if direct:
 		cg.add_nl()
 		cg.add_comment(f"{sig}: {desc}")
 		sigCC = codegen.ident_camel(sig, leading=True)
-		cg.add(codegen.mk_short_function(f"gpio{sigCC}SetModeOutput", f"DDR{io_port} |= _BV({io_bit};", leader='static inline'))
-		cg.add(codegen.mk_short_function(f"gpio{sigCC}SetModeInput", f"DDR{io_port} &= ~_BV({io_bit};", leader='static inline'))
+		cg.add(codegen.mk_short_function(f"gpio{sigCC}SetModeOutput", f"DDR{io_port} |= _BV({io_bit});", leader='static inline'))
+		cg.add(codegen.mk_short_function(f"gpio{sigCC}SetModeInput", f"DDR{io_port} &= ~_BV({io_bit});", leader='static inline'))
 		cg.add(codegen.mk_short_function(f"gpio{sigCC}SetMode", f"if (fout) DDR{io_port} |= _BV({io_bit}); else DDR{io_port} &= ~_BV({io_bit});", 
 		  leader='static inline', args='bool fout'))
 		cg.add(codegen.mk_short_function(f"gpio{sigCC}Read", f"return PIN{io_port} | _BV({io_bit});", ret='bool', leader='static inline'))
-		cg.add(codegen.mk_short_function(f"gpio{sigCC}Toggle", f"PORT{io_port} ^= _BV({io_bit};", leader='static inline'))
-		cg.add(codegen.mk_short_function(f"gpio{sigCC}Set", f"PORT{io_port} |= _BV({io_bit};", leader='static inline'))
-		cg.add(codegen.mk_short_function(f"gpio{sigCC}Clear", f"PORT{io_port} &= ~_BV({io_bit};", leader='static inline'))
+		cg.add(codegen.mk_short_function(f"gpio{sigCC}Toggle", f"PORT{io_port} ^= _BV({io_bit});", leader='static inline'))
+		cg.add(codegen.mk_short_function(f"gpio{sigCC}Set", f"PORT{io_port} |= _BV({io_bit});", leader='static inline'))
+		cg.add(codegen.mk_short_function(f"gpio{sigCC}Clear", f"PORT{io_port} &= ~_BV({io_bit});", leader='static inline'))
 		cg.add(codegen.mk_short_function(f"gpio{sigCC}Write", f"if (b) PORT{io_port} |= _BV({io_bit}); else PORT{io_port} &= ~_BV({io_bit});", 
 		  leader='static inline', args='bool b'))
 

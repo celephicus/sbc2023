@@ -66,9 +66,10 @@ class Codegen:
 		for n, r in enumerate(strs):
 			add(f' static const char {name.upper()}_{n}[] PROGMEM = "{r}";')
 		add('')
-		add(' static const char* const {name.upper()}[] PROGMEM = {')
+		add(f' static const char* const {name.upper()}[] PROGMEM = {{')
 		for n, r in enumerate(strs):
 			add(f'   {name.upper()}_{n},')
+		self.add(' }')
 
 	def end(self):	
 		while self.trailers:

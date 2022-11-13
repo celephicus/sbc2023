@@ -123,7 +123,7 @@ cg.dedent()
 cg.add('};')
 
 cg.add_comment('Define the start of the NV regs. The region is from this index up to the end of the register array.', add_nl=-1)
-nv_segment_start_idx = 'COUNT_REGS' if reg_first_nv == len(registers) else ('REG_IDX_' + list(registers)[reg_first_nv])
+nv_segment_start_idx = 'COUNT_REGS' if reg_first_nv == len(registers) else ('REGS_IDX_' + list(registers)[reg_first_nv])
 cg.add(f'#define REGS_START_NV_IDX {nv_segment_start_idx}')
 
 cg.add_comment('Define default values for the NV segment.', add_nl=-1)
