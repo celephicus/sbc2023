@@ -5,7 +5,7 @@
 typedef uint16_t regs_t;
 static const regs_t REGS_MAXVAL = 65535U;
 
-#include "regs.auto.h"
+#include "regs_local.h"
 
 // Access registers as a block of memory somewhere else.
 uint16_t* regsGetRegs();

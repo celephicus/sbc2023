@@ -6,13 +6,13 @@
 #include "Relay-gpio.h"
 #include "dev.h"
 #include "regs.h"
-#include "event.h"
 #include "utils.h"
 #include "console.h"
 #include "modbus.h"
 #include "driver.h"
 #include "sbc2022_modbus.h"
-#include "sm_supervisor.h"
+// #include "event.h"
+// #include "sm_supervisor.h"
 FILENUM(1);
 
 
@@ -100,6 +100,7 @@ static bool console_cmds_user(char* cmd) {
 	case /** NV-R **/ 0xa8c2: driverNvRead(); break;
 
 	// Events & trace...
+	#if 0
     case /** EVENT **/ 0x8a29: eventPublish(console_u_pop()); break;
     case /** EVENT-EX **/ 0x2f99: /* (id p8 p16 -- ) */ { const uint16_t p16 = console_u_pop(); const uint8_t p8 = console_u_pop(); eventPublish(console_u_pop(), p8, p16); } break;
 	case /** CTM **/ 0xd17f: eventTraceMaskClear(); break;
@@ -115,7 +116,8 @@ static bool console_cmds_user(char* cmd) {
 		consolePrint(CFMT_NL, 0);
 	} break;
     case /** STM **/ 0x116f: /* (f ev-id) */ { const uint8_t ev_id = console_u_pop(); eventTraceMaskSet(ev_id, !!console_u_pop()); } break;
-		
+	#endif 
+	
 	// Arduino pin access...
     case /** PIN **/ 0x1012: {
         uint8_t pin = console_u_pop();
@@ -161,6 +163,8 @@ static void service_regs_dump() {
 	else 
 		s_ticker = 0;
 }
+
+#if 0
 static bool service_event_trace() {
     EventTraceItem evt;
     if (eventTraceRead(&evt)) {
@@ -178,15 +182,17 @@ static bool service_event_trace() {
 }
 
 static SmSupervisorContext sm_supervisor_context;
+static void sm_init() {	eventSmInit(smSupervisor, (EventSmContextBase*)&sm_supervisor_context, 0); }
+#endif
 
 void setup() {
 	const uint16_t restart_rc = devWatchdogInit();
 	regsSetDefaultRange(0, REGS_START_NV_IDX);		// Set volatile registers. 
 	driverInit();
-	eventInit();
+	// eventInit();
 	REGS[REGS_IDX_RESTART] = restart_rc;
 	console_init();
-  	eventSmInit(smSupervisor, (EventSmContextBase*)&sm_supervisor_context, 0);
+	// sm_init();
 }
 
 static void service_blinky_led_warnings() {
@@ -205,16 +211,18 @@ void loop() {
 	driverService();
 	utilsRunEvery(100) {				// Basic 100ms timebase.
 		service_regs_dump();
-		eventSmTimerService();
+		// eventSmTimerService();
 		service_blinky_led_warnings();
 	}
-	service_event_trace();
 
 	// Dispatch events. 
+	#if 0
+	service_event_trace();
     t_event ev;
 	while (EV_NIL != (ev = eventGet())) {   // Read events until there are no more left.
 	  	eventSmService(smSupervisor, (EventSmContextBase*)&sm_supervisor_context, ev);
 	}
+	#endif
 }
 
 void debugRuntimeError(int fileno, int lineno, int errorno) {
@@ -235,20 +243,6 @@ void debugRuntimeError(int fileno, int lineno, int errorno) {
 }
 
 #if 0
-#include <Wire.h>
-#include <SPI.h>
-#include <avr/wdt.h>
-
-#include "src\common\debug.h"
-#include "src\common\types.h"
-#include "src\common\event.h"
-
-#include "src\common\common.h"
-#include "src\common\regs.h"
-#include "src\common\utils.h"
-#include "driver.h"
-#include "sm_supervisor.h"
-#include "version.h"
 
 // Handy function to go off every so often, controlled by a variable. Zero turns it off. Changing the period restarts the timer. 
 // TODO: Unit test Timer.

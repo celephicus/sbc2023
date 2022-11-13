@@ -34,7 +34,7 @@ enum {
 };
 
 // Define the start of the NV regs. The region is from this index up to the end of the register array.
-#define REGS_START_NV_IDX REG_IDX_ENABLES
+#define REGS_START_NV_IDX REGS_IDX_ENABLES
 
 // Define default values for the NV segment.
 #define REGS_NV_DEFAULT_VALS 3
@@ -70,7 +70,7 @@ enum {
  static const char REGS_NAMES_5[] PROGMEM = "VOLTS_MON_BUS";                            \
  static const char REGS_NAMES_6[] PROGMEM = "ENABLES";                                  \
                                                                                         \
- static const char* const {name.upper()}[] PROGMEM = {                                  \
+ static const char* const REGS_NAMES[] PROGMEM = {                                      \
    REGS_NAMES_0,                                                                        \
    REGS_NAMES_1,                                                                        \
    REGS_NAMES_2,                                                                        \
@@ -78,6 +78,7 @@ enum {
    REGS_NAMES_4,                                                                        \
    REGS_NAMES_5,                                                                        \
    REGS_NAMES_6,                                                                        \
+ }
 
 // Declare an array of description text for each register.
 #define DECLARE_REGS_DESCRS()                                                           \
@@ -89,7 +90,7 @@ enum {
  static const char REGS_DESCRS_5[] PROGMEM = "Bus volts /mV.";                          \
  static const char REGS_DESCRS_6[] PROGMEM = "Enable flags.";                           \
                                                                                         \
- static const char* const {name.upper()}[] PROGMEM = {                                  \
+ static const char* const REGS_DESCRS[] PROGMEM = {                                     \
    REGS_DESCRS_0,                                                                       \
    REGS_DESCRS_1,                                                                       \
    REGS_DESCRS_2,                                                                       \
@@ -97,6 +98,7 @@ enum {
    REGS_DESCRS_4,                                                                       \
    REGS_DESCRS_5,                                                                       \
    REGS_DESCRS_6,                                                                       \
+ }
 
 // Declare a multiline string description of the fields.
 #define DECLARE_REGS_HELPS()                                                            \
