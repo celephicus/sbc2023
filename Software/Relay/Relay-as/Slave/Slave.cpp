@@ -22,8 +22,10 @@ static bool console_cmds_user(char* cmd) {
 
 	// Driver
     case /** LED **/ 0xdc88: driverSetLedPattern(console_u_pop()); break;
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
     case /** RLY **/ 0x07a2: driverRelayWrite(console_u_pop()); break;
     case /** ?RLY **/ 0xb21d: consolePrint(CFMT_D, driverRelayRead()); break;
+#endif
 
 	// MODBUS
     case /** SL **/ 0x74fa: modbusSetSlaveId(console_u_pop()); break;
@@ -154,8 +156,10 @@ void setup() {
 static void service_blinky_led_warnings() {
 	if (regsFlags() & REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS)
 		driverSetLedPattern(DRIVER_LED_PATTERN_NO_COMMS);
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 	else if (regsFlags() & REGS_FLAGS_MASK_DC_IN_VOLTS_LOW)
 		driverSetLedPattern(DRIVER_LED_PATTERN_DC_IN_VOLTS_LOW);
+#endif
 	else if (regsFlags() & REGS_FLAGS_MASK_BUS_VOLTS_LOW)
 		driverSetLedPattern(DRIVER_LED_PATTERN_BUS_VOLTS_LOW);
 	else

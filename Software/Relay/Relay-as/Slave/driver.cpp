@@ -197,12 +197,18 @@ static void led_set_pattern(const led_pattern_def_t* def) {
 }
 
 static const led_pattern_def_t LED_PATTERN_OK[] 			 PROGMEM = 	{ {2, 0}, 			{UTILS_SEQ_END, 1}, };
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 static const led_pattern_def_t LED_PATTERN_DC_IN_VOLTS_LOW[] PROGMEM = 	{ {20, 1}, {20, 0}, {UTILS_SEQ_REPEAT, 0}, };
+#endif
 static const led_pattern_def_t LED_PATTERN_BUS_VOLTS_LOW[] 	 PROGMEM = 	{ {5, 1},  {5, 0}, 	{UTILS_SEQ_REPEAT, 0}, };
 static const led_pattern_def_t LED_PATTERN_NO_COMMS[] 		 PROGMEM = 	{ {50, 1}, {5, 0}, 	{UTILS_SEQ_REPEAT, 0}, };
 
 static const led_pattern_def_t* const LED_PATTERNS[] PROGMEM = { 
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
+	LED_PATTERN_OK, LED_PATTERN_BUS_VOLTS_LOW, LED_PATTERN_NO_COMMS,
+#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 	LED_PATTERN_OK, LED_PATTERN_DC_IN_VOLTS_LOW, LED_PATTERN_BUS_VOLTS_LOW, LED_PATTERN_NO_COMMS, 
+#endif
 };
 void driverSetLedPattern(uint8_t p) {
 	if (p >= UTILS_ELEMENT_COUNT(LED_PATTERNS))
