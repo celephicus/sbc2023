@@ -50,14 +50,16 @@ unused = []
 for d in parser.data:
 	# print(d)
 	if not d['Func']: continue				# Ignore pins with no function.
-	if d['Group'] not in pins: pins[d['Group']] = []	# Ready to insert new group...
+
+	if 'unused' in d['Func']:		# An unused pins is lust listed as unused with not firther definitions
+		unused.append(d['Pin'])
+		continue
 		
+	if d['Group'] not in pins: pins[d['Group']] = []	# Ready to insert new group...
 	pins[d['Group']].append((f"GPIO_PIN_{d['Sig']} = {d['Pin']}", d['Description']))		# Insert Arduino pin definition.
 	
 	if 'direct' in d['Func']:	# Insert a bunch of inline functions to directly access the pin.
 		direct.append((d['Sig'], d['Description'], d['io_port'], d['io_bit']))
-	if 'unused' in d['Func']:		# List all unused pins
-		unused.append(pin)
 
 # Write output file...
 cg.add_include_guard()
