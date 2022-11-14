@@ -3,7 +3,7 @@
 #include <avr/wdt.h>
 
 #include "project_config.h"
-#include "Relay-gpio.h"
+#include "gpio.h"
 #include "dev.h"
 #include "regs.h"
 #include "utils.h"

@@ -1,7 +1,7 @@
 #include <Arduino.h>
 
 #include "project_config.h"
-#include "Relay-gpio.h"
+#include "gpio.h"
 #include "utils.h"
 #include "regs.h"
 #include "dev.h"
@@ -24,6 +24,32 @@ static void modbus_master_comms_timer_service() {
 		regsWriteMaskFlags(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS, true);
 }
 
+// Build two different versions depending on product.
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
+
+static uint8_t read_holding_register(uint16_t address, uint16_t* value) {
+	if (address < COUNT_REGS) {
+		*value = REGS[address];
+		return 0;
+	}
+	if (SBC2022_MODBUS_REGISTER_SENSOR == address) {
+		*value = REGS[REGS_IDX_ACCEL_TILT_ANGLE];
+		return 0;
+	}
+	*value = (uint16_t)-1;
+	return 1;
+}
+static uint8_t write_holding_register(uint16_t address, uint16_t value) {
+	if (SBC2022_MODBUS_REGISTER_SENSOR == address) {
+		REGS[REGS_IDX_ACCEL_TILT_ANGLE] = value;
+		modbus_master_comms_timer_restart();
+		return 0;
+	}
+	return 1;
+}
+
+#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
+
 static uint8_t read_holding_register(uint16_t address, uint16_t* value) {
 	if (address < COUNT_REGS) {
 		*value = REGS[address];
@@ -44,6 +70,8 @@ static uint8_t write_holding_register(uint16_t address, uint16_t value) {
 	}
 	return 1;
 }
+
+#endif
 
 void modbus_cb(uint8_t evt) {
 	uint8_t frame[RESP_SIZE];
@@ -185,6 +213,8 @@ static void led_init() { gpioLedSetModeOutput(); }
 static void led_service() { utilsSeqService(&f_led_seq); }
 
 
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
+
 // MAX4820 relay driver driver.
 static void relay_driver_init() {
 	pinMode(GPIO_PIN_RSEL, OUTPUT);
@@ -205,6 +235,8 @@ void driverRelayWrite(uint8_t v) {
 	shiftOut(GPIO_PIN_RDAT, GPIO_PIN_RCLK, MSBFIRST , v);
 	digitalWrite(GPIO_PIN_RSEL, 1);
 }
+
+#endif
 
 // Non-volatile objects.
 
@@ -260,7 +292,9 @@ static uint8_t nv_init() {
 // ADC read.
 //
 const DevAdcChannelDef g_adc_def_list[] PROGMEM = {
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 	{ DEV_ADC_REF_AVCC | DEV_ADC_ARD_PIN_TO_CHAN(GPIO_PIN_VOLTS_MON_12V_IN),	&regs_storage[REGS_IDX_ADC_VOLTS_MON_12V_IN],	NULL },		
+#endif
 	{ DEV_ADC_REF_AVCC | DEV_ADC_ARD_PIN_TO_CHAN(GPIO_PIN_VOLTS_MON_BUS),		&regs_storage[REGS_IDX_ADC_VOLTS_MON_BUS],		NULL },		
 	{ 0,																		DEV_ADC_RESULT_END,								NULL }
 };
@@ -276,7 +310,9 @@ static void adc_start() { devAdcStartConversions(); }
 static uint16_t scaler_12v_mon(uint16_t raw) { return utilsRescaleU16(raw, 1023, 15000); }
 static void adc_do_scaling() {
 	// No need for critical section as we have waited for the ADC ISR to sample new values into the input registers, now it is idle.
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 	REGS[REGS_IDX_VOLTS_MON_12V_IN] = scaler_12v_mon(REGS[REGS_IDX_ADC_VOLTS_MON_12V_IN]);
+#endif
 	REGS[REGS_IDX_VOLTS_MON_BUS] = scaler_12v_mon(REGS[REGS_IDX_ADC_VOLTS_MON_BUS]);
 }
 
@@ -360,12 +396,14 @@ void tholdScanRescan(const thold_scanner_def_t* def, thold_scanner_state_t* sst,
 static bool scanner_thold_12v_mon(bool tstate, uint16_t val) {  return val < (tstate ? 11500 : 1100); }
 static uint16_t scanner_get_delay() { return 10; }
 static const thold_scanner_def_t SCANDEFS[] PROGMEM = {
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 	{	
 		REGS_FLAGS_MASK_DC_IN_VOLTS_LOW, (const void*)DRIVER_LED_PATTERN_DC_IN_VOLTS_LOW,
 		&regs_storage[REGS_IDX_VOLTS_MON_12V_IN],
 		scanner_thold_12v_mon,
 		scanner_get_delay,
 	},
+#endif
 	{	
 		REGS_FLAGS_MASK_BUS_VOLTS_LOW, (const void*)DRIVER_LED_PATTERN_BUS_VOLTS_LOW,
 		&regs_storage[REGS_IDX_VOLTS_MON_BUS], 
@@ -394,7 +432,9 @@ void driverInit() {
 	led_init();
 	adc_init();
 	scanner_init();
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 	relay_driver_init();
+#endif
 	modbus_init();
 }
 
@@ -404,13 +444,11 @@ void driverService() {
 		adc_start();					
 		led_service();		
 	}
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 	relay_driver_pat_watchdog();
+#endif
 	if (devAdcIsConversionDone()) {		// Run scanner when all ADC channels converted. 
 		adc_do_scaling();
 		scanner_scan();
 	}
 }
-
-#if 0
-uint16_t threadGetTicks() { return (uint16_t)millis(); }
-#endif

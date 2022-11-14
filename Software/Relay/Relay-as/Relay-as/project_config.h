@@ -3,6 +3,11 @@
 #ifndef PROJECT_CONFIG_H__
 #define PROJECT_CONFIG_H__
 
+// Special symbol to build different driver flavour for Sensor or Relay.
+#define CFG_DRIVER_BUILD_RELAY 1
+#define CFG_DRIVER_BUILD_SENSOR 2
+#define CFG_DRIVER_BUILD CFG_DRIVER_BUILD_RELAY
+
 // Watchdog. 
 #define CFG_WATCHDOG_TIMEOUT WDTO_2S   
 #define CFG_WATCHDOG_ENABLE 1
@@ -26,10 +31,10 @@ enum {
 #define CFG_VER_MINOR 0
 
 // Build number incremented with each build by cfg-set-build.py script. 
-#define CFG_BUILD_NUMBER 441
+#define CFG_BUILD_NUMBER 452
 
 // Timestamp in ISO8601 format set by cfg-set-build.py script.
-#define CFG_BUILD_TIMESTAMP "20221114T115657"
+#define CFG_BUILD_TIMESTAMP "20221114T151221"
 
 // Do not edit below this line......
 
