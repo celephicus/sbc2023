@@ -362,13 +362,13 @@ static uint16_t scanner_get_delay() { return 10; }
 static const thold_scanner_def_t SCANDEFS[] PROGMEM = {
 	{	
 		REGS_FLAGS_MASK_DC_IN_VOLTS_LOW, (const void*)DRIVER_LED_PATTERN_DC_IN_VOLTS_LOW,
-		&REGS[REGS_IDX_VOLTS_MON_12V_IN],
+		&regs_storage[REGS_IDX_VOLTS_MON_12V_IN],
 		scanner_thold_12v_mon,
 		scanner_get_delay,
 	},
 	{	
 		REGS_FLAGS_MASK_BUS_VOLTS_LOW, (const void*)DRIVER_LED_PATTERN_BUS_VOLTS_LOW,
-		&REGS[REGS_IDX_VOLTS_MON_BUS], 
+		&regs_storage[REGS_IDX_VOLTS_MON_BUS], 
 		scanner_thold_12v_mon,
 		scanner_get_delay,
 	},
