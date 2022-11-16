@@ -7,18 +7,6 @@ void driverInit();
 // Call in mainloop to perform services.
 void driverService();
 
-// Build two different versions depending on product.
-#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
-#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
-
-// Read/write state to relay driver. 
-void driverRelayWrite(uint8_t v);
-uint8_t driverRelayRead();
-
-#else
- #error "Incorrect CFG_DRIVER_BUILD..."
-#endif
-
 // LED pattern, set this and it will blink away forever.
 enum {
 	DRIVER_LED_PATTERN_OK,

@@ -11,18 +11,42 @@
 #include "sbc2022_modbus.h"
 FILENUM(2);
 
+// Simple timer to set flags on timeout for error checking.
+//
+typedef struct {
+	uint16_t flags_mask;
+	uint8_t timeout;
+} TimeoutTimerDef;
+static const TimeoutTimerDef FAULT_TIMER_DEFS[] PROGMEM = {
+	{ REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS, 10 },		// Long timeout as Display migh get busy and not send queries for a while
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
+	{ REGS_FLAGS_MASK_ACCEL_FAIL, 2 },					// Shortest possible timeout as accelerometer streams data quickly.
+#endif
+};
+static uint8_t f_fault_timers[UTILS_ELEMENT_COUNT(FAULT_TIMER_DEFS)];
+static void service_fault_timers() {
+	fori (UTILS_ELEMENT_COUNT(FAULT_TIMER_DEFS)) {
+		if ((f_fault_timers[i] > 0) && (0 == --f_fault_timers[i]))
+			regsWriteMaskFlags(pgm_read_word(&FAULT_TIMER_DEFS[i].flags_mask), true);
+	}
+}
+static void clear_fault_timer(uint16_t mask) { // Clear possibly many flags set by bitmask.
+//	for (uint16_t m = utilsLowestSetBitMask(mask); 0U != m; m <<= 1) {
+	fori (UTILS_ELEMENT_COUNT(FAULT_TIMER_DEFS)) {
+		if (0U == mask)			// Early exit on zero mask as there is nothing more to do.
+			break;
+		const uint16_t m = pgm_read_word(&FAULT_TIMER_DEFS[i].flags_mask);
+		if (m & mask) {
+			regsWriteMaskFlags(m, false);
+			f_fault_timers[i] = pgm_read_byte(&FAULT_TIMER_DEFS[i].timeout);
+			mask &= ~m; // Clear acrioned mask as we might be able to exit early. 
+		}
+	}
+}
+
+
 // MODBUS
 //
-static uint8_t f_modbus_master_comms_timer;
-const uint16_t MODBUS_MASTER_COMMS_TIMEOUT_TICKS = 20;
-static void modbus_master_comms_timer_restart() {
-	f_modbus_master_comms_timer = MODBUS_MASTER_COMMS_TIMEOUT_TICKS;
-	regsWriteMaskFlags(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS, false);
-}
-static void modbus_master_comms_timer_service() {
-	if ((f_modbus_master_comms_timer > 0U) && (0U == -- f_modbus_master_comms_timer))
-		regsWriteMaskFlags(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS, true);
-}
 
 // Build two different versions depending on product.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
@@ -34,6 +58,7 @@ static uint8_t read_holding_register(uint16_t address, uint16_t* value) {
 	}
 	if (SBC2022_MODBUS_REGISTER_SENSOR == address) {
 		*value = REGS[REGS_IDX_ACCEL_TILT_ANGLE];
+		clear_fault_timer(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS);
 		return 0;
 	}
 	*value = (uint16_t)-1;
@@ -42,7 +67,7 @@ static uint8_t read_holding_register(uint16_t address, uint16_t* value) {
 static uint8_t write_holding_register(uint16_t address, uint16_t value) {
 	if (SBC2022_MODBUS_REGISTER_SENSOR == address) {
 		REGS[REGS_IDX_ACCEL_TILT_ANGLE] = value;
-		modbus_master_comms_timer_restart();
+		clear_fault_timer(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS);
 		return 0;
 	}
 	return 1;
@@ -56,7 +81,7 @@ static uint8_t read_holding_register(uint16_t address, uint16_t* value) {
 		return 0;
 	}
 	if (SBC2022_MODBUS_REGISTER_RELAY == address) {
-		*value = driverRelayRead();
+		*value = (uint8_t)REGS[REGS_IDX_RELAYS];
 		return 0;
 	}
 	*value = (uint16_t)-1;
@@ -64,8 +89,8 @@ static uint8_t read_holding_register(uint16_t address, uint16_t* value) {
 }
 static uint8_t write_holding_register(uint16_t address, uint16_t value) {
 	if (SBC2022_MODBUS_REGISTER_RELAY == address) {
-		driverRelayWrite(value);
-		modbus_master_comms_timer_restart();
+		REGS[REGS_IDX_RELAYS] = (uint8_t)value;
+		clear_fault_timer(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS);
 		return 0;
 	}
 	return 1;
@@ -176,8 +201,6 @@ static void modbus_init() {
 }
 static void modbus_service() {
 	modbusService();
-	utilsRunEvery(100)
-		modbus_master_comms_timer_service();
 }
 
 // Driver for the blinky LED.
@@ -218,28 +241,114 @@ void driverSetLedPattern(uint8_t p) {
 static void led_init() { gpioLedSetModeOutput(); }
 static void led_service() { utilsSeqService(&f_led_seq); }
 
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
 
-#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
+#include "SparkFun_ADXL345.h"         
+
+const uint8_t ACCEL_MAX_SAMPLES = 1U << (16 - 10);	// Accelerometer provides 10 bit data. 
+static struct {
+	int16_t ax, ay, az;   		// Accumulators for 3 axes.
+	uint8_t counts;				// Sample counter.
+} f_accel_data;
+static void clear_accel_data() {
+	memset(&f_accel_data, 0, sizeof(f_accel_data));
+}
+
+ADXL345 adxl = ADXL345(10);           // USE FOR SPI COMMUNICATION, ADXL345(CS_PIN);
+static void setup_devices() {
+  adxl.powerOn();                     // Power on the ADXL345
+
+  adxl.setRangeSetting(2);           // Give the range settings
+                                      // Accepted values are 2g, 4g, 8g or 16g
+                                      // Higher Values = Wider Measurement Range
+                                      // Lower Values = Greater Sensitivity
+
+  adxl.setSpiBit(0);                  // Configure the device to be in 4 wire SPI mode when set to '0' or 3 wire SPI mode when set to 1
+                                      // Default: Set to 1
+                                      // SPI pins on the ATMega328: 11, 12 and 13 as reference in SPI Library 
+   
+  adxl.setActivityXYZ(1, 0, 0);       // Set to activate movement detection in the axes "adxl.setActivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
+  adxl.setActivityThreshold(75);      // 62.5mg per increment   // Set activity   // Inactivity thresholds (0-255)
+ 
+  adxl.setInactivityXYZ(1, 0, 0);     // Set to detect inactivity in all the axes "adxl.setInactivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
+  adxl.setInactivityThreshold(75);    // 62.5mg per increment   // Set inactivity // Inactivity thresholds (0-255)
+  adxl.setTimeInactivity(10);         // How many seconds of no activity is inactive?
+
+  adxl.setTapDetectionOnXYZ(0, 0, 1); // Detect taps in the directions turned ON "adxl.setTapDetectionOnX(X, Y, Z);" (1 == ON, 0 == OFF)
+ 
+  // Set values for what is considered a TAP and what is a DOUBLE TAP (0-255)
+  adxl.setTapThreshold(50);           // 62.5 mg per increment
+  adxl.setTapDuration(15);            // 625 μs per increment
+  adxl.setDoubleTapLatency(80);       // 1.25 ms per increment
+  adxl.setDoubleTapWindow(200);       // 1.25 ms per increment
+ 
+  // Set values for what is considered FREE FALL (0-255)
+  adxl.setFreeFallThreshold(7);       // (5 - 9) recommended - 62.5mg per increment
+  adxl.setFreeFallDuration(30);       // (20 - 70) recommended - 5ms per increment
+ 
+  // Setting all interupts to take place on INT1 pin
+  //adxl.setImportantInterruptMapping(1, 1, 1, 1, 1);     // Sets "adxl.setEveryInterruptMapping(single tap, double tap, free fall, activity, inactivity);" 
+                                                        // Accepts only 1 or 2 values for pins INT1 and INT2. This chooses the pin on the ADXL345 to use for Interrupts.
+                                                        // This library may have a problem using INT2 pin. Default to INT1 pin.
+  
+  // Turn on Interrupts for each mode (1 == ON, 0 == OFF)
+  adxl.InactivityINT(0);
+  adxl.ActivityINT(0);
+  adxl.FreeFallINT(0);
+  adxl.doubleTapINT(0);
+  adxl.singleTapINT(0);
+  
+//attachInterrupt(digitalPinToInterrupt(interruptPin), ADXL_ISR, RISING);   // Attach Interrupt
+	clear_accel_data();
+}
+
+static float tilt(float a, float b, float c) {
+	return 360.0 / M_PI * atan2(a, sqrt(b*b + c*c));
+}
+void service_devices() {
+	if (adxl.getInterruptSource() & 0x80) {
+		int x, y, z;
+		adxl.readAccel(&x, &y, &z);
+		f_accel_data.ax += (int16_t)x;
+		f_accel_data.ay += (int16_t)y;
+		f_accel_data.az += (int16_t)z;
+		if (ACCEL_MAX_SAMPLES == f_accel_data.counts++) {
+			clear_fault_timer(REGS_FLAGS_MASK_ACCEL_FAIL);
+			REGS[REGS_IDX_ACCEL_SAMPLES] += 1;
+			REGS[REGS_IDX_ACCEL_X] = f_accel_data.ax;
+			REGS[REGS_IDX_ACCEL_Y] = f_accel_data.ax;
+			REGS[REGS_IDX_ACCEL_Z] = f_accel_data.ax;
+			// Since components are used as a ratio, no need to divide each by counts. 
+			REGS[REGS_IDX_ACCEL_TILT_ANGLE] = (int16_t)(0.5 + 100.0 * tilt((float)f_accel_data.ax, (float)f_accel_data.ay, (float)f_accel_data.az));
+			clear_accel_data();
+		}
+	}
+	if (regsFlags() & REGS_FLAGS_MASK_ACCEL_FAIL)	// We have a fault, set fault value. 
+		REGS[REGS_IDX_ACCEL_TILT_ANGLE] = SBC2022_MODBUS_TILT_FAULT;
+}
+
+#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 
 // MAX4820 relay driver driver.
-static void relay_driver_init() {
+static uint8_t f_relay_data;
+static void write_relays(uint8_t v) {
+	f_relay_data = v;
+	digitalWrite(GPIO_PIN_RSEL, 0);
+	shiftOut(GPIO_PIN_RDAT, GPIO_PIN_RCLK, MSBFIRST, f_relay_data);
+	digitalWrite(GPIO_PIN_RSEL, 1);
+}
+static void setup_devices() {
 	pinMode(GPIO_PIN_RSEL, OUTPUT);
 	digitalWrite(GPIO_PIN_RSEL, 1);   // Set inactive.
 	pinMode(GPIO_PIN_RDAT, OUTPUT);
 	pinMode(GPIO_PIN_RCLK, OUTPUT);
-	driverRelayWrite(0);
+	write_relays(0);
 	gpioWdogSetModeOutput();
 }
-static void relay_driver_pat_watchdog() {
+void service_devices() {
 	gpioWdogToggle();
-}
-static uint8_t f_relay_data;
-uint8_t driverRelayRead() { return f_relay_data; }
-void driverRelayWrite(uint8_t v) {
-	f_relay_data = v;
-	digitalWrite(GPIO_PIN_RSEL, 0);
-	shiftOut(GPIO_PIN_RDAT, GPIO_PIN_RCLK, MSBFIRST , v);
-	digitalWrite(GPIO_PIN_RSEL, 1);
+	if (f_relay_data != (uint8_t)REGS[REGS_IDX_RELAYS])
+		write_relays((uint8_t)REGS[REGS_IDX_RELAYS]);
 }
 
 #endif
@@ -438,21 +547,20 @@ void driverInit() {
 	led_init();
 	adc_init();
 	scanner_init();
-#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
-	relay_driver_init();
-#endif
+	setup_devices();
 	modbus_init();
 }
 
 void driverService() {
 	modbus_service();
-	utilsRunEvery(50) { 
+	utilsRunEvery(100) { 
+		service_fault_timers();
 		adc_start();					
+	}
+	utilsRunEvery(50) { 
 		led_service();		
 	}
-#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
-	relay_driver_pat_watchdog();
-#endif
+	service_devices();
 	if (devAdcIsConversionDone()) {		// Run scanner when all ADC channels converted. 
 		adc_do_scaling();
 		scanner_scan();

@@ -23,8 +23,8 @@ static bool console_cmds_user(char* cmd) {
 	// Driver
     case /** LED **/ 0xdc88: driverSetLedPattern(console_u_pop()); break;
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
-    case /** RLY **/ 0x07a2: driverRelayWrite(console_u_pop()); break;
-    case /** ?RLY **/ 0xb21d: consolePrint(CFMT_D, driverRelayRead()); break;
+    case /** RLY **/ 0x07a2: REGS[REGS_IDX_RELAYS] = console_u_pop(); break;
+    case /** ?RLY **/ 0xb21d: consolePrint(CFMT_D, REGS[REGS_IDX_RELAYS]); break;
 #endif
 
 	// MODBUS

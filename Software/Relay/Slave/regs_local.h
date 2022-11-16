@@ -3,9 +3,9 @@
 
 /* [[[ Definition start...
 FLAGS [hex] "Various flags."
-	DC_IN_VOLTS_LOW [0] "External DC power volts low."
-	BUS_VOLTS_LOW [1] "Bus volts low."
-	MODBUS_MASTER_NO_COMMS [2] "No comms from MODBUS master."
+	BUS_VOLTS_LOW [0] "Bus volts low."
+	MODBUS_MASTER_NO_COMMS [1] "No comms from MODBUS master."
+	DC_IN_VOLTS_LOW [2] "External DC power volts low."
 	EEPROM_READ_BAD_0 [13] "EEPROM bank 0 corrupt."
 	EEPROM_READ_BAD_1 [14] "EEPROM bank 1 corrupt."
 	WATCHDOG_RESTART [15] "Whoops."
@@ -13,6 +13,7 @@ RESTART [hex] "MCUSR in low byte, wdog in high byte."
 ADC_VOLTS_MON_12V_IN "Raw ADC DC power in volts."
 ADC_VOLTS_MON_BUS "Raw ADC Bus volts."
 VOLTS_MON_12V_IN "DC power in /mV."
+RELAYS "Bed control relays."
 ENABLES [nv hex 0x0003] "Enable flags."
 	DUMP_MODBUS_EVENTS [0] "Dump MODBUS event value."
 	DUMP_MODBUS_DATA [1] "Dump MODBUS data."
@@ -28,6 +29,7 @@ enum {
     REGS_IDX_ADC_VOLTS_MON_12V_IN,
     REGS_IDX_ADC_VOLTS_MON_BUS,
     REGS_IDX_VOLTS_MON_12V_IN,
+    REGS_IDX_RELAYS,
     REGS_IDX_VOLTS_MON_BUS,
     REGS_IDX_ENABLES,
     COUNT_REGS,
@@ -44,9 +46,9 @@ enum {
 
 // Flags/masks for register FLAGS.
 enum {
-    	REGS_FLAGS_MASK_DC_IN_VOLTS_LOW = (int)0x1,
-    	REGS_FLAGS_MASK_BUS_VOLTS_LOW = (int)0x2,
-    	REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS = (int)0x4,
+    	REGS_FLAGS_MASK_BUS_VOLTS_LOW = (int)0x1,
+    	REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS = (int)0x2,
+    	REGS_FLAGS_MASK_DC_IN_VOLTS_LOW = (int)0x4,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_0 = (int)0x2000,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_1 = (int)0x4000,
     	REGS_FLAGS_MASK_WATCHDOG_RESTART = (int)0x8000,
@@ -67,8 +69,9 @@ enum {
  static const char REGS_NAMES_2[] PROGMEM = "ADC_VOLTS_MON_12V_IN";                     \
  static const char REGS_NAMES_3[] PROGMEM = "ADC_VOLTS_MON_BUS";                        \
  static const char REGS_NAMES_4[] PROGMEM = "VOLTS_MON_12V_IN";                         \
- static const char REGS_NAMES_5[] PROGMEM = "VOLTS_MON_BUS";                            \
- static const char REGS_NAMES_6[] PROGMEM = "ENABLES";                                  \
+ static const char REGS_NAMES_5[] PROGMEM = "RELAYS";                                   \
+ static const char REGS_NAMES_6[] PROGMEM = "VOLTS_MON_BUS";                            \
+ static const char REGS_NAMES_7[] PROGMEM = "ENABLES";                                  \
                                                                                         \
  static const char* const REGS_NAMES[] PROGMEM = {                                      \
    REGS_NAMES_0,                                                                        \
@@ -78,6 +81,7 @@ enum {
    REGS_NAMES_4,                                                                        \
    REGS_NAMES_5,                                                                        \
    REGS_NAMES_6,                                                                        \
+   REGS_NAMES_7,                                                                        \
  }
 
 // Declare an array of description text for each register.
@@ -87,8 +91,9 @@ enum {
  static const char REGS_DESCRS_2[] PROGMEM = "Raw ADC DC power in volts.";              \
  static const char REGS_DESCRS_3[] PROGMEM = "Raw ADC Bus volts.";                      \
  static const char REGS_DESCRS_4[] PROGMEM = "DC power in /mV.";                        \
- static const char REGS_DESCRS_5[] PROGMEM = "Bus volts /mV.";                          \
- static const char REGS_DESCRS_6[] PROGMEM = "Enable flags.";                           \
+ static const char REGS_DESCRS_5[] PROGMEM = "Bed control relays.";                     \
+ static const char REGS_DESCRS_6[] PROGMEM = "Bus volts /mV.";                          \
+ static const char REGS_DESCRS_7[] PROGMEM = "Enable flags.";                           \
                                                                                         \
  static const char* const REGS_DESCRS[] PROGMEM = {                                     \
    REGS_DESCRS_0,                                                                       \
@@ -98,15 +103,16 @@ enum {
    REGS_DESCRS_4,                                                                       \
    REGS_DESCRS_5,                                                                       \
    REGS_DESCRS_6,                                                                       \
+   REGS_DESCRS_7,                                                                       \
  }
 
 // Declare a multiline string description of the fields.
 #define DECLARE_REGS_HELPS()                                                            \
  static const char REGS_HELPS[] PROGMEM =                                               \
     "\nFlags:"                                                                          \
-    "\n DC_IN_VOLTS_LOW: 0 (External DC power volts low.)"                              \
-    "\n BUS_VOLTS_LOW: 1 (Bus volts low.)"                                              \
-    "\n MODBUS_MASTER_NO_COMMS: 2 (No comms from MODBUS master.)"                       \
+    "\n BUS_VOLTS_LOW: 0 (Bus volts low.)"                                              \
+    "\n MODBUS_MASTER_NO_COMMS: 1 (No comms from MODBUS master.)"                       \
+    "\n DC_IN_VOLTS_LOW: 2 (External DC power volts low.)"                              \
     "\n EEPROM_READ_BAD_0: 13 (EEPROM bank 0 corrupt.)"                                 \
     "\n EEPROM_READ_BAD_1: 14 (EEPROM bank 1 corrupt.)"                                 \
     "\n WATCHDOG_RESTART: 15 (Whoops.)"                                                 \

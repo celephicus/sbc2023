@@ -311,6 +311,12 @@ build.cmd
     <Compile Include="Slave.cpp">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="SparkFun_ADXL345.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="SparkFun_ADXL345.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Content Include="readme.html">
     </Content>
   </ItemGroup>
