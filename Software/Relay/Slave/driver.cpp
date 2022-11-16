@@ -247,11 +247,11 @@ static void led_service() { utilsSeqService(&f_led_seq); }
 
 const uint8_t ACCEL_MAX_SAMPLES = 1U << (16 - 10);	// Accelerometer provides 10 bit data. 
 static struct {
-	static int16_t ax, ay, az;   		// Accumulators for 3 axes.
-	static uint8_t counts;				// Sample counter.
+	int16_t ax, ay, az;   		// Accumulators for 3 axes.
+	uint8_t counts;				// Sample counter.
 } f_accel_data;
 static void clear_accel_data() {
-	memset(f_accel_data, 0, sizeof(f_accel_data));
+	memset(&f_accel_data, 0, sizeof(f_accel_data));
 }
 
 ADXL345 adxl = ADXL345(10);           // USE FOR SPI COMMUNICATION, ADXL345(CS_PIN);
@@ -305,13 +305,10 @@ static void setup_devices() {
 static float tilt(float a, float b, float c) {
 	return 360.0 / M_PI * atan2(a, sqrt(b*b + c*c));
 }
-static float incline(float a, float b, float c) {
-	return 180.0*acos(a/sqrt(a*a+b*b+c*c))/M_PI;
-}
-
 void service_devices() {
 	if (adxl.getInterruptSource() & 0x80) {
 		int x, y, z;
+		adxl.readAccel(&x, &y, &z);
 		f_accel_data.ax += (int16_t)x;
 		f_accel_data.ay += (int16_t)y;
 		f_accel_data.az += (int16_t)z;
@@ -321,7 +318,8 @@ void service_devices() {
 			REGS[REGS_IDX_ACCEL_X] = f_accel_data.ax;
 			REGS[REGS_IDX_ACCEL_Y] = f_accel_data.ax;
 			REGS[REGS_IDX_ACCEL_Z] = f_accel_data.ax;
-			REGS[REGS_IDX_ACCEL_TILT_ANGLE] = (int16_t)(0.5 + 100.0 * tilt((float)ax, (float)ay, (float)az));
+			// Since components are used as a ratio, no need to divide each by counts. 
+			REGS[REGS_IDX_ACCEL_TILT_ANGLE] = (int16_t)(0.5 + 100.0 * tilt((float)f_accel_data.ax, (float)f_accel_data.ay, (float)f_accel_data.az));
 			clear_accel_data();
 		}
 	}
