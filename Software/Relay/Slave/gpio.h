@@ -19,8 +19,8 @@ enum {
     GPIO_PIN_RSEL = 6,                             // Relay driver select
 
     // Console
-    GPIO_PIN_CONS_TX = 7,                          // console serial data out
-    GPIO_PIN_CONS_RX = 8,                          // console serial data in
+    GPIO_PIN_CONS_RX = 7,                          // console serial data in
+    GPIO_PIN_CONS_TX = 8,                          // console serial data out
 
     // Bed Adaptor
     GPIO_PIN_SPARE_3 = 9,                          // Spare to adaptor board
@@ -43,6 +43,16 @@ enum {
 };
 
 // Direct access ports.
+
+// ATN: Pulse high to signal ATN low on bus.
+static inline void gpioAtnSetModeOutput() { DDRD |= _BV(2); }
+static inline void gpioAtnSetModeInput() { DDRD &= ~_BV(2); }
+static inline void gpioAtnSetMode(bool fout) { if (fout) DDRD |= _BV(2); else DDRD &= ~_BV(2); }
+static inline bool gpioAtnRead() { return PIND | _BV(2); }
+static inline void gpioAtnToggle() { PORTD ^= _BV(2); }
+static inline void gpioAtnSet() { PORTD |= _BV(2); }
+static inline void gpioAtnClear() { PORTD &= ~_BV(2); }
+static inline void gpioAtnWrite(bool b) { if (b) PORTD |= _BV(2); else PORTD &= ~_BV(2); }
 
 // WDOG: Falling edge pats output relay watchdog.
 static inline void gpioWdogSetModeOutput() { DDRD |= _BV(3); }

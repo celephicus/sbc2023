@@ -28,6 +28,7 @@ static bool console_cmds_user(char* cmd) {
 #endif
 
 	// MODBUS
+	case /** ATN **/ 0xb87e: driverSendAtn(); break;
     case /** SL **/ 0x74fa: modbusSetSlaveId(console_u_pop()); break;
     case /** ?SL **/ 0x79e5: consolePrint(CFMT_D, modbusGetSlaveId()); break;
     case /** SEND-RAW **/ 0xf690: {
@@ -99,7 +100,7 @@ static bool console_cmds_user(char* cmd) {
 	case /** NV-W **/ 0xa8c7: driverNvWrite(); break;
 	case /** NV-R **/ 0xa8c2: driverNvRead(); break;
 
-	// Arduino pin access...
+	// Arduino system access...
     case /** PIN **/ 0x1012: {
         uint8_t pin = console_u_pop();
         digitalWrite(pin, console_u_pop());
@@ -108,6 +109,8 @@ static bool console_cmds_user(char* cmd) {
         uint8_t pin = console_u_pop();
         pinMode(pin, console_u_pop());
       } break;
+    case /** ?T **/ 0x688e: consolePrint(CFMT_U, (console_ucell_t)millis()); break;
+
     default: return false;
   }
   return true;

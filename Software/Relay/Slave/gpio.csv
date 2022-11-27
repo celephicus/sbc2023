@@ -9,8 +9,8 @@ D3,WDOG,output direct,Falling edge pats output relay watchdog. ,Relay Driver,J7/
 D4,RCLK,output,Relay driver serial clock,Relay Driver,J7/6,2,PD4,PCINT20/XCK/T0,
 D5,RDAT,output,Relay driver serial data,Relay Driver,J7/5,9,PD5,PCINT21/OC0B/T1,PWM
 D6,RSEL,output active=low,Relay driver select,Relay Driver,J7/4,10,PD6,PCINT22/OC0A/AIN0,PWM
-D7,CONS_TX,output,console serial data out,Console,J7/3,11,PD7,PCINT23/AIN1,
-D8,CONS_RX,input,console serial data in,Console,J7/2,12,PB0,PCINT0/CLKO/ICP1,
+D7,CONS_RX,input,console serial data in,Console,J7/3,11,PD7,PCINT23/AIN1,
+D8,CONS_TX,output,console serial data out,Console,J7/2,12,PB0,PCINT0/CLKO/ICP1,
 D9,SPARE_3,output direct,Spare to adaptor board,Bed Adaptor,J7/1,13,PB1,PCINT1/OC1A,PWM
 D10,SSEL,output,SPI slave select to Adaptor,SPI,J6/12,14,PB2,PCINT2/SS/OC1B,PWM
 D11/MOSI,MOSI,MOSI,SPI to Adaptor,SPI,J6/11,15,PB3,PCINT3/OC2A/MOSI,PWM

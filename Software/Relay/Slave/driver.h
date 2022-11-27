@@ -26,4 +26,7 @@ void driverNvSetDefaults();
 // The scanner controls various flags in the flags register. This function causes the events associated with a flags mask to be rescanned, and the event to be resent if the value is above/below a threshold. 
 void driverRescan(uint16_t mask);
 
+// Take ATN low for a while to signal back to the master. 
+void driverSendAtn();
+
 #endif // DRIVER_H__

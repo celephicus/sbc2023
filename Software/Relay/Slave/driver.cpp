@@ -538,6 +538,32 @@ static void scanner_init() { tholdScanInit(SCANDEFS, f_scan_states, UTILS_ELEMEN
 static void scanner_scan() { tholdScanSample(SCANDEFS, f_scan_states, UTILS_ELEMENT_COUNT(SCANDEFS), thold_scanner_cb); }
 void driverRescan(uint16_t mask) { tholdScanRescan(SCANDEFS, f_scan_states, UTILS_ELEMENT_COUNT(SCANDEFS), thold_scanner_cb, mask); }
 
+// ATN line on Bus back to master. 
+static uint8_t f_atn_state;
+static void atn_init() {
+	digitalWrite(GPIO_PIN_ATN, 0);   // Set inactive.
+	pinMode(GPIO_PIN_ATN, OUTPUT);
+}
+static void atn_service() {
+	switch (f_atn_state) {
+		case 1:
+			digitalWrite(GPIO_PIN_ATN, 1);   // Set active.
+			f_atn_state = 2;
+			break;
+		case 2:
+			digitalWrite(GPIO_PIN_ATN, 0);   // Set back inactive.
+			f_atn_state = 0;
+			break;
+		default:
+			// No action.
+			break;			
+	}
+}
+
+void driverSendAtn() { 
+	f_atn_state = 1;
+}
+
 // Externals
 void driverInit() {
 	// All objects in the NV (inc. regs) must have been setup before this call. 
@@ -549,13 +575,15 @@ void driverInit() {
 	scanner_init();
 	setup_devices();
 	modbus_init();
+	atn_init();
 }
 
 void driverService() {
 	modbus_service();
 	utilsRunEvery(100) { 
 		service_fault_timers();
-		adc_start();					
+		adc_start();	
+		atn_service();		
 	}
 	utilsRunEvery(50) { 
 		led_service();		
