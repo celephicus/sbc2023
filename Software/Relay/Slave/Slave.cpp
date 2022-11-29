@@ -156,6 +156,16 @@ void setup() {
 	console_init();
 }
 
+void blinkyLed() {
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
+	const uint16_t ALARM_MASK = REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS|REGS_FLAGS_MASK_DC_IN_VOLTS_LOW|REGS_FLAGS_MASK_BUS_VOLTS_LOW;
+#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
+	const uint16_t ALARM_MASK = REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS|REGS_FLAGS_MASK_DC_IN_VOLTS_LOW;
+#endif
+	if (!(regsFlags() & ALARM_MASK))
+		driverSetLedPattern(DRIVER_LED_PATTERN_OK);
+}
+
 static void service_blinky_led_warnings() {
 	if (regsFlags() & REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS)
 		driverSetLedPattern(DRIVER_LED_PATTERN_NO_COMMS);
@@ -165,9 +175,8 @@ static void service_blinky_led_warnings() {
 #endif
 	else if (regsFlags() & REGS_FLAGS_MASK_BUS_VOLTS_LOW)
 		driverSetLedPattern(DRIVER_LED_PATTERN_BUS_VOLTS_LOW);
-	else
-		driverSetLedPattern(DRIVER_LED_PATTERN_OK);
 }
+
 void loop() {
 	devWatchdogPat(DEV_WATCHDOG_MASK_MAINLOOP);
 	consoleService();

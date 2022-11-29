@@ -9,6 +9,7 @@ void driverService();
 
 // LED pattern, set this and it will blink away forever.
 enum {
+	DRIVER_LED_PATTERN_NONE,
 	DRIVER_LED_PATTERN_OK,
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 	DRIVER_LED_PATTERN_DC_IN_VOLTS_LOW,

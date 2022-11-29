@@ -312,7 +312,7 @@ bool utilsStrtoui(unsigned* n, const char *str, char **endptr, unsigned base);
 
 	bool playIsBusy() { return utilsSeqIsBusy(&f_seq); }
 	void playStart(const PlayDef* def) { utilsSeqStart(&f_seq, def, sizeof(PlayDef), play_action_func); }
-	void playService() { utilsSeqService(&f_seq); }
+	void playService() { utilsSeqService(&f_seq); }		// Call every so often. 
 */
 
 /* The header of the action type, defines the action for the sequencer. A struct must have this as the first member, the action function downcasts the
@@ -344,13 +344,14 @@ typedef struct {
 	t_utils_seq_duration loop_counter;
 	uint8_t item_size;		// Size of derived type that has a UtilsSeqHdr as first item.
 	sequencer_action_func action;
-	t_utils_seq_duration timer;
+	t_utils_seq_duration timer; // Times duration of steps in sequence. 
+	bool init;				// Set to indicate that the sequence has just been set so needs initialisation in utilsSeqService().
 } UtilsSeqCtx;
 
 // Check if the sequencer is running or halted. 
 bool utilsSeqIsBusy(const UtilsSeqCtx* seq);
 
-// Start running a sequence. Call with a NULL definition to stop. 
+// Start running a sequence. Call with a NULL definition to stop. Note that to restart a sequence it must be stopped first, i.e. calling utilsSeqStart() with the same definition as previously has no effect. 
 void utilsSeqStart(UtilsSeqCtx* seq, const UtilsSeqHdr* def, uint8_t item_size, sequencer_action_func action);
 
 void utilsSeqService(UtilsSeqCtx* seq);

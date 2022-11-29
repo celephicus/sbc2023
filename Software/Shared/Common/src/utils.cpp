@@ -87,20 +87,20 @@ bool utilsMultiThreshold(const uint16_t* thresholds, uint8_t count, uint16_t hys
 
 // Utils Sequencer -- generic driver to run an arbitrary sequence by calling a user function every so often with a canned argument.
 
+#define SEQ_ASSERT(cond_) (void)0
+
 bool utilsSeqIsBusy(const UtilsSeqCtx* seq) { return (NULL != seq->hdr); }
 
 UTILS_STATIC_ASSERT(sizeof(t_utils_seq_duration) == 2);  // Make sure that we use the correct pgm_read_xxx macro.
 static void seq_load_timer(UtilsSeqCtx* seq) {	// Load timer with start value.
-	seq->timer = pgm_read_word(&seq->hdr->duration);
+	SEQ_ASSERT(NULL != seq);
+	seq->timer = (t_utils_seq_duration)pgm_read_word(&seq->hdr->duration);
 }
 
-static void seq_next_def(UtilsSeqCtx* seq) {	// Advance pointer to next dequence definition. 
+static void seq_next_def(UtilsSeqCtx* seq) {	// Advance pointer to next sequence definition. 
+	SEQ_ASSERT(NULL != seq);
 	seq->hdr = (const UtilsSeqHdr*)(((uint8_t*)seq->hdr) + seq->item_size);
 }
-
-// Invariant for the sequencer context. If sequencer is running then timer must be non-zero. Define SEQ_ASSERT to assert or similar to verify. 
-#define SEQ_INVARIANT(seq_) ((NULL == (seq_)->hdr) || ((seq_)->timer > 0))
-#define SEQ_ASSERT(cond_) (void)0
 
 static void seq_update(UtilsSeqCtx* seq) {
     seq_load_timer(seq);
@@ -134,31 +134,43 @@ static void seq_update(UtilsSeqCtx* seq) {
 	else
 		seq->action(seq->hdr);					// By default, just run the action.
 
-	SEQ_ASSERT(SEQ_INVARIANT(seq));
+	SEQ_ASSERT((NULL == seq->hdr) || (seq->timer > 0));
 }
 
 void utilsSeqStart(UtilsSeqCtx* seq, const UtilsSeqHdr* def, uint8_t item_size, sequencer_action_func action) {
-	seq->hdr = seq->base = seq->loop_start = def;
-	seq->loop_counter = 0;				// If we see a loop end we'll go over it.
-	seq->item_size = item_size;
-	seq->action = action;
-	if (NULL != seq->hdr)				// Often happens, just a shorthand for a default action.
-		seq_update(seq);
-	else
-		seq->action(NULL);
-	SEQ_ASSERT(SEQ_INVARIANT(seq));
-}
-
-void utilsSeqService(UtilsSeqCtx* seq) {
-	SEQ_ASSERT(SEQ_INVARIANT(seq));
-    if(utilsSeqIsBusy(seq)) {				// If running...
-		SEQ_ASSERT(seq->timer > 0);			// Always true...
-		if (0 == --seq->timer) {			// On timeout, next instruction and execute.
-			seq_next_def(seq);
-			seq_update(seq);
+	if (NULL == def) {							// If we want to stop...
+		seq->hdr = NULL;						// Stop immediately.
+		action(NULL);
+	}
+	
+	else {										// Not running...
+		if (!(utilsSeqIsBusy(seq) && (def == seq->base))) {	// Don't restart a running sequence. 
+			seq->hdr = seq->base = seq->loop_start = def;	// Set sequence pointers
+			seq->loop_counter = 0;				// If we see a loop end without a start we'll just go over it.
+			seq->item_size = item_size;			// Set size of items in array. 
+			seq->action = action;				// Set action func.
+			seq->init = true;					// Make utilsSeqService() start the sequence.
 		}
 	}
 }
+
+void utilsSeqService(UtilsSeqCtx* seq) {
+	SEQ_ASSERT((NULL != seq) && (seq->timer > 0U));
+    if(utilsSeqIsBusy(seq)) {				// If running...
+		if (seq->init) {
+			seq->init = false;
+			seq_update(seq);
+		}
+		else {
+			SEQ_ASSERT(seq->timer > 0);			// Always true...
+			if (0 == --seq->timer) {			// On timeout, next instruction and execute.
+				seq_next_def(seq);
+				seq_update(seq);
+			}
+		}
+	}
+}
+
 #if 0
 // General purpose scaler & thresholder & warning generator. 
 
