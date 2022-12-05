@@ -28,6 +28,7 @@ static bool console_cmds_user(char* cmd) {
 #endif
 
 	// MODBUS
+	case /** ATN **/ 0xb87e: driverSendAtn(); break;
     case /** SL **/ 0x74fa: modbusSetSlaveId(console_u_pop()); break;
     case /** ?SL **/ 0x79e5: consolePrint(CFMT_D, modbusGetSlaveId()); break;
     case /** SEND-RAW **/ 0xf690: {
@@ -60,16 +61,20 @@ static bool console_cmds_user(char* cmd) {
 	  } break;
 
 	// Regs
-    case /** ?V **/ 0x688c: fori(COUNT_REGS) { regsPrintValue(i); } break;
+    case /** ?V **/ 0x688c: 
+	    { const uint8_t idx = console_u_pop();
+		    if (idx < COUNT_REGS) 
+				regsPrintValue(idx);
+			else
+				consolePrint(CFMT_C, (console_cell_t)'?');
+		} break; 
     case /** V **/ 0xb5f3: 
 	    { const uint8_t idx = console_u_pop(); const uint16_t v = (uint16_t)console_u_pop(); 
-		    if (idx < COUNT_REGS) {
-				CRITICAL_START(); 
-				REGS[idx] = v; // Might be interrupted by an ISR part way through.
-				CRITICAL_END();
-			}
+		    if (idx < COUNT_REGS) 
+				CRITICAL( REGS[idx] = v ); // Might be interrupted by an ISR part way through.
 		} break; 
-	case /** ??V **/ 0x85d3: {
+    case /** ??V **/ 0x85d3: fori(COUNT_REGS) { regsPrintValue(i); } break;
+	case /** ???V **/ 0x3cac: {
 		fori (COUNT_REGS) {
 			consolePrint(CFMT_NL, 0); 
 			consolePrint(CFMT_D|CFMT_M_NO_SEP, (console_cell_t)i);
@@ -99,7 +104,7 @@ static bool console_cmds_user(char* cmd) {
 	case /** NV-W **/ 0xa8c7: driverNvWrite(); break;
 	case /** NV-R **/ 0xa8c2: driverNvRead(); break;
 
-	// Arduino pin access...
+	// Arduino system access...
     case /** PIN **/ 0x1012: {
         uint8_t pin = console_u_pop();
         digitalWrite(pin, console_u_pop());
@@ -108,6 +113,8 @@ static bool console_cmds_user(char* cmd) {
         uint8_t pin = console_u_pop();
         pinMode(pin, console_u_pop());
       } break;
+    case /** ?T **/ 0x688e: consolePrint(CFMT_U, (console_ucell_t)millis()); break;
+
     default: return false;
   }
   return true;
@@ -153,6 +160,16 @@ void setup() {
 	console_init();
 }
 
+void blinkyLed() {
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
+	const uint16_t ALARM_MASK = REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS|REGS_FLAGS_MASK_BUS_VOLTS_LOW|REGS_FLAGS_MASK_DC_IN_VOLTS_LOW;
+#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
+	const uint16_t ALARM_MASK = REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS|REGS_FLAGS_MASK_BUS_VOLTS_LOW;
+#endif
+	if (!(regsFlags() & ALARM_MASK))
+		driverSetLedPattern(DRIVER_LED_PATTERN_OK);
+}
+
 static void service_blinky_led_warnings() {
 	if (regsFlags() & REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS)
 		driverSetLedPattern(DRIVER_LED_PATTERN_NO_COMMS);
@@ -162,9 +179,8 @@ static void service_blinky_led_warnings() {
 #endif
 	else if (regsFlags() & REGS_FLAGS_MASK_BUS_VOLTS_LOW)
 		driverSetLedPattern(DRIVER_LED_PATTERN_BUS_VOLTS_LOW);
-	else
-		driverSetLedPattern(DRIVER_LED_PATTERN_OK);
 }
+
 void loop() {
 	devWatchdogPat(DEV_WATCHDOG_MASK_MAINLOOP);
 	consoleService();

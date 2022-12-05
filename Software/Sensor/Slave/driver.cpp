@@ -18,7 +18,7 @@ typedef struct {
 	uint8_t timeout;
 } TimeoutTimerDef;
 static const TimeoutTimerDef FAULT_TIMER_DEFS[] PROGMEM = {
-	{ REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS, 10 },		// Long timeout as Display migh get busy and not send queries for a while
+	{ REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS, 10 },		// Long timeout as Display might get busy and not send queries for a while
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
 	{ REGS_FLAGS_MASK_ACCEL_FAIL, 2 },					// Shortest possible timeout as accelerometer streams data quickly.
 #endif
@@ -39,14 +39,23 @@ static void clear_fault_timer(uint16_t mask) { // Clear possibly many flags set 
 		if (m & mask) {
 			regsWriteMaskFlags(m, false);
 			f_fault_timers[i] = pgm_read_byte(&FAULT_TIMER_DEFS[i].timeout);
-			mask &= ~m; // Clear acrioned mask as we might be able to exit early. 
+			mask &= ~m; // Clear actioned mask as we might be able to exit early. 
 		}
 	}
 }
-
+static void init_fault_timer() { // Assumes fault flags are all cleared already. 
+	fori (UTILS_ELEMENT_COUNT(FAULT_TIMER_DEFS)) 
+		f_fault_timers[i] = pgm_read_byte(&FAULT_TIMER_DEFS[i].timeout);
+}
 
 // MODBUS
 //
+void blinkyLed();	//	Defined in Slave.cpp.
+
+static void restart_modbus_fault_timer() {
+	blinkyLed();
+	clear_fault_timer(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS);
+}
 
 // Build two different versions depending on product.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
@@ -58,18 +67,13 @@ static uint8_t read_holding_register(uint16_t address, uint16_t* value) {
 	}
 	if (SBC2022_MODBUS_REGISTER_SENSOR == address) {
 		*value = REGS[REGS_IDX_ACCEL_TILT_ANGLE];
-		clear_fault_timer(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS);
+		restart_modbus_fault_timer();
 		return 0;
 	}
 	*value = (uint16_t)-1;
 	return 1;
 }
 static uint8_t write_holding_register(uint16_t address, uint16_t value) {
-	if (SBC2022_MODBUS_REGISTER_SENSOR == address) {
-		REGS[REGS_IDX_ACCEL_TILT_ANGLE] = value;
-		clear_fault_timer(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS);
-		return 0;
-	}
 	return 1;
 }
 
@@ -90,7 +94,7 @@ static uint8_t read_holding_register(uint16_t address, uint16_t* value) {
 static uint8_t write_holding_register(uint16_t address, uint16_t value) {
 	if (SBC2022_MODBUS_REGISTER_RELAY == address) {
 		REGS[REGS_IDX_RELAYS] = (uint8_t)value;
-		clear_fault_timer(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS);
+		restart_modbus_fault_timer();
 		return 0;
 	}
 	return 1;
@@ -193,7 +197,14 @@ void modbus_timing_debug(uint8_t id, uint8_t s) {
 static void modbus_init() {
 	Serial.begin(9600);
 	modbusInit(Serial, GPIO_PIN_RS485_TX_EN, modbus_cb);
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY	
 	modbusSetSlaveId(SBC2022_MODBUS_SLAVE_ADDRESS_RELAY);
+#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR	
+	modbusSetSlaveId(SBC2022_MODBUS_SLAVE_ADDRESS_SENSOR_0 + 
+	  !!(regsFlags() & REGS_FLAGS_MASK_LK_A1) +
+	   ((!!(regsFlags() & REGS_FLAGS_MASK_LK_A2)) << 1)
+	);
+#endif	
 	modbusSetTimingDebugCb(modbus_timing_debug);
 	gpioSpare1SetModeOutput();		// These are used by the RS485 debug cb.
 	gpioSpare2SetModeOutput();
@@ -219,7 +230,7 @@ static void led_set_pattern(const led_pattern_def_t* def) {
 	utilsSeqStart(&f_led_seq, (const UtilsSeqHdr*)def, sizeof(led_pattern_def_t), led_action_func); 
 }
 
-static const led_pattern_def_t LED_PATTERN_OK[] 			 PROGMEM = 	{ {2, 0}, 			{UTILS_SEQ_END, 1}, };
+static const led_pattern_def_t LED_PATTERN_OK[] 			 PROGMEM = 	{ {2, 0}, 			{UTILS_SEQ_END, 1}, };		// Blink off when all is well. 
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 static const led_pattern_def_t LED_PATTERN_DC_IN_VOLTS_LOW[] PROGMEM = 	{ {20, 1}, {20, 0}, {UTILS_SEQ_REPEAT, 0}, };
 #endif
@@ -228,15 +239,15 @@ static const led_pattern_def_t LED_PATTERN_NO_COMMS[] 		 PROGMEM = 	{ {50, 1}, {
 
 static const led_pattern_def_t* const LED_PATTERNS[] PROGMEM = { 
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
-	LED_PATTERN_OK, LED_PATTERN_BUS_VOLTS_LOW, LED_PATTERN_NO_COMMS,
+	NULL, LED_PATTERN_OK, LED_PATTERN_BUS_VOLTS_LOW, LED_PATTERN_NO_COMMS,
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
-	LED_PATTERN_OK, LED_PATTERN_DC_IN_VOLTS_LOW, LED_PATTERN_BUS_VOLTS_LOW, LED_PATTERN_NO_COMMS, 
+	NULL, LED_PATTERN_OK, LED_PATTERN_DC_IN_VOLTS_LOW, LED_PATTERN_BUS_VOLTS_LOW, LED_PATTERN_NO_COMMS, 
 #endif
 };
 void driverSetLedPattern(uint8_t p) {
 	if (p >= UTILS_ELEMENT_COUNT(LED_PATTERNS))
 		p = 0;
-	led_set_pattern((const led_pattern_def_t*)pgm_read_word(&LED_PATTERNS[p]));
+	led_set_pattern((const led_pattern_def_t*)pgm_read_ptr(&LED_PATTERNS[p]));
 }
 static void led_init() { gpioLedSetModeOutput(); }
 static void led_service() { utilsSeqService(&f_led_seq); }
@@ -245,9 +256,9 @@ static void led_service() { utilsSeqService(&f_led_seq); }
 
 #include "SparkFun_ADXL345.h"         
 
-const uint8_t ACCEL_MAX_SAMPLES = 1U << (16 - 10);	// Accelerometer provides 10 bit data. 
+const uint8_t ACCEL_MAX_SAMPLES = 1; //1U << (16 - 10);	// Accelerometer provides 10 bit data. 
 static struct {
-	int16_t ax, ay, az;   		// Accumulators for 3 axes.
+	int16_t r[3];   			// Accumulators for 3 axes.
 	uint8_t counts;				// Sample counter.
 } f_accel_data;
 static void clear_accel_data() {
@@ -255,7 +266,7 @@ static void clear_accel_data() {
 }
 
 ADXL345 adxl = ADXL345(10);           // USE FOR SPI COMMUNICATION, ADXL345(CS_PIN);
-static void setup_devices() {
+static void sensor_accel_init() {
   adxl.powerOn();                     // Power on the ADXL345
 
   adxl.setRangeSetting(2);           // Give the range settings
@@ -302,46 +313,57 @@ static void setup_devices() {
 	clear_accel_data();
 }
 
+static void sensor_address_links_init() {
+	regsWriteMaskFlags(REGS_FLAGS_MASK_LK_A1, !digitalRead(GPIO_PIN_SEL0));
+	regsWriteMaskFlags(REGS_FLAGS_MASK_LK_A2, !digitalRead(GPIO_PIN_SEL1));
+}
+static void setup_devices() {
+	sensor_accel_init();
+	sensor_address_links_init();
+}
 static float tilt(float a, float b, float c) {
 	return 360.0 / M_PI * atan2(a, sqrt(b*b + c*c));
 }
+
+// TODO: Test accelerometer actually present on bus. Check chip ID every second would do. Also hardware, pulldown on MISO would stop irupt flagging. 
 void service_devices() {
 	if (adxl.getInterruptSource() & 0x80) {
-		int x, y, z;
-		adxl.readAccel(&x, &y, &z);
-		f_accel_data.ax += (int16_t)x;
-		f_accel_data.ay += (int16_t)y;
-		f_accel_data.az += (int16_t)z;
-		if (ACCEL_MAX_SAMPLES == f_accel_data.counts++) {
+		int r[3];
+		adxl.readAccel(r);
+		fori (3) f_accel_data.r[i] += (int16_t)r[i];
+		if (++f_accel_data.counts >= REGS[REGS_IDX_ACCEL_AVG]) {	// Check for time to average accumulated readings.
+			gpioSpare1Set();
 			clear_fault_timer(REGS_FLAGS_MASK_ACCEL_FAIL);
 			REGS[REGS_IDX_ACCEL_SAMPLES] += 1;
-			REGS[REGS_IDX_ACCEL_X] = f_accel_data.ax;
-			REGS[REGS_IDX_ACCEL_Y] = f_accel_data.ax;
-			REGS[REGS_IDX_ACCEL_Z] = f_accel_data.ax;
-			// Since components are used as a ratio, no need to divide each by counts. 
-			REGS[REGS_IDX_ACCEL_TILT_ANGLE] = (int16_t)(0.5 + 100.0 * tilt((float)f_accel_data.ax, (float)f_accel_data.ay, (float)f_accel_data.az));
+			fori (3) REGS[REGS_IDX_ACCEL_X + i] = f_accel_data.r[i];
 			clear_accel_data();
+
+			// Since components are used as a ratio, no need to divide each by counts.
+			float tilt_angle = tilt((float)(int16_t)REGS[REGS_IDX_ACCEL_X], (float)(int16_t)REGS[REGS_IDX_ACCEL_Y], (float)(int16_t)REGS[REGS_IDX_ACCEL_Z]);
+			REGS[REGS_IDX_ACCEL_TILT_ANGLE] = (int16_t)(0.5 + 100.0 * tilt_angle);
+			gpioSpare1Clear();
 		}
 	}
-	if (regsFlags() & REGS_FLAGS_MASK_ACCEL_FAIL)	// We have a fault, set fault value. 
-		REGS[REGS_IDX_ACCEL_TILT_ANGLE] = SBC2022_MODBUS_TILT_FAULT;
+	if (regsFlags() & REGS_FLAGS_MASK_ACCEL_FAIL)	// We have a fault, set fault value.
+	REGS[REGS_IDX_ACCEL_TILT_ANGLE] = SBC2022_MODBUS_TILT_FAULT;
 }
 
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 
 // MAX4820 relay driver driver.
+// Made a boo-boo, connected relay driver to SCK/MOSI instead of GPIO_PIN_RDAT/GPIO_PIN_RCLK. Suggest correcting in next board spin. Till then, we use the on-chip SPI. 
 static uint8_t f_relay_data;
 static void write_relays(uint8_t v) {
 	f_relay_data = v;
 	digitalWrite(GPIO_PIN_RSEL, 0);
-	shiftOut(GPIO_PIN_RDAT, GPIO_PIN_RCLK, MSBFIRST, f_relay_data);
+	shiftOut(GPIO_PIN_MOSI, GPIO_PIN_SCK, MSBFIRST, f_relay_data);
 	digitalWrite(GPIO_PIN_RSEL, 1);
 }
 static void setup_devices() {
 	pinMode(GPIO_PIN_RSEL, OUTPUT);
 	digitalWrite(GPIO_PIN_RSEL, 1);   // Set inactive.
-	pinMode(GPIO_PIN_RDAT, OUTPUT);
-	pinMode(GPIO_PIN_RCLK, OUTPUT);
+	pinMode(GPIO_PIN_MOSI, OUTPUT);
+	pinMode(GPIO_PIN_SCK, OUTPUT);
 	write_relays(0);
 	gpioWdogSetModeOutput();
 }
@@ -422,7 +444,7 @@ static void adc_init() {
 }
 static void adc_start() { devAdcStartConversions(); }
 
-static uint16_t scaler_12v_mon(uint16_t raw) { return utilsRescaleU16(raw, 1023, 15000); }
+static uint16_t scaler_12v_mon(uint16_t raw) { return utilsRescaleU16(raw, 1023, 13300); }
 static void adc_do_scaling() {
 	// No need for critical section as we have waited for the ADC ISR to sample new values into the input registers, now it is idle.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
@@ -432,35 +454,37 @@ static void adc_do_scaling() {
 }
 
 // Threshold scanner
-typedef bool (*thold_scanner_threshold_func_t)(bool tstate, uint16_t value); 	// Get new tstate, from value, and current tstate for implementing hysteresis.
-typedef uint16_t (*thold_scanner_action_delay_func_t)();				// Returns number of ticks before update is published.
+typedef uint8_t (*thold_scanner_threshold_func)(uint8_t tstate, uint16_t value); 	// Get new tstate, from value, and current tstate for implementing hysteresis.
+typedef uint16_t (*thold_scanner_action_delay_func)();				// Returns number of ticks before update is published.
 typedef struct {	// Define a single scan, always const.
 	uint16_t flags_mask;
 	const void* publish_func_arg;    				// Argument supplied to callback function. 
     const uint16_t* input_reg;              		// Input register, usually scaled ADC.
-    thold_scanner_threshold_func_t threshold;    	// Thresholding function, returns small zero based value
-    thold_scanner_action_delay_func_t delay_get;  	// Function returning delay before tstate update is published. Null implies no delay. 
-} thold_scanner_def_t;
+    thold_scanner_threshold_func threshold;    	// Thresholding function, returns small zero based value
+    thold_scanner_action_delay_func delay_get;  	// Function returning delay before tstate update is published. Null implies no delay. 
+} TholdScannerDef;
 
 typedef struct {	// Holds current state of a scan.
 	uint16_t action_timer;
-} thold_scanner_state_t;
+	uint8_t prev_tstate;
+} TholdScannerState;
 
 typedef void (*thold_scanner_update_cb)(uint16_t mask, const void* arg);	// Callback that a scan has changed state. 
 
-void tholdScanInit(const thold_scanner_def_t* def, thold_scanner_state_t* sst, uint8_t count, thold_scanner_update_cb cb) {
-	memset(sst, 0U, sizeof(thold_scanner_state_t) * count);					// Clear the entire array pf state objects.
-
+void tholdScanInit(const TholdScannerDef* def, TholdScannerState* sst, uint8_t count, thold_scanner_update_cb cb) {
 	while (count-- > 0U) {
+		sst->prev_tstate = 2;	// Force update as current tstate can never equal this, being a bool.
+
 		const uint16_t mask =  pgm_read_word(&def->flags_mask);
 		// Check all values that we can here.
         ASSERT(0 != mask);
 		// publish_func_arg may be NULL.
         ASSERT(NULL != pgm_read_ptr(&def->input_reg));
-		ASSERT(NULL != (thold_scanner_threshold_func_t)pgm_read_ptr(&def->threshold));
+		ASSERT(NULL != (thold_scanner_threshold_func)pgm_read_ptr(&def->threshold));
 		// delay_get may be NULL for no delay. 
 		if (NULL != cb)
 			cb(mask, pgm_read_ptr(&def->publish_func_arg));
+			
 		def += 1, sst += 1;
     }
 }
@@ -471,17 +495,17 @@ static void thold_scan_publish_update(uint16_t mask, void* cb_arg, thold_scanner
 		cb(mask, cb_arg);
 }
 
-void tholdScanSample(const thold_scanner_def_t* def, thold_scanner_state_t* sst, uint8_t count, thold_scanner_update_cb cb) {
+void tholdScanSample(const TholdScannerDef* def, TholdScannerState* sst, uint8_t count, thold_scanner_update_cb cb) {
 	while (count-- > 0U) {
 		const uint16_t mask =  pgm_read_word(&def->flags_mask);
         const uint16_t input_val = *(const uint16_t*)pgm_read_ptr(&def->input_reg);	        // Read input value from register. 
 		
 		// Get new state by thresholding the input value with a custom function, which is supplied the old tstate so it can set the threshold hysteresis. 
-		const bool current_tstate = regsFlags() & mask;	// Get current tstate.
-        const bool new_tstate = ((thold_scanner_threshold_func_t)pgm_read_ptr(&def->threshold))(current_tstate, input_val);
+        const uint8_t new_tstate = !!((thold_scanner_threshold_func)pgm_read_ptr(&def->threshold))(sst->prev_tstate, input_val); // Convert to boolean, but type uint8_t. 
 
-		if (current_tstate != new_tstate)  {		 						// If the tstate has changed...
-			const thold_scanner_action_delay_func_t delay_get = (thold_scanner_action_delay_func_t)pgm_read_ptr(&def->delay_get);
+		if (sst->prev_tstate != new_tstate)  {		 						// If the tstate has changed...
+			sst->prev_tstate = new_tstate;
+			const thold_scanner_action_delay_func delay_get = (thold_scanner_action_delay_func)pgm_read_ptr(&def->delay_get);
 			sst->action_timer = (NULL != delay_get) ? delay_get() : 0U;
 			if (0U == sst->action_timer)			// Check, might be loaded with zero for immediate update. 
 				thold_scan_publish_update(mask, pgm_read_ptr(&def->publish_func_arg), cb, new_tstate);
@@ -492,7 +516,7 @@ void tholdScanSample(const thold_scanner_def_t* def, thold_scanner_state_t* sst,
     }
 }
 
-void tholdScanRescan(const thold_scanner_def_t* def, thold_scanner_state_t* sst, uint8_t count, thold_scanner_update_cb cb, uint16_t scan_mask) {
+void tholdScanRescan(const TholdScannerDef* def, TholdScannerState* sst, uint8_t count, thold_scanner_update_cb cb, uint16_t scan_mask) {
 	while (count-- > 0U) {
 		const uint16_t mask =  pgm_read_word(&def->flags_mask);
         if (scan_mask & mask) {     // Do we have a set bit in mask?
@@ -508,9 +532,9 @@ void tholdScanRescan(const thold_scanner_def_t* def, thold_scanner_state_t* sst,
     }
 }
 
-static bool scanner_thold_12v_mon(bool tstate, uint16_t val) {  return val < (tstate ? 11500 : 1100); }
+static uint8_t scanner_thold_12v_mon(uint8_t tstate, uint16_t val) {  return val < (tstate ? 11500 : 11000); }
 static uint16_t scanner_get_delay() { return 10; }
-static const thold_scanner_def_t SCANDEFS[] PROGMEM = {
+static const TholdScannerDef SCANDEFS[] PROGMEM = {
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 	{	
 		REGS_FLAGS_MASK_DC_IN_VOLTS_LOW, (const void*)DRIVER_LED_PATTERN_DC_IN_VOLTS_LOW,
@@ -532,11 +556,37 @@ static void thold_scanner_cb(uint16_t mask, const void* arg) {
 	(void)arg;
 }
 	
-thold_scanner_state_t f_scan_states[UTILS_ELEMENT_COUNT(SCANDEFS)];
+TholdScannerState f_scan_states[UTILS_ELEMENT_COUNT(SCANDEFS)];
 
 static void scanner_init() { tholdScanInit(SCANDEFS, f_scan_states, UTILS_ELEMENT_COUNT(SCANDEFS), thold_scanner_cb); }
 static void scanner_scan() { tholdScanSample(SCANDEFS, f_scan_states, UTILS_ELEMENT_COUNT(SCANDEFS), thold_scanner_cb); }
 void driverRescan(uint16_t mask) { tholdScanRescan(SCANDEFS, f_scan_states, UTILS_ELEMENT_COUNT(SCANDEFS), thold_scanner_cb, mask); }
+
+// ATN line on Bus back to master. 
+static uint8_t f_atn_state;
+static void atn_init() {
+	digitalWrite(GPIO_PIN_ATN, 0);   // Set inactive.
+	pinMode(GPIO_PIN_ATN, OUTPUT);
+}
+static void atn_service() {
+	switch (f_atn_state) {
+		case 1:
+			digitalWrite(GPIO_PIN_ATN, 1);   // Set active.
+			f_atn_state = 2;
+			break;
+		case 2:
+			digitalWrite(GPIO_PIN_ATN, 0);   // Set back inactive.
+			f_atn_state = 0;
+			break;
+		default:
+			// No action.
+			break;			
+	}
+}
+
+void driverSendAtn() { 
+	f_atn_state = 1;
+}
 
 // Externals
 void driverInit() {
@@ -549,13 +599,16 @@ void driverInit() {
 	scanner_init();
 	setup_devices();
 	modbus_init();
+	atn_init();
+	init_fault_timer();
 }
 
 void driverService() {
 	modbus_service();
 	utilsRunEvery(100) { 
 		service_fault_timers();
-		adc_start();					
+		adc_start();	
+		atn_service();		
 	}
 	utilsRunEvery(50) { 
 		led_service();		

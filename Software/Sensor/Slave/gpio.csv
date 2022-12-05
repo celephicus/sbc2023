@@ -10,8 +10,8 @@ D4,SPARE_2,output direct,Spare for debugging,Spare,J7/6,2,PD4,PCINT20/XCK/T0,
 D5,SPARE_3,output direct,Spare for debugging,Spare,J7/5,9,PD5,PCINT21/OC0B/T1,PWM
 D6,,unused,,,J7/4,10,PD6,PCINT22/OC0A/AIN0,PWM
 D7,,unused,,,J7/3,11,PD7,PCINT23/AIN1,
-D8,CONS_TX,output,console serial data out,Console,J7/2,12,PB0,PCINT0/CLKO/ICP1,
-D9,CONS_RX,input,console serial data in,Console,J7/1,13,PB1,PCINT1/OC1A,PWM
+D8,CONS_RX,input,console serial data in,Console,J7/2,12,PB0,PCINT0/CLKO/ICP1,
+D9,CONS_TX,output,console serial data out,Console,J7/1,13,PB1,PCINT1/OC1A,PWM
 D10,SSEL,output,SPI slave select to Accelerometer,SPI,J6/12,14,PB2,PCINT2/SS/OC1B,PWM
 D11/MOSI,MOSI,MOSI,SPI to Accelerometer,SPI,J6/11,15,PB3,PCINT3/OC2A/MOSI,PWM
 D12/MISO,MISO,MISO,SPI to Accelerometer,SPI,J6/10,16,PB4,PCINT4/MISO,

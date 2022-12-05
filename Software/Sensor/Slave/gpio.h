@@ -18,8 +18,8 @@ enum {
     GPIO_PIN_SPARE_3 = 5,                          // Spare for debugging
 
     // Console
-    GPIO_PIN_CONS_TX = 8,                          // console serial data out
-    GPIO_PIN_CONS_RX = 9,                          // console serial data in
+    GPIO_PIN_CONS_RX = 8,                          // console serial data in
+    GPIO_PIN_CONS_TX = 9,                          // console serial data out
 
     // SPI
     GPIO_PIN_SSEL = 10,                            // SPI slave select to Accelerometer
