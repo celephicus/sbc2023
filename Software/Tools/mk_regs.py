@@ -45,7 +45,7 @@ reReg = re.compile(r'''
 def error(msg, lineno=None):
 	codegen.error(f"line {lineno}: {msg}" if lineno else msg)
 	
-registers = {} # defs with ident in col 1 are registers, with a 4-tuple of (fields, default-value, options, description). Options are `hex', `nv', default.
+registers = {} # defs with ident in col 1 are registers, with a 4-tuple of (fields, default-value, options, description). Options are a default value as an int, optional `nv' and one of (`hex', 'signed').
 				# defs with leading whitepsace are fields, and add a dict of name: 2-tuple of (bits, description). Options are bit `3' or range `5..7'.
 REG_IDX_FIELDS, REG_IDX_DEFAULT, REG_IDX_OPTIONS, REG_IDX_DESC = range(4)
 FIELD_IDX_BITS, FIELD_IDX_MASK, FIELD_IDX_DESC = range(3)
@@ -55,24 +55,22 @@ for lineno, ln in enumerate(parts[RegionParser.S_DEFS], len(parts[RegionParser.S
 	#continue
 	name = r_name.upper()
 	raw_options = r_options.lower().split() if r_options else [] 	# Normalise options.
-	options = []	# Both registers & fields parse options, so clear it here. 
 	if not r_lwsp:		# Register declaration...
+		options = {}		
 		if name in registers: error(f"{name}: duplicate register name.", lineno)
-		default_value = None		# Default value has a default value!
+		default_value = 0					# Default value has a default value!
+		options['format'] = 'unsigned'		# Format to use when printing. 
 		for opt in raw_options:
 			try: 
-				v = int(opt, 0)	
-				if default_value is not None:
-					error(f"{name}: more than one default value `{opt}'.", lineno) 
+				default_value = int(opt, 0)	
+			except ValueError: 	# Not an int, try other options.
+				if opt in 'nv'.split():		# Simple options.
+					options[opt] = ''
+				elif opt in 'hex signed'.split(): 
+					options['format'] = opt
 				else:
-					default_value = v;
-					continue
-			except ValueError: 
-				if opt not in 'nv hex'.split(): error(f"{name}: illegal option `{opt}'.", lineno) 
-			if opt in options: error(f"{name}: duplicate option `{opt}'.", lineno) 
-			options.append(opt)
-		if default_value is not None and 'nv' not in options: error(f"{name}: default value not required for non-nv option.", lineno) 
-		if default_value is None: default_value = 0
+					error(f"{name}: illegal option `{opt}'.", lineno) 
+		
 		registers[name] = ({}, default_value, options, r_desc)
 		existing_field_mask = 0		# Used to check fields do not overlap existing fields.
 	else:				# Field declaration...
@@ -94,11 +92,7 @@ for lineno, ln in enumerate(parts[RegionParser.S_DEFS], len(parts[RegionParser.S
 # Sort register names to have those tagged as `nv' last.
 registers = dict(sorted(registers.items(), key=lambda x: 'nv' in x[1][REG_IDX_OPTIONS]))
 
-# Check that we haven't tagged one as hex beyond the first 16.
-for r in list(registers.items())[16:]:
-	if 'hex' in r[1][REG_IDX_OPTIONS]: error(f"{r[0]}: option `hex' illegal for registers not in first 16.") 
-
-# Get index of start of NV segment. This is probably a oneliner.
+# Get index of start of NV segment. This is probably a oneliner for Python gurus.
 reg_first_nv = len(registers)
 for i, x in enumerate(registers.values()):
 	if 'nv' in x[REG_IDX_OPTIONS]: 
@@ -106,7 +100,8 @@ for i, x in enumerate(registers.values()):
 		break
 
 import pprint
-#pprint.pprint(registers, sort_dicts=False)
+# pprint.pprint(registers, sort_dicts=False)
+# sys.exit()
 
 # Generate declarations...
 cg.add(parts[RegionParser.S_LEADER])
@@ -130,10 +125,10 @@ cg.add_comment('Define default values for the NV segment.', add_nl=-1)
 nv_reg_names = list(registers)[reg_first_nv:]
 cg.add(f"#define REGS_NV_DEFAULT_VALS {', '.join([str(registers[r][REG_IDX_DEFAULT]) for r in nv_reg_names])}")
 
-cg.add_comment('Define which regs to print in hex. Note that since we only have 16 bits of mask all hex flags must be in the first 16.', add_nl=-1)
-p_hex = [f'_BV(REGS_IDX_{r[0]})' for r in list(registers.items())[:16] if 'hex' in r[1][REG_IDX_OPTIONS]]
-p_hex = '|'.join(p_hex) if p_hex else '0'
-cg.add(f"#define REGS_PRINT_HEX_MASK ({p_hex})")
+cg.add_comment('Define how to format the reg when printing.', add_nl=-1)
+FORMATS = {'signed': 'D', 'unsigned': 'U', 'hex': 'X'}
+p_format = [f"CFMT_{FORMATS[r[REG_IDX_OPTIONS]['format']]}" for r in registers.values()]
+cg.add(f"#define REGS_FORMAT_DEF {', '.join(p_format)}")
 
 for f in registers.items():
 	fields = f[1][REG_IDX_FIELDS]

@@ -1,6 +1,12 @@
 # codegen -- Some kittle helpers for writing code generators.
 import sys, os, re
 
+def message(m):
+	print(m, end='', file=sys.stderr)
+def error(msg):
+	message(f"Error: {msg}\n")
+	sys.exit(1)
+
 class Codegen:
 	def __init__(self, infile, outfile=None):
 			self.infile = infile
@@ -15,14 +21,8 @@ class Codegen:
 	def indent(self, cols=4): self.indent_cols += cols
 	def dedent(self, cols=4): self.indent(-cols)
 	
-	def message(self, m):
-		print(m, end='', file=sys.stderr)
-	def error(self, msg):
-		self.message(f"Error: {msg}\n")
-		sys.exit(1)
-
 	def begin(self, reader=None):
-		self.message(f"{self.script}: reading input file `{self.infile}'... ")
+		message(f"{self.script}: reading input file `{self.infile}'... ")
 		try:
 			with open(self.infile, 'rt') as f:
 				if reader is None:
@@ -30,9 +30,9 @@ class Codegen:
 				else:
 					return reader(f)
 		except EnvironmentError:
-			self.error(f"failed to read `{self.infile}'.")
+			error(f"failed to read `{self.infile}'.")
 		except Exception as exc:
-			self.error(f"exception {exc} during reading `{self.infile}'.")
+			error(f"exception {exc} during reading `{self.infile}'.")
 
 	def add(self, stuff, eat_nl=False, add_nl=None, trailer='', col_width=0):
 		"""Add either a string that will be split into lines, or a list of lines to the contents of the output file. Indentation will be added. 
@@ -82,14 +82,14 @@ class Codegen:
 			existing = None
 		
 		if existing == contents:	# No need to write output file...
-			self.message(f"output file `{self.outfile}' not written as unchanged.\n")
+			message(f"output file `{self.outfile}' not written as unchanged.\n")
 		else:						# We need to write output file...
 			try:
 				with open(self.outfile, 'wt') as f:
 					f.write(contents)
 			except EnvironmentError:		
-				self.error(f"failed to write output file `{self.outfile}'.")
-			self.message(f"output file `{self.outfile}' updated.\n")
+				error(f"failed to write output file `{self.outfile}'.")
+			message(f"output file `{self.outfile}' updated.\n")
 
 def split_ident(n):
 	"""Split an identifier like `foo_bar' or `fooBar' or `foo bar' or `FOO_BAR' to ['foo', 'bar']; `foo123' to ['foo', '123']. Anything not a C 
