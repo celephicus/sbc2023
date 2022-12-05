@@ -41,13 +41,13 @@ enum {
 // Define default values for the NV segment.
 #define REGS_NV_DEFAULT_VALS 3
 
-// Define which regs to print in hex. Note that since we only have 16 bits of mask all hex flags must be in the first 16.
-#define REGS_PRINT_HEX_MASK (_BV(REGS_IDX_FLAGS)|_BV(REGS_IDX_RESTART)|_BV(REGS_IDX_ENABLES))
+// Define how to format the reg when printing.
+#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X
 
 // Flags/masks for register FLAGS.
 enum {
-    	REGS_FLAGS_MASK_BUS_VOLTS_LOW = (int)0x1,
-    	REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS = (int)0x2,
+    	REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS = (int)0x1,
+    	REGS_FLAGS_MASK_BUS_VOLTS_LOW = (int)0x2,
     	REGS_FLAGS_MASK_DC_IN_VOLTS_LOW = (int)0x4,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_0 = (int)0x2000,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_1 = (int)0x4000,
@@ -110,8 +110,8 @@ enum {
 #define DECLARE_REGS_HELPS()                                                            \
  static const char REGS_HELPS[] PROGMEM =                                               \
     "\nFlags:"                                                                          \
-    "\n BUS_VOLTS_LOW: 0 (Bus volts low.)"                                              \
-    "\n MODBUS_MASTER_NO_COMMS: 1 (No comms from MODBUS master.)"                       \
+    "\n MODBUS_MASTER_NO_COMMS: 0 (No comms from MODBUS master.)"                       \
+    "\n BUS_VOLTS_LOW: 1 (Bus volts low.)"                                              \
     "\n DC_IN_VOLTS_LOW: 2 (External DC power volts low.)"                              \
     "\n EEPROM_READ_BAD_0: 13 (EEPROM bank 0 corrupt.)"                                 \
     "\n EEPROM_READ_BAD_1: 14 (EEPROM bank 1 corrupt.)"                                 \
