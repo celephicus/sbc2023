@@ -61,16 +61,20 @@ static bool console_cmds_user(char* cmd) {
 	  } break;
 
 	// Regs
-    case /** ?V **/ 0x688c: fori(COUNT_REGS) { regsPrintValue(i); } break;
+    case /** ?V **/ 0x688c: 
+	    { const uint8_t idx = console_u_pop();
+		    if (idx < COUNT_REGS) 
+				regsPrintValue(idx);
+			else
+				consolePrint(CFMT_C, (console_cell_t)'?');
+		} break; 
     case /** V **/ 0xb5f3: 
 	    { const uint8_t idx = console_u_pop(); const uint16_t v = (uint16_t)console_u_pop(); 
-		    if (idx < COUNT_REGS) {
-				CRITICAL_START(); 
-				REGS[idx] = v; // Might be interrupted by an ISR part way through.
-				CRITICAL_END();
-			}
+		    if (idx < COUNT_REGS) 
+				CRITICAL( REGS[idx] = v ); // Might be interrupted by an ISR part way through.
 		} break; 
-	case /** ??V **/ 0x85d3: {
+    case /** ??V **/ 0x85d3: fori(COUNT_REGS) { regsPrintValue(i); } break;
+	case /** ???V **/ 0x3cac: {
 		fori (COUNT_REGS) {
 			consolePrint(CFMT_NL, 0); 
 			consolePrint(CFMT_D|CFMT_M_NO_SEP, (console_cell_t)i);

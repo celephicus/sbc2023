@@ -197,7 +197,14 @@ void modbus_timing_debug(uint8_t id, uint8_t s) {
 static void modbus_init() {
 	Serial.begin(9600);
 	modbusInit(Serial, GPIO_PIN_RS485_TX_EN, modbus_cb);
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY	
 	modbusSetSlaveId(SBC2022_MODBUS_SLAVE_ADDRESS_RELAY);
+#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR	
+	modbusSetSlaveId(SBC2022_MODBUS_SLAVE_ADDRESS_SENSOR_0 + 
+	  !!(regsFlags() & REGS_FLAGS_MASK_LK_A1) +
+	   ((!!(regsFlags() & REGS_FLAGS_MASK_LK_A2)) << 1)
+	);
+#endif	
 	modbusSetTimingDebugCb(modbus_timing_debug);
 	gpioSpare1SetModeOutput();		// These are used by the RS485 debug cb.
 	gpioSpare2SetModeOutput();
@@ -249,9 +256,9 @@ static void led_service() { utilsSeqService(&f_led_seq); }
 
 #include "SparkFun_ADXL345.h"         
 
-//const uint8_t ACCEL_MAX_SAMPLES = 1; //1U << (16 - 10);	// Accelerometer provides 10 bit data. 
+const uint8_t ACCEL_MAX_SAMPLES = 1; //1U << (16 - 10);	// Accelerometer provides 10 bit data. 
 static struct {
-	int16_t ax, ay, az;   		// Accumulators for 3 axes.
+	int16_t r[3];   			// Accumulators for 3 axes.
 	uint8_t counts;				// Sample counter.
 } f_accel_data;
 static void clear_accel_data() {
@@ -317,27 +324,28 @@ static void setup_devices() {
 static float tilt(float a, float b, float c) {
 	return 360.0 / M_PI * atan2(a, sqrt(b*b + c*c));
 }
+
+// TODO: Test accelerometer actually present on bus. Check chip ID every second would do. Also hardware, pulldown on MISO would stop irupt flagging. 
 void service_devices() {
 	if (adxl.getInterruptSource() & 0x80) {
-		int x, y, z;
-		adxl.readAccel(&x, &y, &z);
-		f_accel_data.ax += (int16_t)x;
-		f_accel_data.ay += (int16_t)y;
-		f_accel_data.az += (int16_t)z;
-		if (REGS[REGS_IDX_ACCEL_AVG] == f_accel_data.counts++) {	// Check for time to average accumulated readings. 
+		int r[3];
+		adxl.readAccel(r);
+		fori (3) f_accel_data.r[i] += (int16_t)r[i];
+		if (++f_accel_data.counts >= REGS[REGS_IDX_ACCEL_AVG]) {	// Check for time to average accumulated readings.
+			gpioSpare1Set();
 			clear_fault_timer(REGS_FLAGS_MASK_ACCEL_FAIL);
 			REGS[REGS_IDX_ACCEL_SAMPLES] += 1;
-			REGS[REGS_IDX_ACCEL_X] = f_accel_data.ax;
-			REGS[REGS_IDX_ACCEL_Y] = f_accel_data.ay;
-			REGS[REGS_IDX_ACCEL_Z] = f_accel_data.az;
+			fori (3) REGS[REGS_IDX_ACCEL_X + i] = f_accel_data.r[i];
 			clear_accel_data();
 
-			// Since components are used as a ratio, no need to divide each by counts. 
-			REGS[REGS_IDX_ACCEL_TILT_ANGLE] = (int16_t)(0.5 + 100.0 * tilt((float)REGS[REGS_IDX_ACCEL_X], (float)REGS[REGS_IDX_ACCEL_Y], (float)REGS[REGS_IDX_ACCEL_Z]));
+			// Since components are used as a ratio, no need to divide each by counts.
+			float tilt_angle = tilt((float)(int16_t)REGS[REGS_IDX_ACCEL_X], (float)(int16_t)REGS[REGS_IDX_ACCEL_Y], (float)(int16_t)REGS[REGS_IDX_ACCEL_Z]);
+			REGS[REGS_IDX_ACCEL_TILT_ANGLE] = (int16_t)(0.5 + 100.0 * tilt_angle);
+			gpioSpare1Clear();
 		}
 	}
-	if (regsFlags() & REGS_FLAGS_MASK_ACCEL_FAIL)	// We have a fault, set fault value. 
-		REGS[REGS_IDX_ACCEL_TILT_ANGLE] = SBC2022_MODBUS_TILT_FAULT;
+	if (regsFlags() & REGS_FLAGS_MASK_ACCEL_FAIL)	// We have a fault, set fault value.
+	REGS[REGS_IDX_ACCEL_TILT_ANGLE] = SBC2022_MODBUS_TILT_FAULT;
 }
 
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
