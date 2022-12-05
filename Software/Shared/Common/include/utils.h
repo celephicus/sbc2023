@@ -38,7 +38,10 @@ bool utilsIsTimerDone(T &then, T timeout) { return ((T)millis() - then) > timeou
 #else
  #error "Unknown how to define Critical Sections."
 #endif
-	
+
+// Plain C version.
+#define CRITICAL(op_) 	do { CRITICAL_START(); op_; CRITICAL_END(); } while(0)
+
 // C++ version, use ... { Critical c; *stuff* }, lock released on leaving block, even with a goto. 
 struct Critical {
 	Critical() { CRITICAL_START(); }

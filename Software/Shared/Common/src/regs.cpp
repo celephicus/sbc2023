@@ -13,11 +13,10 @@ bool regsWriteMaskFlags(regs_t mask, bool s) { return regsWriteMask(REGS_IDX_FLA
 bool regsUpdateMaskFlags(regs_t mask, regs_t value) { return regsUpdateMask(REGS_IDX_FLAGS, mask, value); }
 
 void regsPrintValue(uint8_t reg_idx) {
+	static const uint8_t FORMATS[] PROGMEM = { REGS_FORMAT_DEF };
 	regs_t v; 
-	CRITICAL_START();
-		v = REGS[reg_idx]; 	// Might be written by an ISR.
-	CRITICAL_END();
-	consolePrint((_BV(reg_idx) & REGS_PRINT_HEX_MASK) ? CFMT_X : CFMT_U, (console_cell_t)v);	
+	CRITICAL( v = REGS[reg_idx] ); 	// Might be written by an ISR.
+	consolePrint(pgm_read_byte(&FORMATS[reg_idx]), (console_cell_t)v);	
 }
 
 void regsSetDefaultAll() { regsSetDefaultRange(0, COUNT_REGS); }
@@ -25,9 +24,8 @@ void regsSetDefaultAll() { regsSetDefaultRange(0, COUNT_REGS); }
 void regsSetDefaultRange(uint8_t start, uint8_t end) {
 	static const regs_t NV_DEFAULTS[COUNT_REGS - REGS_START_NV_IDX] PROGMEM = { REGS_NV_DEFAULT_VALS };
 	while (start < end) {
-		CRITICAL_START();
-		REGS[start] = (start < REGS_START_NV_IDX) ? 0 : (regs_t)pgm_read_word(&NV_DEFAULTS[start - REGS_START_NV_IDX]);
-		CRITICAL_END();
+		const uint16_t v = (start < REGS_START_NV_IDX) ? 0 : (regs_t)pgm_read_word(&NV_DEFAULTS[start - REGS_START_NV_IDX]);
+		CRITICAL( REGS[start] = v );
 		start += 1;
 	}
 }
