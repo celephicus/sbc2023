@@ -3,8 +3,8 @@
 
 /* [[[ Definition start...
 FLAGS [hex] "Various flags."
-	BUS_VOLTS_LOW [0] "Bus volts low."
-	MODBUS_MASTER_NO_COMMS [1] "No comms from MODBUS master."
+	MODBUS_MASTER_NO_COMMS [0] "No comms from MODBUS master."
+	BUS_VOLTS_LOW [1] "Bus volts low."
 	DC_IN_VOLTS_LOW [2] "External DC power volts low."
 	EEPROM_READ_BAD_0 [13] "EEPROM bank 0 corrupt."
 	EEPROM_READ_BAD_1 [14] "EEPROM bank 1 corrupt."

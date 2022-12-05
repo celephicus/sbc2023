@@ -43,7 +43,10 @@ static void clear_fault_timer(uint16_t mask) { // Clear possibly many flags set 
 		}
 	}
 }
-
+static void init_fault_timer() { // Assumes fault flags are all cleared already. 
+	fori (UTILS_ELEMENT_COUNT(FAULT_TIMER_DEFS)) 
+		f_fault_timers[i] = pgm_read_byte(&FAULT_TIMER_DEFS[i].timeout);
+}
 
 // MODBUS
 //
@@ -246,7 +249,7 @@ static void led_service() { utilsSeqService(&f_led_seq); }
 
 #include "SparkFun_ADXL345.h"         
 
-const uint8_t ACCEL_MAX_SAMPLES = 1U << (16 - 10);	// Accelerometer provides 10 bit data. 
+//const uint8_t ACCEL_MAX_SAMPLES = 1; //1U << (16 - 10);	// Accelerometer provides 10 bit data. 
 static struct {
 	int16_t ax, ay, az;   		// Accumulators for 3 axes.
 	uint8_t counts;				// Sample counter.
@@ -256,7 +259,7 @@ static void clear_accel_data() {
 }
 
 ADXL345 adxl = ADXL345(10);           // USE FOR SPI COMMUNICATION, ADXL345(CS_PIN);
-static void setup_devices() {
+static void sensor_accel_init() {
   adxl.powerOn();                     // Power on the ADXL345
 
   adxl.setRangeSetting(2);           // Give the range settings
@@ -303,6 +306,14 @@ static void setup_devices() {
 	clear_accel_data();
 }
 
+static void sensor_address_links_init() {
+	regsWriteMaskFlags(REGS_FLAGS_MASK_LK_A1, !digitalRead(GPIO_PIN_SEL0));
+	regsWriteMaskFlags(REGS_FLAGS_MASK_LK_A2, !digitalRead(GPIO_PIN_SEL1));
+}
+static void setup_devices() {
+	sensor_accel_init();
+	sensor_address_links_init();
+}
 static float tilt(float a, float b, float c) {
 	return 360.0 / M_PI * atan2(a, sqrt(b*b + c*c));
 }
@@ -313,15 +324,16 @@ void service_devices() {
 		f_accel_data.ax += (int16_t)x;
 		f_accel_data.ay += (int16_t)y;
 		f_accel_data.az += (int16_t)z;
-		if (ACCEL_MAX_SAMPLES == f_accel_data.counts++) {
+		if (REGS[REGS_IDX_ACCEL_AVG] == f_accel_data.counts++) {	// Check for time to average accumulated readings. 
 			clear_fault_timer(REGS_FLAGS_MASK_ACCEL_FAIL);
 			REGS[REGS_IDX_ACCEL_SAMPLES] += 1;
 			REGS[REGS_IDX_ACCEL_X] = f_accel_data.ax;
-			REGS[REGS_IDX_ACCEL_Y] = f_accel_data.ax;
-			REGS[REGS_IDX_ACCEL_Z] = f_accel_data.ax;
-			// Since components are used as a ratio, no need to divide each by counts. 
-			REGS[REGS_IDX_ACCEL_TILT_ANGLE] = (int16_t)(0.5 + 100.0 * tilt((float)f_accel_data.ax, (float)f_accel_data.ay, (float)f_accel_data.az));
+			REGS[REGS_IDX_ACCEL_Y] = f_accel_data.ay;
+			REGS[REGS_IDX_ACCEL_Z] = f_accel_data.az;
 			clear_accel_data();
+
+			// Since components are used as a ratio, no need to divide each by counts. 
+			REGS[REGS_IDX_ACCEL_TILT_ANGLE] = (int16_t)(0.5 + 100.0 * tilt((float)REGS[REGS_IDX_ACCEL_X], (float)REGS[REGS_IDX_ACCEL_Y], (float)REGS[REGS_IDX_ACCEL_Z]));
 		}
 	}
 	if (regsFlags() & REGS_FLAGS_MASK_ACCEL_FAIL)	// We have a fault, set fault value. 
@@ -336,23 +348,14 @@ static uint8_t f_relay_data;
 static void write_relays(uint8_t v) {
 	f_relay_data = v;
 	digitalWrite(GPIO_PIN_RSEL, 0);
-#if 0	
-	shiftOut(GPIO_PIN_RDAT, GPIO_PIN_RCLK, MSBFIRST, f_relay_data);
-#else
 	shiftOut(GPIO_PIN_MOSI, GPIO_PIN_SCK, MSBFIRST, f_relay_data);
-#endif
 	digitalWrite(GPIO_PIN_RSEL, 1);
 }
 static void setup_devices() {
 	pinMode(GPIO_PIN_RSEL, OUTPUT);
 	digitalWrite(GPIO_PIN_RSEL, 1);   // Set inactive.
-#if 0	
-	pinMode(GPIO_PIN_RDAT, OUTPUT);
-	pinMode(GPIO_PIN_RCLK, OUTPUT);
-#else	
 	pinMode(GPIO_PIN_MOSI, OUTPUT);
 	pinMode(GPIO_PIN_SCK, OUTPUT);
-#endif
 	write_relays(0);
 	gpioWdogSetModeOutput();
 }
@@ -589,6 +592,7 @@ void driverInit() {
 	setup_devices();
 	modbus_init();
 	atn_init();
+	init_fault_timer();
 }
 
 void driverService() {
