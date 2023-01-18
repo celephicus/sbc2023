@@ -131,7 +131,9 @@ static void console_init() {
 	consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CONSOLE_OUTPUT_NEWLINE_STR "Restart code:"));
 	regsPrintValue(REGS_IDX_RESTART);	
 	consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CONSOLE_OUTPUT_NEWLINE_STR "EEPROM status: "));
-	regsPrintValue(REGS_IDX_FLAGS & (REGS_FLAGS_MASK_EEPROM_READ_BAD_0|REGS_FLAGS_MASK_EEPROM_READ_BAD_1));	
+	consolePrint(CFMT_D|CFMT_M_NO_SEP, !!(REGS[REGS_IDX_FLAGS] & REGS_FLAGS_MASK_EEPROM_READ_BAD_0));
+	consolePrint(CFMT_C, ',');
+	consolePrint(CFMT_D, !!(REGS[REGS_IDX_FLAGS] & REGS_FLAGS_MASK_EEPROM_READ_BAD_1));
 	consolePrompt();
 
 }

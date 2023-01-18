@@ -105,7 +105,7 @@ static uint8_t write_holding_register(uint16_t address, uint16_t value) {
 void modbus_cb(uint8_t evt) {
 	uint8_t frame[RESP_SIZE];
 	uint8_t frame_len = RESP_SIZE;	// Must call modbusGetResponse() with buffer length set.
-	const bool resp_ovf = modbusGetResponse(&frame_len, frame);
+	const bool resp_ok = modbusGetResponse(&frame_len, frame);
 
 	//gpioSpare1Write(true);
 	// Dump MODBUS...
@@ -114,10 +114,10 @@ void modbus_cb(uint8_t evt) {
 		consolePrint(CFMT_U, evt);
 		if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_DATA) {
 			const uint8_t* p = frame;
-			fori (frame_len)
-			consolePrint(CFMT_X2, *p++);
-			if (resp_ovf)
-			consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OVF"));
+			while (frame_len--)
+				consolePrint(CFMT_X2, *p++);
+			if (!resp_ok)
+				consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OVF"));
 		}
 		consolePrint(CFMT_NL, 0);
 	}
@@ -155,7 +155,7 @@ void modbus_cb(uint8_t evt) {
 		}
 	}
 	
-	// Master gets responses...
+	// Master gets responses... This for debugging only, normally  Sensor & Relay are slaves.
 	if (MODBUS_CB_EVT_RESP_OK == evt) {
 		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("Response ID:"));
 		consolePrint(CFMT_D|CFMT_M_NO_SEP, frame[MODBUS_FRAME_IDX_FUNCTION]);
@@ -168,16 +168,18 @@ void modbus_cb(uint8_t evt) {
 					consolePrint(CFMT_U, modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA+1+idx]));
 				}
 				else
-				consolePrint(CFMT_STR_P, (console_cell_t)PSTR("corrupt"));
-			} break;
+					consolePrint(CFMT_STR_P, (console_cell_t)PSTR("corrupt"));
+			} 
+			break;
 			case MODBUS_FC_WRITE_SINGLE_REGISTER: // REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
-			if (6 == frame_len)
-			consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OK"));
-			else
-			consolePrint(CFMT_STR_P, (console_cell_t)PSTR("corrupt"));
+				if (6 == frame_len)
+					consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OK"));
+				else
+					consolePrint(CFMT_STR_P, (console_cell_t)PSTR("corrupt"));
 			break;
 			default:
-			consolePrint(CFMT_STR_P, (console_cell_t)PSTR("Unknown response"));
+				consolePrint(CFMT_STR_P, (console_cell_t)PSTR("Unknown response"));
+			break;
 		}
 		consolePrint(CFMT_NL, 0);
 	}
@@ -196,6 +198,7 @@ void modbus_timing_debug(uint8_t id, uint8_t s) {
 
 static void modbus_init() {
 	Serial.begin(9600);
+	Serial.write('*');
 	modbusInit(Serial, GPIO_PIN_RS485_TX_EN, modbus_cb);
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY	
 	modbusSetSlaveId(SBC2022_MODBUS_SLAVE_ADDRESS_RELAY);
