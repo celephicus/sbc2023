@@ -24,17 +24,17 @@ enum {
 };
 
 // Product name
-#define CFG_PRODUCT_NAME_STR "TSA SBC2022 Relay Module"
+#define CFG_PRODUCT_NAME_STR "TSA SBC2022 Sensor Module"
 
 // Version info, set by manual editing. 
 #define CFG_VER_MAJOR 1     
 #define CFG_VER_MINOR 0
 
 // Build number incremented with each build by cfg-set-build.py script. 
-#define CFG_BUILD_NUMBER 529
+#define CFG_BUILD_NUMBER 532
 
 // Timestamp in ISO8601 format set by cfg-set-build.py script.
-#define CFG_BUILD_TIMESTAMP "20221205T162608"
+#define CFG_BUILD_TIMESTAMP "20230117T125045"
 
 // Do not edit below this line......
 

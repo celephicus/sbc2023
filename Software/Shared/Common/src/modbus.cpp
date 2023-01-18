@@ -155,20 +155,24 @@ static uint8_t verify_rx_frame_valid() {
 }
 
 bool modbusGetResponse(uint8_t* len, uint8_t* buf) {
-	bool rc = true;
+	bool rc;
 	const uint8_t resp_len = bufferFrameLen(&f_ctx.buf_rx);	// Get length of response 
 	if (resp_len > *len) 						// If truncate to host buffer ...
 		rc = false;			
 	else {
-		*len = resp_len;						// Only copy what we have to.
-		memcpy(buf, f_ctx.buf_rx.buf, *len);
-	}
+		*len = resp_len;		
+		rc = true;
+	}				
+	memcpy(buf, f_ctx.buf_rx.buf, *len);
 	bufferFrameReset(&f_ctx.buf_rx);
 	return rc;
 }
 
+const uint8_t* modbusPeekRequest() { return f_ctx.buf_tx.buf; }
+
 void modbusService() {
 	// Master may be waiting for a reply from a slave. On timeout, flag timeout to callback.
+	// This will only be called on RX timeout, which will only happen if at least one character has been received. 
 	if (TIMER_IS_TIMEOUT_WITH_CB(&f_ctx.start_time, MASTER_RESPONSE_TIMEOUT_MICROS, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT)) 
 		f_ctx.cb_resp(MODBUS_CB_EVT_RESP_TIMEOUT);
 	

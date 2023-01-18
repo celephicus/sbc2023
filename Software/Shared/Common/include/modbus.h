@@ -49,8 +49,11 @@ enum {
 	MODBUS_CB_EVT_REQ_X					= 101,	// Sent by SLAVE, we have a request for another slave ID.
 };
 
-// Get response, returns false if buffer too small for data. On return len is set to number of bytes copied.
+// Get response, len set to length of buffer, returns false if overflow. On return len is set to number of bytes copied.
 bool modbusGetResponse(uint8_t* len, uint8_t* buf);
+
+// Access data in request. For use by event handler in MASTER mode.
+const uint8_t* modbusPeekRequest();
 
 // MODBUS Function Codes.
 enum {
