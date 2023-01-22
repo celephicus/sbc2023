@@ -90,22 +90,22 @@ void eventTraceMaskSetDefault();
 
 // SMs have their state defined by this object. Derived classes have an instance as their first member then any extra data as required.
 typedef struct {
-    int8_t st;			// Non-negative value giving SM's state. State 0 is the initialstate set at startup.
+    int8_t st;			// Non-negative value giving SM's state. State 0 is the initial state set at startup.
 	uint8_t id;			// Zero based value to ID the instance of the SM.
-} EventSmStateBase;
+} EventSmContextBase;
 
 // State machines are functions with this signature. They return a new state value if the state has changed or a negative value if no change.
-typedef int8_t (*EventSmFunc)(EventSmStateBase* state, t_event ev);
+typedef int8_t (*EventSmFunc)(EventSmContextBase* state, t_event ev);
 
-void eventSmInit(EventSmFunc sm, EventSmStateBase* state, uint8_t id);
+void eventSmInit(EventSmFunc sm, EventSmContextBase* state, uint8_t id);
 
-enum { EV_SM_NOCHANGE = -1 };	// Value returned for no change in state.
+enum { EVENT_SM_NO_CHANGE = -1 };	// Value returned for no change in state.
 
 // Send an event to the state machine for servicing.
-void eventSmService(EventSmFunc sm, EventSmStateBase* state, t_event ev);
+void eventSmService(EventSmFunc sm, EventSmContextBase* state, t_event ev);
 
 // Post an event just to this state machine guaranteed to be the next event read.
-void eventSmPostSelf(EventSmStateBase* state);
+void eventSmPostSelf(EventSmContextBase* state);
 
 // Start the given timer with the given period in ticks.
 void eventSmTimerStart(uint8_t timer_idx, uint16_t period);

@@ -1,0 +1,11 @@
+#ifndef CODEGEN_OUT__
+#define CODEGEN_OUT__
+
+// Contents of input file.
+A line
+Anotherline (no newline)
+// Comment, then newline.
+
+// End
+
+#endif   // CODEGEN_OUT__

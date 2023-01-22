@@ -38,7 +38,10 @@ bool utilsIsTimerDone(T &then, T timeout) { return ((T)millis() - then) > timeou
 #else
  #error "Unknown how to define Critical Sections."
 #endif
-	
+
+// Plain C version.
+#define CRITICAL(op_) 	do { CRITICAL_START(); op_; CRITICAL_END(); } while(0)
+
 // C++ version, use ... { Critical c; *stuff* }, lock released on leaving block, even with a goto. 
 struct Critical {
 	Critical() { CRITICAL_START(); }
@@ -122,7 +125,7 @@ static inline void buffer##name_##AddMem(Buffer##name_* q, const void* m, uint8_
 	memcpy(q->p, m, len); q->p += len;																						\
 }																															\
 static inline void buffer##name_##AddU16(Buffer##name_* q, uint16_t x) { 													\
-	buffer##name_##AddMem(q, &x, sizeof(uint16_t));																			\
+	buffer##name_##Add(q, x>>8); buffer##name_##Add(q, x);																	\
 }
 
 // How many elements in an array?
@@ -138,10 +141,10 @@ static inline void buffer##name_##AddU16(Buffer##name_* q, uint16_t x) { 							
 uint16_t utilsChecksumFletcher16(uint8_t const *data, size_t count);
 
 // Simple very fast checksum for EEPROM, guaranteed to note changing values to 0x00 or 0xff, which are the most likely errors.
-typedef struct { uint8_t sum1, sum2; } utils_checksum_eeprom_state_t;
-void utilsChecksumEepromInit(utils_checksum_eeprom_state_t* s);
-void utilsChecksumEepromUpdate(utils_checksum_eeprom_state_t* s, const void *data, size_t count);
-uint16_t utilsChecksumEepromGet(utils_checksum_eeprom_state_t* s);
+typedef struct { uint8_t sum1, sum2; } UtilsChecksumEepromState;
+void utilsChecksumEepromInit(UtilsChecksumEepromState* s);
+void utilsChecksumEepromUpdate(UtilsChecksumEepromState* s, const void *data, size_t count);
+uint16_t utilsChecksumEepromGet(UtilsChecksumEepromState* s);
 
 // Simple version of the above.
 uint16_t utilsChecksumEeprom(const void *data, size_t count);
@@ -257,26 +260,20 @@ T utilsRescale(T input_value, T max_input, T max_output) {
 #define utilsRescaleU16 utilsRescale<uint16_t, uint32_t>
 
 /* Multiple threshold comparator, use like this:
+	static const uint16_t PROGMEM THRESHOLDS[] = { 50, 100, 500 };
+	enum { HYSTERESIS = 20 };
+	uint8_t level;
 
-static const uint16_t PROGMEM THRESHOLDS[] = { 50, 100, 500 };
-enum { HYSTERESIS = 20 };
-uint8_t level;
-
-After executing
-	multiThreshold(THRESHOLDS,  ELEMENT_COUNT(THRESHOLDS),	HYSTERESIS, &level, x);
-
-	as x ranges from 0 .. 600 .. 0, level changes so:
-
-0..49	0
-50.. 99 1
-100..499 2
-500..600 3
-600.. 480 3
-479.. 80 2
-79..30 1
-29..0 0
-
-Returns true if the level has changed.
+   After executing `multiThreshold(THRESHOLDS,  ELEMENT_COUNT(THRESHOLDS),	HYSTERESIS, &level, x)', as x ranges from 0 .. 600 .. 0, level changes so,
+    with the function returning true if level has changed.
+	0..49	  0
+	50.. 99   1
+	100..499  2
+	500..600  3
+	600.. 480 3
+	479.. 80  2
+	79..30    1
+	29..0     0
 */
 bool utilsMultiThreshold(const uint16_t* thresholds, uint8_t count, uint16_t hysteresis, uint8_t* level, uint16_t val);
 
@@ -301,64 +298,167 @@ uint16_t utilsFilter(T* accum, uint16_t input, uint8_t k, bool reset) {
 	If endptr is non-NULL, it is set to the first illegal character. */
 bool utilsStrtoui(unsigned* n, const char *str, char **endptr, unsigned base);
 
-// Utils Sequencer -- generic driver to run an arbitrary sequence by calling a user function every so often with a canned argument.
+/* Utils Sequencer -- generic driver to run an arbitrary sequence by calling a user function every so often with a canned argument.
+	Example - play a tune with the play() function.
+	typedef struct {		// Subclass of sequencer header with some extra info to control the `thing' being sequenced.
+		UtilsSeqHdr hdr;
+		uint16_t pitch;
+	} PlayDef;
 
-/* Example - play a tune.
-typedef struct {		// Subclass of sequencer header with some extra info to control the `thing' being sequenced.
-	UtilsSeqHdr hdr;
-	uint16_t pitch;
-} PlayDef;
+	static UtilsSeqCtx f_seq;	// Keeps track of the sequencer state.
 
-static UtilsSeqCtx f_seq;	// Keeps track of the sequencer state.
+	static void play_action_func(const UtilsSeqHdr* hdr) {
+		const PlayDef* def = (const PlayDef*)hdr;		// Downcast to subclass.
+		if (NULL != hdr) play(pgm_read_word(&hdr->pitch));
+		else play(OFF);
+	}
 
-static void play_action_func(const UtilsSeqHdr* hdr) {
-	const PlayDef* def = (const PlayDef*)hdr;		// Downcast to subclass.
-	if (NULL != hdr) play(pgm_read_word(&hdr->pitch));
-	else play(OFF);
-}
-
-bool playIsBusy() { return utilsSeqIsBusy(&f_seq); }
-void playStart(const PlayDef* def) { utilsSeqStart(&f_seq, def, sizeof(PlayDef), play_action_func); }
-void playService() { utilsSeqService(&f_seq); }
+	bool playIsBusy() { return utilsSeqIsBusy(&f_seq); }
+	void playStart(const PlayDef* def) { utilsSeqStart(&f_seq, def, sizeof(PlayDef), play_action_func); }
+	void playService() { utilsSeqService(&f_seq); }		// Call every so often. 
 */
 
 /* The header of the action type, defines the action for the sequencer. A struct must have this as the first member, the action function downcasts the
    argument to the derived type and extracts the values.
-   If the last duration value is UTILS_SEQ_END then the action function is called for the associated data, and then the sequence ends. This allows a LED say
-   to display a colour sequence, then hold on a colour.
+   If the last duration value is UTILS_SEQ_END then the action function is called for the associated data, and then the sequence ends. This allows for 
+   example a LED to display a colour sequence, then hold on a colour.
    If the last duration value is UTILS_SEQ_REPEAT then the action function is NOT called for the associated data, and the sequence restarts.
-   UTILS_SEQ_LOOP(N) & UTILS_SEQ_LOOP_END allow a bit of the sequence to be repeated N times.
-*/
-
-typedef uint16_t utils_seq_duration_t;
-const utils_seq_duration_t UTILS_SEQ_END = 			0U;
-const utils_seq_duration_t UTILS_SEQ_REPEAT = 		0xffff;
-const utils_seq_duration_t UTILS_SEQ_LOOP_MASK = 	0x8000;
+   UTILS_SEQ_LOOP(N) & UTILS_SEQ_LOOP_END allow a bit of the sequence to be repeated N times. */
+typedef uint16_t t_utils_seq_duration;
+const t_utils_seq_duration UTILS_SEQ_END = 			0U;
+const t_utils_seq_duration UTILS_SEQ_REPEAT = 		0xffff;
+const t_utils_seq_duration UTILS_SEQ_LOOP_MASK = 	0x8000;
 #define					   UTILS_SEQ_LOOP(n_) 		(UTILS_SEQ_LOOP_MASK | (n_))
-const utils_seq_duration_t UTILS_SEQ_LOOP_END = 	0xfffe;
+const t_utils_seq_duration UTILS_SEQ_LOOP_END = 	0xfffe;
 
-// We encode what we want the sequencer to do in the duration.
+// We encode what we want the sequencer to do in the duration member. Note that it cannot have the MSB set. 
 typedef struct {
-	utils_seq_duration_t duration;
+	t_utils_seq_duration duration;
 } UtilsSeqHdr;
 
 // Casts UtilsSeqHdr to subtype, extracts values and actions them. If handed a NULL pointer then turn off the thing.
 typedef void (*sequencer_action_func)(const UtilsSeqHdr*);
 
+// Context that holds the current state of a sequencer. 
 typedef struct {
 	const UtilsSeqHdr* base;
 	const UtilsSeqHdr* hdr;
 	const UtilsSeqHdr* loop_start;
-	utils_seq_duration_t loop_counter;
+	t_utils_seq_duration loop_counter;
 	uint8_t item_size;		// Size of derived type that has a UtilsSeqHdr as first item.
 	sequencer_action_func action;
-	utils_seq_duration_t timer;
+	t_utils_seq_duration timer; // Times duration of steps in sequence. 
+	bool init;				// Set to indicate that the sequence has just been set so needs initialisation in utilsSeqService().
 } UtilsSeqCtx;
 
+// Check if the sequencer is running or halted. 
 bool utilsSeqIsBusy(const UtilsSeqCtx* seq);
 
+// Start running a sequence. Call with a NULL definition to stop. Note that to restart a sequence it must be stopped first, i.e. calling utilsSeqStart() with the same definition as previously has no effect. 
 void utilsSeqStart(UtilsSeqCtx* seq, const UtilsSeqHdr* def, uint8_t item_size, sequencer_action_func action);
 
 void utilsSeqService(UtilsSeqCtx* seq);
+
+#if 0
+/* Generic scanner -- check value in regs, usually an ADC channel, scale it and send events when value crosses a threshold.
+	Thresholds divide the input range into regions, each of which has an index starting from zero, the t-state. The threshold function is called
+	 with the current t-state to implement hysteresis. */
+
+typedef uint16_t (*thold_scanner_scaler_func_t)(uint16_t value);
+typedef uint8_t (*thold_scanner_threshold_func_t)(uint8_t tstate, uint16_t value); 	// Outputs a t_state, a zero based value. 
+typedef uint16_t (*thold_scanner_action_delay_func_t)();				// Returns number of ticks before update is published. 
+typedef uint8_t (*thold_scanner_get_tstate_func_t)(const void* arg);
+typedef void (*thold_scanner_set_tstate_func_t)(void* arg, uint8_t value);
+typedef void (*thold_scanner_publish_func_t)(const void* arg, uint8_t value);
+typedef struct {
+    const uint16_t* input_reg;              		// Input register, usually ADC.
+    uint16_t* scaled_reg;             				// Output register for scaled value. 
+    thold_scanner_scaler_func_t scaler;         	// Scaling function, if NULL no scaling
+    thold_scanner_threshold_func_t do_thold;    	// Thresholding function, returns small zero based value
+    thold_scanner_action_delay_func_t delay_get;  	// Function returning delay before tstate update is published. Null implies no delay. 
+    thold_scanner_get_tstate_func_t tstate_get;		// Return the current tstate.
+    thold_scanner_set_tstate_func_t tstate_set; 	// Set the new tstate. 
+    void* tstate_func_arg;        					// Argument supplied to value_set & value_get funcs. 
+    thold_scanner_publish_func_t publish;           // Function called on thresholded value change. 
+	const void* publish_func_arg;    				// Argument supplied to publish func. 
+} thold_scanner_def_t;
+
+typedef struct {
+	uint8_t tstate;						
+	uint16_t action_timer;
+	bool init_done;
+} thold_scanner_context_t;
+
+void tholdScanInit(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count);
+void tholdScanSample(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count);
+void tholdScanRescan(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count, uint16_t mask);
+#endif
+// Runtime assertions
+//
+
+// From Niall Murphy article "Assert Yourself". Gives each file a guaranteed unique number by misusing the linker. Usage: FILENUM(33);
+#define FILENUM(num_) 									\
+    void filenum_##num_##_(void) __attribute__ ((unused));	\
+    void filenum_##num_##_(void) {}							\
+    enum { F_NUM = (num_) }
+
+// Define this somewhere, it can be used to log a runtime error, and should not return.
+void debugRuntimeError(int fileno, int lineno, int errorno) __attribute__ ((noreturn));
+
+// Convenience function to raise a runtime error...
+#define RUNTIME_ERROR(_errorno) debugRuntimeError(F_NUM, __LINE__, (_errorno))
+
+// Check a condition and raise a runtime error if it is not true.
+#define ALLEGE(_cond) if (_cond) {} else { RUNTIME_ERROR(0); }
+
+// Our assert macro does not print the condition that failed, contrary to the usual version. This is intentional, it conserves
+// string space on the target, and the user just has to report the file & line numbers.
+#ifndef NDEBUG  /* A release build defines this macro, a debug build does not. */ 
+#define ASSERT(cond_) do { 			\
+    if (!(cond_))  					\
+        RUNTIME_ERROR(0); 			\
+} while (0)
+#else   
+    #define ASSERT(cond_) do { /* empty */ } while (0)
+#endif
+
+#if 0
+/* Trace macros, used for printing verbose formatted output, probably not on small targets.  Designed to compile out if required. 
+   If CFG_DEBUG_GET_TRACE_LEVEL is constant then the optimiser will remove calls. Else it can be made a register.
+   Trace levels are stolen from the Python logging lib. */   
+   
+#if CFG_WANT_DEBUG_TRACE
+#if !defined(CFG_DEBUG_GET_TRACE_LEVEL) || !defined(CFG_DEBUG_TRACE_OUTPUT)
+#error "CFG_DEBUG_GET_TRACE_LEVEL() & CFG_DEBUG_TRACE_OUTPUT() must be defined if using TRACE()"
+#endif
+
+// Dump trace info with no extra text if level >= current level.
+#define TRACE_RAW(_level, _fmt, ...)  \
+  do { if (CFG_DEBUG_GET_TRACE_LEVEL() >= (_level)) CFG_DEBUG_TRACE_OUTPUT("\r\nTRACE: "  _fmt,  ## __VA_ARGS__); } while (0)
+	
+// Trace with file number & line info.
+#define TRACE(_level, _type, _fmt, ...) \
+  TRACE_RAW(_level, "%u:" STR(__LINE__) " " _type ": " _fmt, F_NUM, ## __VA_ARGS__); 
+
+#else
+#define TRACE(_level, _type, _fmt, ...) 	((void)0)
+#define TRACE_RAW(_fmt, ...)		 	((void)0)
+#endif 
+
+enum {
+	DEBUG_TRACE_LEVEL_CRITICAL =	50,		// Something really bad has happened. You will not go to space today.
+	DEBUG_TRACE_LEVEL_ERROR = 		40,		// Something has failed, but maybe we can keep going.
+	DEBUG_TRACE_LEVEL_WARNING = 	30,		// Something isn't right.
+	DEBUG_TRACE_LEVEL_INFO = 		20,		// Something interesting has happened.
+	DEBUG_TRACE_LEVEL_DEBUG = 		10,		// Something interesting to programmers only...
+};
+
+#define TRACE_XXX(_xxx, _fmt, ...) TRACE(CONCAT(DEBUG_TRACE_LEVEL_, _xxx), #_xxx, _fmt, ## __VA_ARGS__) 
+#define TRACE_CRITICAL(_fmt, ...) 	TRACE_XXX(CRITICAL, _fmt, ## __VA_ARGS__)
+#define TRACE_ERROR(_fmt, ...) 		TRACE_XXX(ERROR, _fmt, ## __VA_ARGS__)
+#define TRACE_WARNING(_fmt, ...) 	TRACE_XXX(WARNING, _fmt, ## __VA_ARGS__)
+#define TRACE_INFO(_fmt, ...) 		TRACE_XXX(INFO, _fmt, ## __VA_ARGS__)
+#define TRACE_DEBUG(_fmt, ...) 		TRACE_XXX(DEBUG, _fmt, ## __VA_ARGS__)
+#endif
 
 #endif

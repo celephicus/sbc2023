@@ -2,9 +2,7 @@
 
 #include "project_config.h"
 #include "utils.h"
-#include "dev.h"
-
-#ifdef __AVR__
+#include "dev.h" 
 
 #include <avr/wdt.h>
 
@@ -93,7 +91,7 @@ static void write_eeprom(const DevEepromBlock* block, uint8_t bank_idx, dev_eepr
 
 // Compute the checksum for the user data referred to by the block definition. 
 static dev_eeprom_checksum_t get_checksum(const DevEepromBlock* block) {
-    utils_checksum_eeprom_state_t s;
+    UtilsChecksumEepromState s;
     
     utilsChecksumEepromInit(&s);
 	const uint16_t version = pgm_read_word(&block->version);
@@ -198,4 +196,4 @@ uint16_t devWatchdogInit() {
 	
 	return restart;
 }
-#endif
+

@@ -138,12 +138,23 @@ void eventTraceMaskSetDefault() {
 //
 
 // Cookies are unique values stored with each timer when it is started. They are used to block events from this timer from an older timeout
-//  from getting to the SM. Timers are not shared between SMs.
-static uint16_t l_timer_cookie;
+//  from getting to the SM. Timer events are never sent with a cookie value of -1, so this is used to stop a timer event read from the queue being sent to
+//  a SM if the timer is stopped. 
+// Timers are not shared between SMs.
+static const uint16_t TIMER_COOKIE_INVALID = (uint16_t)-1;
+static bool timer_cookie_is_valid(uint16_t v) { return (TIMER_COOKIE_INVALID != v); }
+static uint16_t timer_cookie_get() {
+	static uint16_t cookie;
+	if (!timer_cookie_is_valid(++cookie)) 
+		cookie = 0; 
+	return cookie;
+}
+
+// TODO: Make cookie a hash of SM ID and cookie, then non-targetted SMs will not receive the timer event at all.
 static struct {
     uint16_t counter;		// Counts down to zero, then timeout.
     uint16_t cookie;		// Unique value used to block older timeouts.
-} l_timers[CFG_EVENT_TMER_COUNT];
+} l_timers[CFG_EVENT_TIMER_COUNT];
 
 // Helper to queue a timeout event.
 static void publish_timer_timeout(uint8_t idx) { eventPublish(EV_TIMER, idx, l_timers[idx].cookie); }
@@ -152,7 +163,7 @@ bool eventSmGetTimerCookie(uint8_t timer_idx) { return l_timers[timer_idx].cooki
 
 void eventSmTimerStart(uint8_t timer_idx, uint16_t timeout) {
     eventTraceWrite(EV_DEBUG_TIMER_ARM, timer_idx, timeout);
-    l_timers[timer_idx].cookie = ++l_timer_cookie;		// Store new cookie value.
+    l_timers[timer_idx].cookie = timer_cookie_get();	// Store new cookie value.
     l_timers[timer_idx].counter = timeout;				// Set timeout
     if (0U == timeout)       		// Zero timeout implies immediate timeout.
 		publish_timer_timeout(timer_idx);
@@ -161,11 +172,12 @@ void eventSmTimerStart(uint8_t timer_idx, uint16_t timeout) {
 void eventSmTimerStop(uint8_t timer_idx) {
     if (l_timers[timer_idx].counter > 0)	// Only send debug event if timer actually stopped.
 		eventTraceWrite(EV_DEBUG_TIMER_STOP, timer_idx);
+    l_timers[timer_idx].cookie = TIMER_COOKIE_INVALID;	// Make sure SMs will not receive old timeout events from this timer. 
     l_timers[timer_idx].counter = 0;
 }
 
 void eventSmTimerService() {
-    fori (CFG_EVENT_TMER_COUNT) {
+    fori (CFG_EVENT_TIMER_COUNT) {
         if ((l_timers[i].counter > 0) && (0 == -- l_timers[i].counter))
             publish_timer_timeout(i);
     }
@@ -177,21 +189,21 @@ bool eventSmTimerIsDone(uint8_t timer_idx) { return (0 == l_timers[timer_idx].co
 // State machine system.
 //
 
-void eventSmInit(EventSmFunc sm, EventSmStateBase* state, uint8_t id) {
+void eventSmInit(EventSmFunc sm, EventSmContextBase* state, uint8_t id) {
 	state->id = id;
     state->st = 0;
     (void)sm(state, event_mk(EV_SM_ENTRY));
 }
 
-void eventSmService(EventSmFunc sm, EventSmStateBase* state, t_event ev) {
-	// Don't bother sending event timeout events to the non-targetted SMs.
+void eventSmService(EventSmFunc sm, EventSmContextBase* state, t_event ev) {
+	// Don't bother sending event expiredtimeout events to the non-targetted SMs.
 	if (EV_TIMER == event_id(ev)) {
 		uint8_t timer_idx = event_p8(ev);
-		if ((timer_idx >= CFG_EVENT_TMER_COUNT) || (eventSmGetTimerCookie(timer_idx) != event_p16(ev)))
+		if ((timer_idx >= CFG_EVENT_TIMER_COUNT) || (eventSmGetTimerCookie(timer_idx) != event_p16(ev)))
 			return;
 	}
 
-	// Throw away self events not targetting this SM.
+	// Throw away self events not targeting this SM.
 	if ((EV_SM_SELF == event_id(ev)) && (event_p8(ev) != state->id))
 		return;
 
@@ -207,71 +219,6 @@ void eventSmService(EventSmFunc sm, EventSmStateBase* state, t_event ev) {
     }
 }
 
-void eventSmPostSelf(EventSmStateBase* state) {  eventPublishEvFront(event_mk(EV_SM_SELF, state->id)); }
-
-// State Machines...
-//
-
-#if 0
-
-// Assign timers.
-enum {
-    TIMER_0 = TIMER_SM_SUPERVISOR,
-    TIMER_MASTER_COMMS = TIMER_0,
-};
-
-enum {
-	TIMEOUT_MS_MASTER_COMMS = 4000,
-};
-
-enum { ST_RUN, ST_NO_MASTER };
-int8_t smSupervisor(EventSmstateBase* state, event_t& ev) {
-    SmSupervisorstate* my_state = (SmSupervisorstate*)state;        // Downcast to derived class.
-
-    switch (state->state) {
-    case ST_RUN:
-        switch(event_get_id(ev)) {
-#if 0
-        case EV_SM_ENTRY:
-			eventSmPostSelf();
-            break;
-		case EV_SM_SELF:
-			driverSetLedPattern(DRIVER_LED_PATTERN_OK);
-			eventSmTimerStart(TIMER_MASTER_COMMS, TIMEOUT_MS_MASTER_COMMS);
-            break;
-        case EV_MODBUS_MASTER_COMMS:            // Master has written relays.
-			eventSmPostSelf();
-            break;
-#else
-        case EV_SM_ENTRY:
-			driverSetLedPattern(DRIVER_LED_PATTERN_OK);
-			eventSmTimerStart(TIMER_MASTER_COMMS, TIMEOUT_MS_MASTER_COMMS);
-            break;
-        case EV_MODBUS_MASTER_COMMS:            // Master has written relays.
-			return ST_RUN;
-#endif
-		case EV_TIMER:
-			if (TIMER_MASTER_COMMS == event_p8(ev))
-				return ST_NO_MASTER;
-        }
-        break;
-
-    case ST_NO_MASTER:
-        switch(event_get_id(ev)) {
-        case EV_SM_ENTRY:
-            driverSetLedPattern(DRIVER_LED_PATTERN_NO_COMMS);
-            break;
-        case EV_MODBUS_MASTER_COMMS:            // Master has written relays.
-			return ST_RUN;
-		}
-        break;
-
-    default:    // Bad state->..
-        break;
-    }
-
-    return SM_NO_CHANGE;
-}
-#endif
+void eventSmPostSelf(EventSmContextBase* state) {  eventPublishEvFront(event_mk(EV_SM_SELF, state->id)); }
 
 

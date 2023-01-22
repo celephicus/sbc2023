@@ -15,7 +15,7 @@ DEFAULT_EVENTS = '''\
     DEBUG  						Generic debug event.
 '''
 
-LOCAL_EVENTS_DEF_FN = 'event.txt'
+LOCAL_EVENTS_DEF_FN = 'event.src'
 LOCAL_EVENTS_INC_FN = 'event-defs.auto.h'
 
 # Load up local definitions...

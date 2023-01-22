@@ -1,0 +1,14 @@
+// A test for the region parser class, newline follows.
+
+/* [[[ Definition start...
+Def 1
+Def 2
+Def 3 then newline
+
+>>>  Definition end, declaration start... */
+Decl 1
+Decl 2
+Decl3 then newline
+// ]]]  Declaration end.
+
+// Last line, preceding & trailing newline.

@@ -1,0 +1,10 @@
+.gitignore
+ADXL345.h
+build.cmd
+driver.cpp
+driver.h
+Slave.componentinfo.xml
+Slave.cpp
+Slave.cppproj
+SparkFun_ADXL345.cpp
+SparkFun_ADXL345.h
