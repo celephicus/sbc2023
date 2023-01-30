@@ -114,7 +114,7 @@ void modbus_cb(uint8_t evt) {
 		consolePrint(CFMT_U, evt);
 		if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_DATA) {
 			const uint8_t* p = frame;
-			while (frame_len--)
+			fori (frame_len)
 				consolePrint(CFMT_X2, *p++);
 			if (!resp_ok)
 				consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OVF"));
@@ -155,33 +155,8 @@ void modbus_cb(uint8_t evt) {
 		}
 	}
 	
-	// Master gets responses... This for debugging only, normally  Sensor & Relay are slaves.
+	// Master gets responses, normally  Sensor & Relay are slaves so this code will not be seen.
 	if (MODBUS_CB_EVT_RESP_OK == evt) {
-		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("Response ID:"));
-		consolePrint(CFMT_D|CFMT_M_NO_SEP, frame[MODBUS_FRAME_IDX_FUNCTION]);
-		consolePrint(CFMT_C, ':');
-		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
-			case MODBUS_FC_READ_HOLDING_REGISTERS: { // REQ: [ID FC=3 addr:16 count:16(max 125)] RESP: [ID FC=3 byte-count value-0:16, ...]
-				uint8_t byte_count = frame[MODBUS_FRAME_IDX_DATA];
-				if (((byte_count & 1) == 0) && (frame_len == byte_count + 5)) {
-					for (uint8_t idx = 0; idx < byte_count; idx += 2)
-					consolePrint(CFMT_U, modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA+1+idx]));
-				}
-				else
-					consolePrint(CFMT_STR_P, (console_cell_t)PSTR("corrupt"));
-			} 
-			break;
-			case MODBUS_FC_WRITE_SINGLE_REGISTER: // REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
-				if (6 == frame_len)
-					consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OK"));
-				else
-					consolePrint(CFMT_STR_P, (console_cell_t)PSTR("corrupt"));
-			break;
-			default:
-				consolePrint(CFMT_STR_P, (console_cell_t)PSTR("Unknown response"));
-			break;
-		}
-		consolePrint(CFMT_NL, 0);
 	}
 	
 	//gpioSpare1Write(0);
@@ -198,7 +173,6 @@ void modbus_timing_debug(uint8_t id, uint8_t s) {
 
 static void modbus_init() {
 	Serial.begin(9600);
-	Serial.write('*');
 	modbusInit(Serial, GPIO_PIN_RS485_TX_EN, modbus_cb);
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY	
 	modbusSetSlaveId(SBC2022_MODBUS_SLAVE_ADDRESS_RELAY);
@@ -263,9 +237,14 @@ const uint8_t ACCEL_MAX_SAMPLES = 1; //1U << (16 - 10);	// Accelerometer provide
 static struct {
 	int16_t r[3];   			// Accumulators for 3 axes.
 	uint8_t counts;				// Sample counter.
+	bool restart;				// Flag to reset processing out of init, fault. 
+	bool reset_filter;			// Reset filter as part of processing restart. 
+	int32_t filter_accum;
 } f_accel_data;
-static void clear_accel_data() {
-	memset(&f_accel_data, 0, sizeof(f_accel_data));
+
+static void clear_accel_accum() {
+	f_accel_data.r[0] = f_accel_data.r[1] = f_accel_data.r[2] = 0;
+	f_accel_data.counts = 0U;
 }
 
 ADXL345 adxl = ADXL345(10);           // USE FOR SPI COMMUNICATION, ADXL345(CS_PIN);
@@ -313,7 +292,7 @@ static void sensor_accel_init() {
   adxl.singleTapINT(0);
   
 //attachInterrupt(digitalPinToInterrupt(interruptPin), ADXL_ISR, RISING);   // Attach Interrupt
-	clear_accel_data();
+	f_accel_data.restart = true;	// Flag processing as needing a restart
 }
 
 static void sensor_address_links_init() {
@@ -324,31 +303,77 @@ static void setup_devices() {
 	sensor_accel_init();
 	sensor_address_links_init();
 }
+
+// Calculate pitch with given scale value for 90Deg.
+const float TILT_FS = 9000.0;
 static float tilt(float a, float b, float c) {
-	return 360.0 / M_PI * atan2(a, sqrt(b*b + c*c));
+	return 2.0 * TILT_FS / M_PI * atan2(a, sqrt(b*b + c*c));
 }
 
-// TODO: Test accelerometer actually present on bus. Check chip ID every second would do. Also hardware, pulldown on MISO would stop irupt flagging. 
+const uint16_t ACCEL_CHECK_PERIOD_MS = 1000;
+const uint16_t ACCEL_RAW_SAMPLE_RATE_NOMINAL = 100;
+const uint16_t ACCEL_RAW_SAMPLE_RATE_TOLERANCE_PERC = 25;
+//const int16_t ACCEL_TILT_ANGLE_FILTER_K = 4;
+//const int16_t ACCEL_TILT_MOVING_THRESHOLD = 20;
+
+template <typename U, typename T>
+U signed_filter(T* accum, U input, U k_pow_2, bool reset) {
+	*accum = reset ? ((T)input * k_pow_2) : (*accum - (*accum / k_pow_2) + (T)input);
+	return (U)(*accum / k_pow_2);
+}
 void service_devices() {
+	static uint16_t raw_sample_count;
 	if (adxl.getInterruptSource() & 0x80) {
+		// Acquire raw data and increment sample counter, used for determining if the accelerometer is working.
 		int r[3];
 		adxl.readAccel(r);
-		fori (3) f_accel_data.r[i] += (int16_t)r[i];
-		if (++f_accel_data.counts >= REGS[REGS_IDX_ACCEL_AVG]) {	// Check for time to average accumulated readings.
-			gpioSpare1Set();
-			clear_fault_timer(REGS_FLAGS_MASK_ACCEL_FAIL);
-			REGS[REGS_IDX_ACCEL_SAMPLES] += 1;
-			fori (3) REGS[REGS_IDX_ACCEL_X + i] = f_accel_data.r[i];
-			clear_accel_data();
+		if (raw_sample_count < 65535) raw_sample_count += 1; 
+		fori (3) 
+			f_accel_data.r[i] += (int16_t)r[i];
+			
+		if (!(regsFlags() & REGS_FLAGS_MASK_ACCEL_FAIL)) { // Only run if the correct sample rate has been detected. 
+			if (f_accel_data.restart) {			// If restart from init or a fault, restart the processing. 
+				f_accel_data.restart = false;
+				clear_accel_accum();
+				f_accel_data.reset_filter = true;
+			}
+		
+			if (++f_accel_data.counts >= REGS[REGS_IDX_ACCEL_AVG]) {	// Check for time to average accumulated readings.
+				gpioSpare1Set();
+				REGS[REGS_IDX_ACCEL_SAMPLE_COUNT] += 1;
+				fori (3) 
+					REGS[REGS_IDX_ACCEL_X + i] = (regs_t)f_accel_data.r[i];
+				clear_accel_accum();
 
-			// Since components are used as a ratio, no need to divide each by counts.
-			float tilt_angle = tilt((float)(int16_t)REGS[REGS_IDX_ACCEL_X], (float)(int16_t)REGS[REGS_IDX_ACCEL_Y], (float)(int16_t)REGS[REGS_IDX_ACCEL_Z]);
-			REGS[REGS_IDX_ACCEL_TILT_ANGLE] = (int16_t)(0.5 + 100.0 * tilt_angle);
-			gpioSpare1Clear();
+				// Since components are used as a ratio, no need to divide each by counts.
+				int16_t tilt_angle = (int16_t)(0.5 + tilt((float)(int16_t)REGS[REGS_IDX_ACCEL_Y], (float)(int16_t)REGS[REGS_IDX_ACCEL_X], (float)(int16_t)REGS[REGS_IDX_ACCEL_Z]));
+				REGS[REGS_IDX_ACCEL_TILT_ANGLE] = (regs_t)tilt_angle;
+			
+				// Filter tilt value a bit.
+				REGS[REGS_IDX_ACCEL_TILT_ANGLE_LP] = signed_filter(&f_accel_data.filter_accum, (int16_t)REGS[REGS_IDX_ACCEL_TILT_ANGLE], (int16_t)REGS[REGS_IDX_ACCEL_TILT_ANGLE_FILTER_K], f_accel_data.reset_filter);
+				f_accel_data.reset_filter = false;
+				
+				// Are we moving?
+				int16_t delta = REGS[REGS_IDX_ACCEL_TILT_ANGLE_LP] - REGS[REGS_IDX_ACCEL_TILT_ANGLE];
+				regsWriteMaskFlags(REGS_FLAGS_MASK_TILT_MOVING, !utilsIsInLimit(delta, -(int16_t)REGS[REGS_IDX_ACCEL_TILT_MOVING_THRESHOLD], +(int16_t)REGS[REGS_IDX_ACCEL_TILT_MOVING_THRESHOLD]));
+				
+				gpioSpare1Clear();
+			}
 		}
 	}
-	if (regsFlags() & REGS_FLAGS_MASK_ACCEL_FAIL)	// We have a fault, set fault value.
-	REGS[REGS_IDX_ACCEL_TILT_ANGLE] = SBC2022_MODBUS_TILT_FAULT;
+	
+	// Check that we have the correct sample rate from the accelerometer. We can force a fault for testing the logic. On fault flag the filter as needing reset and set a bad value to the tilt reg. 
+	utilsRunEvery(ACCEL_CHECK_PERIOD_MS) {
+		if (0 != REGS[REGS_IDX_ACCEL_SAMPLE_RATE_TEST])		// Fake sample count for testing. 
+			raw_sample_count = REGS[REGS_IDX_ACCEL_SAMPLE_RATE_TEST];
+		const bool fault = !utilsIsInLimit(raw_sample_count, ACCEL_RAW_SAMPLE_RATE_NOMINAL - ACCEL_RAW_SAMPLE_RATE_TOLERANCE_PERC, ACCEL_RAW_SAMPLE_RATE_NOMINAL + ACCEL_RAW_SAMPLE_RATE_TOLERANCE_PERC);
+		regsWriteMaskFlags(REGS_FLAGS_MASK_ACCEL_FAIL, fault);
+		if (fault) {
+			f_accel_data.restart = true;
+			REGS[REGS_IDX_ACCEL_TILT_ANGLE] = REGS[REGS_IDX_ACCEL_TILT_ANGLE_LP] = SBC2022_MODBUS_TILT_FAULT;
+		}
+		raw_sample_count = 0;
+	}
 }
 
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY

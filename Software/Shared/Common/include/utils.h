@@ -1,10 +1,7 @@
 #ifndef UTILS_H__
 #define UTILS_H__
-#if 0
-// Mock millis() for testing.
-#ifdef TEST
-extern uint32_t millis();
-#endif
+
+extern uint32_t millis();	// Required to use millis() in template
 
 // I can't believe how often I stuff up using millis() to time a period. So as usual, here's a function to do timeouts.
 template <typename T>
@@ -12,7 +9,6 @@ void utilsStartTimer(T &then) { then = (T)millis(); }
 
 template <typename T>
 bool utilsIsTimerDone(T &then, T timeout) { return ((T)millis() - then) > timeout; }
-#endif
 
 /* I'm not sure this belongs here, but there is a need in event for critical sections, so here it is. I'd like to put it in dev,
 	which was where the more device specific stuff was intended to go.
@@ -230,6 +226,12 @@ T utilsAbs(T x)  {
 #define utilsAbsI8 utilsAbs<int8_t>
 #define utilsAbsI16 utilsAbs<int16_t>
 #define utilsAbsI32 utilsAbs<int32_t>
+
+// Check if a value is within the limit. Note considers both lower AND UPPER as within the limit. Not like a Python range. 
+template <typename T>
+T utilsIsInLimit(T x, T low, T high)  {
+	return (x >= low) && (x <= high);
+}
 
 // Update the bits matching the mask in the value. Return true if value has changed.
 template <typename T>
