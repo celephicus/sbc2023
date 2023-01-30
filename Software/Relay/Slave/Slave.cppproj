@@ -179,6 +179,7 @@
       <Value>%24(ProjectDir)\..\ArduinoCore\include\variants\standard</Value>
       <Value>../../../Shared/Common/include</Value>
       <Value>../../../Shared/AVR/include</Value>
+      <Value>../../../Shared/2022SBC</Value>
       <Value>..</Value>
     </ListValues>
   </avrgcc.compiler.directories.IncludePaths>
@@ -246,6 +247,26 @@ build.cmd
 </PreBuildEvent>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\Shared\2022SBC\driver.cpp">
+      <SubType>compile</SubType>
+      <Link>Shared\2022SBC\driver.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\Shared\2022SBC\driver.h">
+      <SubType>compile</SubType>
+      <Link>Shared\2022SBC\driver.h</Link>
+    </Compile>
+    <Compile Include="..\..\Shared\2022SBC\Slave.cpp">
+      <SubType>compile</SubType>
+      <Link>Shared\2022SBC\Slave.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\Shared\2022SBC\SparkFun_ADXL345.cpp">
+      <SubType>compile</SubType>
+      <Link>Shared\2022SBC\SparkFun_ADXL345.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\Shared\2022SBC\SparkFun_ADXL345.h">
+      <SubType>compile</SubType>
+      <Link>Shared\2022SBC\SparkFun_ADXL345.h</Link>
+    </Compile>
     <Compile Include="..\..\Shared\AVR\include\dev.h">
       <SubType>compile</SubType>
       <Link>Shared\AVR\dev.h</Link>
@@ -290,14 +311,6 @@ build.cmd
       <SubType>compile</SubType>
       <Link>Shared\Common\regs.cpp</Link>
     </Compile>
-    <Compile Include="driver.cpp">
-      <SubType>compile</SubType>
-      <Link>driver.cpp</Link>
-    </Compile>
-    <Compile Include="driver.h">
-      <SubType>compile</SubType>
-      <Link>driver.h</Link>
-    </Compile>
     <Compile Include="gpio.h">
       <SubType>compile</SubType>
     </Compile>
@@ -306,15 +319,6 @@ build.cmd
       <Link>project_config.h</Link>
     </Compile>
     <Compile Include="regs_local.h">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="Slave.cpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="SparkFun_ADXL345.cpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="SparkFun_ADXL345.h">
       <SubType>compile</SubType>
     </Compile>
     <Content Include="readme.html">
@@ -331,6 +335,7 @@ build.cmd
     <Folder Include="Shared" />
     <Folder Include="Shared\AVR" />
     <Folder Include="Shared\Common" />
+    <Folder Include="Shared\2022SBC" />
   </ItemGroup>
   <Import Project="$(AVRSTUDIO_EXE_PATH)\\Vs\\Compiler.targets" />
 </Project>
