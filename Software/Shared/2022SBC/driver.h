@@ -11,13 +11,12 @@ void driverService();
 enum {
 	DRIVER_LED_PATTERN_NONE,
 	DRIVER_LED_PATTERN_OK,
-#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
-	DRIVER_LED_PATTERN_DC_IN_VOLTS_LOW,
-#endif
-	DRIVER_LED_PATTERN_BUS_VOLTS_LOW,
+	DRIVER_LED_PATTERN_DC_LOW,
+	DRIVER_LED_PATTERN_ACCEL_FAIL,
 	DRIVER_LED_PATTERN_NO_COMMS,
 };
 void driverSetLedPattern(uint8_t p);
+uint8_t driverGetLedPattern();
 
 // NV objects.
 uint8_t driverNvRead();

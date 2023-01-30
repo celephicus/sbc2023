@@ -11,7 +11,8 @@
 #include "sbc2022_modbus.h"
 FILENUM(2);
 
-// Simple timer to set flags on timeout for error checking.
+// Simple timer to set flags on timeout for error checking. Defined by a regs flags mask value with a SINGLE bit set and a timeout. Calling clear_fault_timer(m) will restart the timer and clear the flag. 
+//  On timeout, the flag is set. 
 //
 typedef struct {
 	uint16_t flags_mask;
@@ -19,9 +20,7 @@ typedef struct {
 } TimeoutTimerDef;
 static const TimeoutTimerDef FAULT_TIMER_DEFS[] PROGMEM = {
 	{ REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS, 10 },		// Long timeout as Display might get busy and not send queries for a while
-#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
-	{ REGS_FLAGS_MASK_ACCEL_FAIL, 2 },					// Shortest possible timeout as accelerometer streams data quickly.
-#endif
+
 };
 static uint8_t f_fault_timers[UTILS_ELEMENT_COUNT(FAULT_TIMER_DEFS)];
 static void service_fault_timers() {
@@ -31,7 +30,6 @@ static void service_fault_timers() {
 	}
 }
 static void clear_fault_timer(uint16_t mask) { // Clear possibly many flags set by bitmask.
-//	for (uint16_t m = utilsLowestSetBitMask(mask); 0U != m; m <<= 1) {
 	fori (UTILS_ELEMENT_COUNT(FAULT_TIMER_DEFS)) {
 		if (0U == mask)			// Early exit on zero mask as there is nothing more to do.
 			break;
@@ -50,10 +48,7 @@ static void init_fault_timer() { // Assumes fault flags are all cleared already.
 
 // MODBUS
 //
-void blinkyLed();	//	Defined in Slave.cpp.
-
 static void restart_modbus_fault_timer() {
-	blinkyLed();
 	clear_fault_timer(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS);
 }
 
@@ -206,26 +201,22 @@ static void led_action_func(const UtilsSeqHdr* hdr) {
 static void led_set_pattern(const led_pattern_def_t* def) { 
 	utilsSeqStart(&f_led_seq, (const UtilsSeqHdr*)def, sizeof(led_pattern_def_t), led_action_func); 
 }
-
-static const led_pattern_def_t LED_PATTERN_OK[] 			 PROGMEM = 	{ {2, 0}, 			{UTILS_SEQ_END, 1}, };		// Blink off when all is well. 
-#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
-static const led_pattern_def_t LED_PATTERN_DC_IN_VOLTS_LOW[] PROGMEM = 	{ {20, 1}, {20, 0}, {UTILS_SEQ_REPEAT, 0}, };
-#endif
-static const led_pattern_def_t LED_PATTERN_BUS_VOLTS_LOW[] 	 PROGMEM = 	{ {5, 1},  {5, 0}, 	{UTILS_SEQ_REPEAT, 0}, };
-static const led_pattern_def_t LED_PATTERN_NO_COMMS[] 		 PROGMEM = 	{ {50, 1}, {5, 0}, 	{UTILS_SEQ_REPEAT, 0}, };
+static const led_pattern_def_t LED_PATTERN_OK[] 		PROGMEM = 	{ {2, 0}, 			{UTILS_SEQ_END, 1}, };		// Blink off when all is well. 
+static const led_pattern_def_t LED_PATTERN_DC_LOW[]		PROGMEM = 	{ {20, 1}, {20, 0}, {UTILS_SEQ_REPEAT, 0}, };
+static const led_pattern_def_t LED_PATTERN_ACCEL_FAIL[]	PROGMEM = 	{ {5, 1}, {5, 0},	{UTILS_SEQ_REPEAT, 0}, };
+static const led_pattern_def_t LED_PATTERN_NO_COMMS[] 	PROGMEM = 	{ {50, 1}, {5, 0}, 	{UTILS_SEQ_REPEAT, 0}, };
 
 static const led_pattern_def_t* const LED_PATTERNS[] PROGMEM = { 
-#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
-	NULL, LED_PATTERN_OK, LED_PATTERN_BUS_VOLTS_LOW, LED_PATTERN_NO_COMMS,
-#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
-	NULL, LED_PATTERN_OK, LED_PATTERN_DC_IN_VOLTS_LOW, LED_PATTERN_BUS_VOLTS_LOW, LED_PATTERN_NO_COMMS, 
-#endif
+	NULL, LED_PATTERN_OK, LED_PATTERN_DC_LOW, LED_PATTERN_ACCEL_FAIL, LED_PATTERN_NO_COMMS, 
 };
+static uint8_t f_led_pattern;
 void driverSetLedPattern(uint8_t p) {
 	if (p >= UTILS_ELEMENT_COUNT(LED_PATTERNS))
 		p = 0;
+	f_led_pattern = p; 
 	led_set_pattern((const led_pattern_def_t*)pgm_read_ptr(&LED_PATTERNS[p]));
 }
+uint8_t driverGetLedPattern() { return f_led_pattern; }
 static void led_init() { gpioLedSetModeOutput(); }
 static void led_service() { utilsSeqService(&f_led_seq); }
 
@@ -488,7 +479,7 @@ typedef struct {	// Define a single scan, always const.
 	uint16_t flags_mask;
 	const void* publish_func_arg;    				// Argument supplied to callback function. 
     const uint16_t* input_reg;              		// Input register, usually scaled ADC.
-    thold_scanner_threshold_func threshold;    	// Thresholding function, returns small zero based value
+    thold_scanner_threshold_func threshold;    		// Thresholding function, returns small zero based value
     thold_scanner_action_delay_func delay_get;  	// Function returning delay before tstate update is published. Null implies no delay. 
 } TholdScannerDef;
 
@@ -563,20 +554,37 @@ void tholdScanRescan(const TholdScannerDef* def, TholdScannerState* sst, uint8_t
 static uint8_t scanner_thold_12v_mon(uint8_t tstate, uint16_t val) {  return val < (tstate ? 11500 : 11000); }
 static uint16_t scanner_get_delay() { return 10; }
 static const TholdScannerDef SCANDEFS[] PROGMEM = {
+
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 	{	
-		REGS_FLAGS_MASK_DC_IN_VOLTS_LOW, (const void*)DRIVER_LED_PATTERN_DC_IN_VOLTS_LOW,
-		&regs_storage[REGS_IDX_VOLTS_MON_12V_IN],
-		scanner_thold_12v_mon,
-		scanner_get_delay,
+		REGS_FLAGS_MASK_DC_LOW,						// Flags mask
+		NULL,										// Callback function arg. 
+		&regs_storage[REGS_IDX_VOLTS_MON_12V_IN],	// Input register. 
+		scanner_thold_12v_mon,						// Threshold function. 
+		scanner_get_delay,							// Delay function. 
 	},
 #endif
-	{	
-		REGS_FLAGS_MASK_BUS_VOLTS_LOW, (const void*)DRIVER_LED_PATTERN_BUS_VOLTS_LOW,
-		&regs_storage[REGS_IDX_VOLTS_MON_BUS], 
-		scanner_thold_12v_mon,
-		scanner_get_delay,
-	},
+
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
+{
+	REGS_FLAGS_MASK_DC_LOW,						// Flags mask
+	NULL,										// Callback function arg.
+	&regs_storage[REGS_IDX_VOLTS_MON_BUS],		// Input register.
+	scanner_thold_12v_mon,						// Threshold function.
+	scanner_get_delay,							// Delay function.
+},
+#endif
+
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
+{
+	REGS_FLAGS_MASK_DC_LOW,						// Flags mask
+	NULL,										// Callback function arg.
+	&regs_storage[REGS_IDX_VOLTS_MON_BUS],		// Input register.
+	scanner_thold_12v_mon,						// Threshold function.
+	scanner_get_delay,							// Delay function.
+},
+#endif
+
 };
 
 static void thold_scanner_cb(uint16_t mask, const void* arg) {

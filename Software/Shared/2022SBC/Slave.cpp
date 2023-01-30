@@ -22,6 +22,7 @@ static bool console_cmds_user(char* cmd) {
 
 	// Driver
     case /** LED **/ 0xdc88: driverSetLedPattern(console_u_pop()); break;
+    case /** ?LED **/ 0xdd37: consolePrint(CFMT_D, driverGetLedPattern()); break;
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
     case /** RLY **/ 0x07a2: REGS[REGS_IDX_RELAYS] = console_u_pop(); break;
     case /** ?RLY **/ 0xb21d: consolePrint(CFMT_D, REGS[REGS_IDX_RELAYS]); break;
@@ -162,25 +163,42 @@ void setup() {
 	console_init();
 }
 
-void blinkyLed() {
-#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
-	const uint16_t ALARM_MASK = REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS|REGS_FLAGS_MASK_BUS_VOLTS_LOW|REGS_FLAGS_MASK_DC_IN_VOLTS_LOW;
-#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
-	const uint16_t ALARM_MASK = REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS|REGS_FLAGS_MASK_BUS_VOLTS_LOW;
-#endif
-	if (!(regsFlags() & ALARM_MASK))
-		driverSetLedPattern(DRIVER_LED_PATTERN_OK);
-}
+// Simple fault notifier that looks at various flags on the regs flags register. The first matching flag will set the corresponding LED pattern, or the OK pattern if none. 
+typedef struct {
+	uint16_t flags_mask;
+	uint8_t led_pattern;
+} BlinkyLedWarningDef;
 
-static void service_blinky_led_warnings() {
-	if (regsFlags() & REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS)
-		driverSetLedPattern(DRIVER_LED_PATTERN_NO_COMMS);
+static const BlinkyLedWarningDef BLINKY_LED_WARNING_DEFS[] PROGMEM = {
+
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
-	else if (regsFlags() & REGS_FLAGS_MASK_DC_IN_VOLTS_LOW)
-		driverSetLedPattern(DRIVER_LED_PATTERN_DC_IN_VOLTS_LOW);
+	{ REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS, DRIVER_LED_PATTERN_NO_COMMS },
+	{ REGS_FLAGS_MASK_DC_LOW, DRIVER_LED_PATTERN_DC_LOW },
 #endif
-	else if (regsFlags() & REGS_FLAGS_MASK_BUS_VOLTS_LOW)
-		driverSetLedPattern(DRIVER_LED_PATTERN_BUS_VOLTS_LOW);
+
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
+	{ REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS, DRIVER_LED_PATTERN_NO_COMMS },
+	{ REGS_FLAGS_MASK_DC_LOW, DRIVER_LED_PATTERN_DC_LOW },
+	{ REGS_FLAGS_MASK_ACCEL_FAIL, DRIVER_LED_PATTERN_ACCEL_FAIL },
+#endif
+
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
+	{ REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS, DRIVER_LED_PATTERN_NO_COMMS },
+	{ REGS_FLAGS_MASK_DC_LOW, DRIVER_LED_PATTERN_DC_LOW },
+#endif
+
+};
+static void service_blinky_led_warnings() { 
+	if (!(REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DISABLE_BLINKY_LED)) {
+		fori (UTILS_ELEMENT_COUNT(BLINKY_LED_WARNING_DEFS)) {
+			const uint16_t m = pgm_read_word(&BLINKY_LED_WARNING_DEFS[i].flags_mask);
+			if (m & regsFlags()) {
+				driverSetLedPattern(pgm_read_byte(&BLINKY_LED_WARNING_DEFS[i].led_pattern));
+				return;
+			}
+		}
+		driverSetLedPattern(DRIVER_LED_PATTERN_OK);
+	}
 }
 
 void loop() {
