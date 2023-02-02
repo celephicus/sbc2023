@@ -168,7 +168,8 @@ bool modbusGetResponse(uint8_t* len, uint8_t* buf) {
 	return rc;
 }
 
-const uint8_t* modbusPeekRequest() { return f_ctx.buf_tx.buf; }
+const uint8_t* modbusPeekRequestData() { return f_ctx.buf_tx.buf; }
+uint8_t modbusPeekRequestLen() { return bufferFrameLen(&f_ctx.buf_tx); }
 
 void modbusService() {
 	// Master may be waiting for a reply from a slave. On timeout, flag timeout to callback.
@@ -180,23 +181,27 @@ void modbusService() {
 	if (TIMER_IS_TIMEOUT_WITH_CB(&f_ctx.rx_timestamp_micros, RX_TIMEOUT_MICROS, MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT)) {
 		timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_FRAME, true);
 		if (bufferFrameLen(&f_ctx.buf_rx) > 0) {			// Do we have data, might well get spurious timeouts.
+			const uint8_t rx_frame_valid = verify_rx_frame_valid();		// Basic validity checks.
 			if (timer_is_active(&f_ctx.start_time)) {				// Master is waiting for response...
 				TIMER_STOP_WITH_CB(&f_ctx.start_time, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT);
-				uint8_t response_valid = verify_rx_frame_valid();		// Basic validity checks.
-				if (0 == response_valid)	{ 	// Do further checks as we know what the response should contain...
+				if (0U != rx_frame_valid)		// Some basic error in the frame...
+					f_ctx.cb_resp(rx_frame_valid);
+				else { 	// Do further checks as we know what the response should contain...
 					if (f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_SLAVE_ID] != f_ctx.buf_tx.buf[MODBUS_FRAME_IDX_SLAVE_ID])	// Wrong slave id.
-						response_valid = MODBUS_CB_EVT_RESP_BAD_SLAVE_ID;
+						f_ctx.cb_resp(MODBUS_CB_EVT_RESP_BAD_SLAVE_ID);
 					else if (f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_FUNCTION] != f_ctx.buf_tx.buf[MODBUS_FRAME_IDX_FUNCTION])	// Wrong Function code.
-						response_valid = MODBUS_CB_EVT_RESP_BAD_FUNC_CODE;
+						f_ctx.cb_resp(MODBUS_CB_EVT_RESP_BAD_FUNC_CODE);
+					else
+						f_ctx.cb_resp(MODBUS_CB_EVT_RESP_OK);	// We got a valid response!
 				}
-				f_ctx.cb_resp((0 == response_valid) ? MODBUS_CB_EVT_RESP_OK : response_valid);
 			}
 			else {						// Master NOT waiting, must be a request from someone, so flag it.
-				uint8_t request_valid = verify_rx_frame_valid();		// Basic validity checks.
-				if (0U != request_valid)
-					f_ctx.cb_resp(request_valid);
+				if (0U != rx_frame_valid)		// Some basic error in the frame...
+					f_ctx.cb_resp(rx_frame_valid);
+				else if (modbusGetSlaveId() != f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_SLAVE_ID])	// Not for us...
+					f_ctx.cb_resp(MODBUS_CB_EVT_REQ_X);
 				else
-					f_ctx.cb_resp((modbusGetSlaveId() == f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_SLAVE_ID]) ? MODBUS_CB_EVT_REQ_OK : MODBUS_CB_EVT_REQ_X);
+					f_ctx.cb_resp(MODBUS_CB_EVT_REQ_OK);	// We got a valid request!
 			}
 		}
 		timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_FRAME, false);

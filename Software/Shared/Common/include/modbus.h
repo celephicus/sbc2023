@@ -53,7 +53,8 @@ enum {
 bool modbusGetResponse(uint8_t* len, uint8_t* buf);
 
 // Access data in request. For use by event handler in MASTER mode.
-const uint8_t* modbusPeekRequest();
+const uint8_t* modbusPeekRequestData();
+uint8_t modbusPeekRequestLen();
 
 // MODBUS Function Codes.
 enum {

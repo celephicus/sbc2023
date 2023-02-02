@@ -50,7 +50,10 @@ registers = {} # defs with ident in col 1 are registers, with a 4-tuple of (fiel
 REG_IDX_FIELDS, REG_IDX_DEFAULT, REG_IDX_OPTIONS, REG_IDX_DESC = range(4)
 FIELD_IDX_BITS, FIELD_IDX_MASK, FIELD_IDX_DESC = range(3)
 for lineno, ln in enumerate(parts[RegionParser.S_DEFS], len(parts[RegionParser.S_LEADER])+1):
-	r_lwsp, r_name, r_options, r_desc = reReg.match(ln).groups()
+	if not ln or ln.isspace(): continue
+	m = reReg.match(ln)
+	if not m: error(f"Line {ln}", lineno)
+	r_lwsp, r_name, r_options, r_desc = m.groups()
 	#print(r_lwsp, r_name, r_options, r_desc)
 	#continue
 	name = r_name.upper()

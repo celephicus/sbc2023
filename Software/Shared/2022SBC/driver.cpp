@@ -14,13 +14,13 @@ FILENUM(2);
 // Simple timer to set flags on timeout for error checking. Defined by a regs flags mask value with a SINGLE bit set and a timeout. Calling clear_fault_timer(m) will restart the timer and clear the flag. 
 //  On timeout, the flag is set. 
 //
+#if (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR) || (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY)
 typedef struct {
 	uint16_t flags_mask;
 	uint8_t timeout;
 } TimeoutTimerDef;
 static const TimeoutTimerDef FAULT_TIMER_DEFS[] PROGMEM = {
 	{ REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS, 10 },		// Long timeout as Display might get busy and not send queries for a while
-
 };
 static uint8_t f_fault_timers[UTILS_ELEMENT_COUNT(FAULT_TIMER_DEFS)];
 static void service_fault_timers() {
@@ -45,14 +45,15 @@ static void init_fault_timer() { // Assumes fault flags are all cleared already.
 	fori (UTILS_ELEMENT_COUNT(FAULT_TIMER_DEFS)) 
 		f_fault_timers[i] = pgm_read_byte(&FAULT_TIMER_DEFS[i].timeout);
 }
+#else
+static void init_fault_timer() {}
+static void service_fault_timers() {}
+#endif
 
 // MODBUS
 //
-static void restart_modbus_fault_timer() {
-	clear_fault_timer(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS);
-}
 
-// Build two different versions depending on product.
+// Build two different versions of MODBUS register read/write depending on product.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
 
 static uint8_t read_holding_register(uint16_t address, uint16_t* value) {
@@ -60,9 +61,9 @@ static uint8_t read_holding_register(uint16_t address, uint16_t* value) {
 		*value = REGS[address];
 		return 0;
 	}
-	if (SBC2022_MODBUS_REGISTER_SENSOR == address) {
+	if (SBC2022_MODBUS_REGISTER_SENSOR_TILT == address) {
 		*value = REGS[REGS_IDX_ACCEL_TILT_ANGLE];
-		restart_modbus_fault_timer();
+		clear_fault_timer(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS);
 		return 0;
 	}
 	*value = (uint16_t)-1;
@@ -89,7 +90,7 @@ static uint8_t read_holding_register(uint16_t address, uint16_t* value) {
 static uint8_t write_holding_register(uint16_t address, uint16_t value) {
 	if (SBC2022_MODBUS_REGISTER_RELAY == address) {
 		REGS[REGS_IDX_RELAYS] = (uint8_t)value;
-		restart_modbus_fault_timer();
+		clear_fault_timer(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS);
 		return 0;
 	}
 	return 1;
@@ -102,8 +103,8 @@ void modbus_cb(uint8_t evt) {
 	uint8_t frame_len = RESP_SIZE;	// Must call modbusGetResponse() with buffer length set.
 	const bool resp_ok = modbusGetResponse(&frame_len, frame);
 
-	//gpioSpare1Write(true);
 	// Dump MODBUS...
+	//gpioSpare1Write(true);
 	if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS) {
 		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("RECV:"));
 		consolePrint(CFMT_U, evt);
@@ -117,26 +118,27 @@ void modbus_cb(uint8_t evt) {
 		consolePrint(CFMT_NL, 0);
 	}
 	
-	// Slaves get requests...
-	if (MODBUS_CB_EVT_REQ_OK == evt) {					// Only respond if we get a request. This will have our slave ID.
-		BufferFrame response;
+#if (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR) || (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY)		
+	switch (evt) {
+		case MODBUS_CB_EVT_REQ_OK: 					// Slaves only respond if we get a request. This will have our slave ID.
 		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
 			case MODBUS_FC_WRITE_SINGLE_REGISTER: {	// REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
 				if (8 == frame_len) {
 					const uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
 					const uint16_t value   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
 					write_holding_register(address, value);
-					modbusSlaveSend(frame, frame_len - 2);	// Less 2 for CRC as send appends it.
+					modbusSlaveSend(frame, frame_len - 2);	// Send request back less 2 for CRC as send appends it.
 				}
 			} break;
 			case MODBUS_FC_READ_HOLDING_REGISTERS: { // REQ: [ID FC=3 addr:16 count:16(max 125)] RESP: [ID FC=3 byte-count value-0:16, ...]
 				if (8 == frame_len) {
+					BufferFrame response;
 					uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
 					uint16_t count   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
 					bufferFrameReset(&response);
 					bufferFrameAddMem(&response, frame, 2);		// Copy ID & Function Code from request frame.
 					uint16_t byte_count = count * 2;			// Count sent as 16 bits, but bytecount only 8 bits.
-					if (byte_count < (uint16_t)bufferFrameFree(&response) - 2) { // Is space for data and CRC?
+					if (byte_count <= (uint16_t)bufferFrameFree(&response) - 2) { // Is space for data and CRC?
 						bufferFrameAdd(&response, (uint8_t)byte_count);
 						while (count--) {
 							uint16_t value;
@@ -147,12 +149,58 @@ void modbus_cb(uint8_t evt) {
 					}
 				}
 			} break;
-		}
-	}
+		}			// Closes `switch(frame[MODBUS_FRAME_IDX_FUNCTION])'
+		break;
+	}		// Closes `switch (evt) {'
 	
-	// Master gets responses, normally  Sensor & Relay are slaves so this code will not be seen.
-	if (MODBUS_CB_EVT_RESP_OK == evt) {
-	}
+#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
+	const uint8_t sensor_idx = modbusPeekRequestData()[MODBUS_FRAME_IDX_SLAVE_ID] - SBC2022_MODBUS_SLAVE_ADDRESS_SENSOR_0;	// Only applies to sesnors.
+	const bool is_sensor_response = sensor_idx < SBC2022_MODBUS_SLAVE_COUNT_SENSOR;
+	
+	switch (evt) {
+		case MODBUS_CB_EVT_RESP_OK:			// Good response...
+		
+		// Handle response from Sensors.
+		if (is_sensor_response) {	// Check slave ID...
+			if (MODBUS_FC_READ_HOLDING_REGISTERS == frame[MODBUS_FRAME_IDX_FUNCTION]) { // REQ: [ID FC=3 addr:16 count:16(max 125)] RESP: [ID FC=3 byte-count value-0:16, ...]
+				uint16_t address = modbusGetU16(&modbusPeekRequestData()[MODBUS_FRAME_IDX_DATA]); // Get register address from request frame. 
+				uint8_t byte_count = frame[MODBUS_FRAME_IDX_DATA];		// Retrieve byte count from response frame. 
+				if (((byte_count & 1) == 0) && (frame_len == (byte_count + 5))) {
+					fori (byte_count/2) {
+						const uint16_t regval = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 1 + i*2]);
+						if (address == SBC2022_MODBUS_REGISTER_SENSOR_TILT) {
+							REGS[REGS_IDX_TILT_SENSOR_0 + sensor_idx] = regval;
+							regsWriteMaskFlags(REGS_FLAGS_MASK_TILT_SENSOR_0_FAIL << sensor_idx, false);	// Clear fault flag as we got a response.
+						}
+						else if (address == SBC2022_MODBUS_REGISTER_SENSOR_STATUS) {
+							REGS[REGS_IDX_SENSOR_STATUS_0 + sensor_idx] = regval;
+						}
+						address += 1;
+					}
+				}
+			}
+		}
+		
+		else if (frame[MODBUS_FRAME_IDX_SLAVE_ID] == SBC2022_MODBUS_SLAVE_ADDRESS_RELAY) {
+			if ((6 == frame_len) && (MODBUS_FC_WRITE_SINGLE_REGISTER == frame[MODBUS_FRAME_IDX_FUNCTION])) { // REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
+				uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
+				if (SBC2022_MODBUS_REGISTER_RELAY == address)
+					regsWriteMaskFlags(REGS_FLAGS_MASK_RELAY_MODULE_FAIL, false);	// Clear fault flag as we got a response.
+			}
+		}
+		break;
+		
+		default:
+		if (is_sensor_response) {
+			regsWriteMaskFlags(REGS_FLAGS_MASK_TILT_SENSOR_0_FAIL << sensor_idx, true);
+		}
+		else if (frame[MODBUS_FRAME_IDX_SLAVE_ID] == SBC2022_MODBUS_SLAVE_ADDRESS_RELAY) {
+			regsWriteMaskFlags(REGS_FLAGS_MASK_RELAY_MODULE_FAIL, true);
+		}
+		break;
+			
+	}	// Closes `switch (evt) {'. 
+#endif
 	
 	//gpioSpare1Write(0);
 }
@@ -171,11 +219,15 @@ static void modbus_init() {
 	modbusInit(Serial, GPIO_PIN_RS485_TX_EN, modbus_cb);
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY	
 	modbusSetSlaveId(SBC2022_MODBUS_SLAVE_ADDRESS_RELAY);
-#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR	
+#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
 	modbusSetSlaveId(SBC2022_MODBUS_SLAVE_ADDRESS_SENSOR_0 + 
 	  !!(regsFlags() & REGS_FLAGS_MASK_LK_A1) +
 	   ((!!(regsFlags() & REGS_FLAGS_MASK_LK_A2)) << 1)
 	);
+#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
+	fori (SBC2022_MODBUS_SLAVE_COUNT_SENSOR)
+		regsWriteMaskFlags(REGS_FLAGS_MASK_TILT_SENSOR_0_FAIL << i, true);
+	regsWriteMaskFlags(REGS_FLAGS_MASK_RELAY_MODULE_FAIL, true);
 #endif	
 	modbusSetTimingDebugCb(modbus_timing_debug);
 	gpioSpare1SetModeOutput();		// These are used by the RS485 debug cb.
@@ -391,6 +443,11 @@ void service_devices() {
 	if (f_relay_data != (uint8_t)REGS[REGS_IDX_RELAYS])
 		write_relays((uint8_t)REGS[REGS_IDX_RELAYS]);
 }
+
+#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
+
+static void setup_devices() {}
+static void service_devices() {}
 
 #endif
 

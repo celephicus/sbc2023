@@ -121,7 +121,7 @@ static bool console_cmds_user(char* cmd) {
   return true;
 }
 
-SoftwareSerial consSerial(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); // RX, TX
+static SoftwareSerial consSerial(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); // RX, TX
 static void console_init() {
 	consSerial.begin(19200);
 	consoleInit(console_cmds_user, consSerial);
@@ -183,7 +183,7 @@ static const BlinkyLedWarningDef BLINKY_LED_WARNING_DEFS[] PROGMEM = {
 #endif
 
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
-	{ REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS, DRIVER_LED_PATTERN_NO_COMMS },
+	{ REGS_FLAGS_MASK_RELAY_MODULE_FAIL, DRIVER_LED_PATTERN_NO_COMMS },
 	{ REGS_FLAGS_MASK_DC_LOW, DRIVER_LED_PATTERN_DC_LOW },
 #endif
 
