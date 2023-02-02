@@ -402,7 +402,7 @@ const uint16_t NV_VERSION = 2;
 
 // All data managed by NV
 typedef struct {
-	uint16_t regs[COUNT_REGS];		// Must be first in struct as we only write the last bit to NV.
+	regs_t regs[COUNT_REGS];		// Must be first in struct as we only write the last bit to NV.
 } NvData;
 static NvData l_nv_data;
 
@@ -412,7 +412,7 @@ static NvData l_nv_data;
 uint16_t* regsGetRegs() { return regs_storage; }
 
 // The NV only managed the latter part of regs and whatever else is in the NvData struct.
-#define NV_DATA_NV_SIZE (sizeof(l_nv_data) - sizeof(uint16_t) * (COUNT_REGS - REGS_START_NV_IDX))
+#define NV_DATA_NV_SIZE (sizeof(regs_t) * (COUNT_REGS - REGS_START_NV_IDX))
 
 // Locate two copies of the NV portion of the registers in EEPROM. 
 typedef struct {
