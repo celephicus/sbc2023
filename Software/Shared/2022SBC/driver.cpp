@@ -66,6 +66,10 @@ static uint8_t read_holding_register(uint16_t address, uint16_t* value) {
 		clear_fault_timer(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS);
 		return 0;
 	}
+	if (SBC2022_MODBUS_REGISTER_SENSOR_STATUS == address) {
+		*value = REGS[REGS_IDX_ACCEL_TILT_STATUS];
+		return 0;
+	}
 	*value = (uint16_t)-1;
 	return 1;
 }
@@ -106,14 +110,14 @@ void modbus_cb(uint8_t evt) {
 	// Dump MODBUS...
 	//gpioSpare1Write(true);
 	if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS) {
-		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("RECV:"));
+		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("R:"));
 		consolePrint(CFMT_U, evt);
 		if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_DATA) {
 			const uint8_t* p = frame;
 			fori (frame_len)
-				consolePrint(CFMT_X2, *p++);
+				consolePrint(CFMT_X2|CFMT_M_NO_SEP, *p++);
 			if (!resp_ok)
-				consolePrint(CFMT_STR_P, (console_cell_t)PSTR("OVF"));
+				consolePrint(CFMT_STR_P, (console_cell_t)PSTR(" OVF"));
 		}
 		consolePrint(CFMT_NL, 0);
 	}
@@ -154,7 +158,7 @@ void modbus_cb(uint8_t evt) {
 	}		// Closes `switch (evt) {'
 	
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
-	const uint8_t sensor_idx = modbusPeekRequestData()[MODBUS_FRAME_IDX_SLAVE_ID] - SBC2022_MODBUS_SLAVE_ADDRESS_SENSOR_0;	// Only applies to sesnors.
+	const uint8_t sensor_idx = modbusPeekRequestData()[MODBUS_FRAME_IDX_SLAVE_ID] - SBC2022_MODBUS_SLAVE_ID_SENSOR_0;	// Only applies to sesnors.
 	const bool is_sensor_response = sensor_idx < SBC2022_MODBUS_SLAVE_COUNT_SENSOR;
 	
 	switch (evt) {
@@ -166,22 +170,29 @@ void modbus_cb(uint8_t evt) {
 				uint16_t address = modbusGetU16(&modbusPeekRequestData()[MODBUS_FRAME_IDX_DATA]); // Get register address from request frame. 
 				uint8_t byte_count = frame[MODBUS_FRAME_IDX_DATA];		// Retrieve byte count from response frame. 
 				if (((byte_count & 1) == 0) && (frame_len == (byte_count + 5))) {
+					bool got_tilt = false, got_status = false;
 					fori (byte_count/2) {
 						const uint16_t regval = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 1 + i*2]);
 						if (address == SBC2022_MODBUS_REGISTER_SENSOR_TILT) {
 							REGS[REGS_IDX_TILT_SENSOR_0 + sensor_idx] = regval;
-							regsWriteMaskFlags(REGS_FLAGS_MASK_TILT_SENSOR_0_FAIL << sensor_idx, false);	// Clear fault flag as we got a response.
+							got_tilt = true;
 						}
 						else if (address == SBC2022_MODBUS_REGISTER_SENSOR_STATUS) {
 							REGS[REGS_IDX_SENSOR_STATUS_0 + sensor_idx] = regval;
+							got_status = true;
 						}
 						address += 1;
 					}
+					
+					// Force a good status to be set in the unlikely event that we request a tilt value but not status. 
+					// TODO: Check for rogue value for tilt. 
+					if (got_tilt && (!got_status))
+						REGS[REGS_IDX_SENSOR_STATUS_0 + sensor_idx] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_IDLE;
 				}
 			}
 		}
 		
-		else if (frame[MODBUS_FRAME_IDX_SLAVE_ID] == SBC2022_MODBUS_SLAVE_ADDRESS_RELAY) {
+		else if (frame[MODBUS_FRAME_IDX_SLAVE_ID] == SBC2022_MODBUS_SLAVE_ID_RELAY) {
 			if ((6 == frame_len) && (MODBUS_FC_WRITE_SINGLE_REGISTER == frame[MODBUS_FRAME_IDX_FUNCTION])) { // REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
 				uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
 				if (SBC2022_MODBUS_REGISTER_RELAY == address)
@@ -192,9 +203,9 @@ void modbus_cb(uint8_t evt) {
 		
 		default:
 		if (is_sensor_response) {
-			regsWriteMaskFlags(REGS_FLAGS_MASK_TILT_SENSOR_0_FAIL << sensor_idx, true);
+			REGS[REGS_IDX_SENSOR_STATUS_0 + sensor_idx] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_NOT_PRESENT;
 		}
-		else if (frame[MODBUS_FRAME_IDX_SLAVE_ID] == SBC2022_MODBUS_SLAVE_ADDRESS_RELAY) {
+		else if (frame[MODBUS_FRAME_IDX_SLAVE_ID] == SBC2022_MODBUS_SLAVE_ID_RELAY) {
 			regsWriteMaskFlags(REGS_FLAGS_MASK_RELAY_MODULE_FAIL, true);
 		}
 		break;
@@ -214,19 +225,18 @@ void modbus_timing_debug(uint8_t id, uint8_t s) {
 	}
 }
 
+static const uint32_t MODBUS_BAUDRATE = 9600UL;
+static const uint16_t MODBUS_RESPONSE_TIMEOUT_MILLIS = 20U;
 static void modbus_init() {
-	Serial.begin(9600);
-	modbusInit(Serial, GPIO_PIN_RS485_TX_EN, modbus_cb);
+	Serial.begin(MODBUS_BAUDRATE);
+	modbusInit(Serial, GPIO_PIN_RS485_TX_EN, MODBUS_BAUDRATE, MODBUS_RESPONSE_TIMEOUT_MILLIS, modbus_cb);
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY	
-	modbusSetSlaveId(SBC2022_MODBUS_SLAVE_ADDRESS_RELAY);
+	modbusSetSlaveId(SBC2022_MODBUS_SLAVE_ID_RELAY);
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
-	modbusSetSlaveId(SBC2022_MODBUS_SLAVE_ADDRESS_SENSOR_0 + 
-	  !!(regsFlags() & REGS_FLAGS_MASK_LK_A1) +
-	   ((!!(regsFlags() & REGS_FLAGS_MASK_LK_A2)) << 1)
-	);
+	modbusSetSlaveId(SBC2022_MODBUS_SLAVE_ID_SENSOR_0 + (!digitalRead(GPIO_PIN_SEL0)) + 2 * (!digitalRead(GPIO_PIN_SEL1)));
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 	fori (SBC2022_MODBUS_SLAVE_COUNT_SENSOR)
-		regsWriteMaskFlags(REGS_FLAGS_MASK_TILT_SENSOR_0_FAIL << i, true);
+		REGS[REGS_IDX_SENSOR_STATUS_0 + i] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_NOT_PRESENT;
 	regsWriteMaskFlags(REGS_FLAGS_MASK_RELAY_MODULE_FAIL, true);
 #endif	
 	modbusSetTimingDebugCb(modbus_timing_debug);
@@ -338,13 +348,9 @@ static void sensor_accel_init() {
 	f_accel_data.restart = true;	// Flag processing as needing a restart
 }
 
-static void sensor_address_links_init() {
-	regsWriteMaskFlags(REGS_FLAGS_MASK_LK_A1, !digitalRead(GPIO_PIN_SEL0));
-	regsWriteMaskFlags(REGS_FLAGS_MASK_LK_A2, !digitalRead(GPIO_PIN_SEL1));
-}
+
 static void setup_devices() {
 	sensor_accel_init();
-	sensor_address_links_init();
 }
 
 // Calculate pitch with given scale value for 90Deg.
@@ -397,15 +403,21 @@ void service_devices() {
 				f_accel_data.reset_filter = false;
 				
 				// Are we moving?
-				int16_t delta = REGS[REGS_IDX_ACCEL_TILT_ANGLE_LP] - REGS[REGS_IDX_ACCEL_TILT_ANGLE];
-				regsWriteMaskFlags(REGS_FLAGS_MASK_TILT_MOVING, !utilsIsInLimit(delta, -(int16_t)REGS[REGS_IDX_ACCEL_TILT_MOVING_THRESHOLD], +(int16_t)REGS[REGS_IDX_ACCEL_TILT_MOVING_THRESHOLD]));
+				const int16_t delta = REGS[REGS_IDX_ACCEL_TILT_ANGLE_LP] - REGS[REGS_IDX_ACCEL_TILT_ANGLE];
+				if (delta < -(int16_t)REGS[REGS_IDX_ACCEL_TILT_MOVING_THRESHOLD])
+					REGS[REGS_IDX_ACCEL_TILT_STATUS] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_MOTION_NEG;
+				else if (delta > +(int16_t)REGS[REGS_IDX_ACCEL_TILT_MOVING_THRESHOLD])
+					REGS[REGS_IDX_ACCEL_TILT_STATUS] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_MOTION_POS;
+				else
+					REGS[REGS_IDX_ACCEL_TILT_STATUS] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_IDLE;
 				
 				gpioSpare1Clear();
 			}
 		}
 	}
 	
-	// Check that we have the correct sample rate from the accelerometer. We can force a fault for testing the logic. On fault flag the filter as needing reset and set a bad value to the tilt reg. 
+	// Check that we have the correct sample rate from the accelerometer. We can force a fault for testing the logic.
+	// On fault flag the filter as needing reset, set status reg to bad and set a bad value to the tilt reg. 
 	utilsRunEvery(ACCEL_CHECK_PERIOD_MS) {
 		if (0 != REGS[REGS_IDX_ACCEL_SAMPLE_RATE_TEST])		// Fake sample count for testing. 
 			raw_sample_count = REGS[REGS_IDX_ACCEL_SAMPLE_RATE_TEST];
@@ -414,6 +426,7 @@ void service_devices() {
 		if (fault) {
 			f_accel_data.restart = true;
 			REGS[REGS_IDX_ACCEL_TILT_ANGLE] = REGS[REGS_IDX_ACCEL_TILT_ANGLE_LP] = SBC2022_MODBUS_TILT_FAULT;
+			REGS[REGS_IDX_ACCEL_TILT_STATUS] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_NOT_WORKING;
 		}
 		raw_sample_count = 0;
 	}

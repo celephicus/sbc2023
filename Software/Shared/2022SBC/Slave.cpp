@@ -123,7 +123,7 @@ static bool console_cmds_user(char* cmd) {
 
 static SoftwareSerial consSerial(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); // RX, TX
 static void console_init() {
-	consSerial.begin(19200);
+	consSerial.begin(38400);
 	consoleInit(console_cmds_user, consSerial);
 	// Signon message, note two newlines to leave a gap from any preceding output on the terminal.
 	consolePrint(CFMT_NL, 0); consolePrint(CFMT_NL, 0);

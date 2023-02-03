@@ -4,11 +4,7 @@
 /* [[[ Definition start...
 FLAGS [hex] "Various flags."
 	DC_LOW [0] "Bus volts low."
-	TILT_SENSOR_0_FAIL [1] "Tilt Sensor 1 fail."
-	TILT_SENSOR_1_FAIL [2] "Tilt Sensor 1 fail."
-	TILT_SENSOR_2_FAIL [3] "Tilt Sensor 2 fail."
-	TILT_SENSOR_3_FAIL [4] "Tilt Sensor 2 fail."
-	RELAY_MODULE_FAIL [5] "Relay module fail."
+	RELAY_MODULE_FAIL [4] "Relay module fail."
 	EEPROM_READ_BAD_0 [13] "EEPROM bank 0 corrupt."
 	EEPROM_READ_BAD_1 [14] "EEPROM bank 1 corrupt."
 	WATCHDOG_RESTART [15] "Whoops."
@@ -62,11 +58,7 @@ enum {
 // Flags/masks for register FLAGS.
 enum {
     	REGS_FLAGS_MASK_DC_LOW = (int)0x1,
-    	REGS_FLAGS_MASK_TILT_SENSOR_0_FAIL = (int)0x2,
-    	REGS_FLAGS_MASK_TILT_SENSOR_1_FAIL = (int)0x4,
-    	REGS_FLAGS_MASK_TILT_SENSOR_2_FAIL = (int)0x8,
-    	REGS_FLAGS_MASK_TILT_SENSOR_3_FAIL = (int)0x10,
-    	REGS_FLAGS_MASK_RELAY_MODULE_FAIL = (int)0x20,
+    	REGS_FLAGS_MASK_RELAY_MODULE_FAIL = (int)0x10,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_0 = (int)0x2000,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_1 = (int)0x4000,
     	REGS_FLAGS_MASK_WATCHDOG_RESTART = (int)0x8000,
@@ -150,11 +142,7 @@ enum {
  static const char REGS_HELPS[] PROGMEM =                                               \
     "\nFlags:"                                                                          \
     "\n DC_LOW: 0 (Bus volts low.)"                                                     \
-    "\n TILT_SENSOR_0_FAIL: 1 (Tilt Sensor 1 fail.)"                                    \
-    "\n TILT_SENSOR_1_FAIL: 2 (Tilt Sensor 1 fail.)"                                    \
-    "\n TILT_SENSOR_2_FAIL: 3 (Tilt Sensor 2 fail.)"                                    \
-    "\n TILT_SENSOR_3_FAIL: 4 (Tilt Sensor 2 fail.)"                                    \
-    "\n RELAY_MODULE_FAIL: 5 (Relay module fail.)"                                      \
+    "\n RELAY_MODULE_FAIL: 4 (Relay module fail.)"                                      \
     "\n EEPROM_READ_BAD_0: 13 (EEPROM bank 0 corrupt.)"                                 \
     "\n EEPROM_READ_BAD_1: 14 (EEPROM bank 1 corrupt.)"                                 \
     "\n WATCHDOG_RESTART: 15 (Whoops.)"                                                 \

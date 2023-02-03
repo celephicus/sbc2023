@@ -11,7 +11,7 @@ typedef void (*modbus_response_cb)(uint8_t evt);
 
 /* Initialise the driver. Initially the slave address is set to zero, which is not a valid slave address, so it will not respond to any requests
 	as this is outside the legal address range of 1-247 inclusive. */
-void modbusInit(Stream& rs485, uint8_t tx_en, modbus_response_cb cb);
+void modbusInit(Stream& rs485, uint8_t tx_en, uint32_t baud, uint16_t response_timeout, modbus_response_cb cb);
 
 // Callback function used for hardware debugging of timing. The `id' argument is event-type, `s' is state.
 enum {

@@ -1,26 +1,22 @@
 #include <Arduino.h>
 #include "modbus.h"
 
-// TODO: RX timeout should be calculated.
-const uint16_t RX_TIMEOUT_MICROS = 2000; // 2 character times 
-const uint16_t MASTER_RESPONSE_TIMEOUT_MICROS = 50U*1000U;	// Oddly enough the MODBUS spec does not mandate this.
-
 // Implement a little non-blocking microsecond timer, good for 65535 microseconds, note that resolution of micros() is 4 or 8us.
 static bool timer_is_active(uint16_t* then) {	// Check if timer is running, might be useful to check if a timer is still running.
 	return (*then != (uint16_t)0U);
 }
-static void timer_start(uint16_t* then) { 	// Start timer, note extends period by 1 if necessary to make timere flag as active.
-	*then = (uint16_t)micros();
+static void timer_start(uint16_t now, uint16_t* then) { 	// Start timer, note extends period by 1 if necessary to make timere flag as active.
+	*then = now;
 	if (!timer_is_active(then)) 
 		*then = (uint16_t)-1; 
 }
 static void timer_stop(uint16_t* then) { 	// Stop timer, it is now inactive and timer_is_timeout() will never return true;
 	*then = (uint16_t)0U; 
 }
-static bool timer_is_timeout(uint16_t* then, uint16_t duration) { // Check for timeout and return true if so, then timer will be inactive.
+static bool timer_is_timeout(uint16_t now, uint16_t* then, uint16_t duration) { // Check for timeout and return true if so, then timer will be inactive.
 	if (
 	  timer_is_active(then) &&	// No timeout unless set.
-	  ((uint16_t)micros() - *then > duration)
+	  (now - *then > duration)
 	) {
 		timer_stop(then);
 		return true;
@@ -47,6 +43,9 @@ typedef struct {
 	// RX: Master waits for response after sending request, slaves receive requests.
 	BufferFrame buf_rx;						// Buffer used for receiving, requests if a slave, responses if a master.
 	uint16_t rx_timestamp_micros;
+	uint16_t rx_timeout_micros;
+	uint16_t resp_timeout_millis;
+	
 } ModbusContext;
 static ModbusContext f_ctx;
 
@@ -58,23 +57,23 @@ static void timing_debug(uint8_t id, uint8_t s) {
 }
 
 // Timer functions that also send a timing debug event.
-static void TIMER_START_WITH_CB(uint16_t* then, uint8_t cb_id) { 
-	timer_start(then); 
+static void TIMER_START_WITH_CB(uint16_t now, uint16_t* then, uint8_t cb_id) { 
+	timer_start(now, then); 
 	timing_debug(cb_id, true); 
 }
 static void TIMER_STOP_WITH_CB(uint16_t* then, uint8_t cb_id) { 
 	timer_stop(then); 
 	timing_debug(cb_id, false); 
 }
-static bool TIMER_IS_TIMEOUT_WITH_CB(uint16_t* then, uint16_t duration, uint8_t cb_id) { 
-	bool timeout = timer_is_timeout(then, duration); 
+static bool TIMER_IS_TIMEOUT_WITH_CB(uint16_t now, uint16_t* then, uint16_t duration, uint8_t cb_id) { 
+	bool timeout = timer_is_timeout(now, then, duration); 
 	if (timeout) timing_debug(cb_id, false);
 	return timeout;
 }
 	
 static uint16_t get_crc(const uint8_t* buf, uint8_t len);	
 
-void modbusInit(Stream& rs485, uint8_t tx_en_pin, modbus_response_cb cb) {
+void modbusInit(Stream& rs485, uint8_t tx_en_pin, uint32_t baud, uint16_t response_timeout, modbus_response_cb cb) {
 	memset(&f_ctx, 0, sizeof(f_ctx));
 	bufferFrameReset(&f_ctx.buf_rx);
 	bufferFrameReset(&f_ctx.buf_tx);
@@ -87,6 +86,8 @@ void modbusInit(Stream& rs485, uint8_t tx_en_pin, modbus_response_cb cb) {
 		(void)f_ctx.sRs485->read();
 	TIMER_STOP_WITH_CB(&f_ctx.start_time, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT);
 	TIMER_STOP_WITH_CB(&f_ctx.rx_timestamp_micros, MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT);
+	f_ctx.rx_timeout_micros = utilsLimitMin((uint16_t)(15UL * 1000UL*1000UL / baud), (uint16_t)750U);	// Timeout 1.5 character times minimum 750us.
+	f_ctx.resp_timeout_millis = response_timeout;
 }
 void modbusSetSlaveId(uint8_t id) { f_ctx.slave_id = id; }
 uint8_t modbusGetSlaveId() { return f_ctx.slave_id; }
@@ -113,7 +114,7 @@ void modbusSlaveSend(const uint8_t* frame, uint8_t sz) {
 void modbusMasterSend(const uint8_t* frame, uint8_t sz, uint8_t resp_sz/*=0U*/) {
 	(void)resp_sz;
 	modbusSlaveSend(frame, sz);
-	TIMER_START_WITH_CB(&f_ctx.start_time, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT);
+	TIMER_START_WITH_CB((uint16_t)millis(), &f_ctx.start_time, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT);
 }
 
 // Helpers to send actual frames.
@@ -174,11 +175,11 @@ uint8_t modbusPeekRequestLen() { return bufferFrameLen(&f_ctx.buf_tx); }
 void modbusService() {
 	// Master may be waiting for a reply from a slave. On timeout, flag timeout to callback.
 	// This will only be called on RX timeout, which will only happen if at least one character has been received. 
-	if (TIMER_IS_TIMEOUT_WITH_CB(&f_ctx.start_time, MASTER_RESPONSE_TIMEOUT_MICROS, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT)) 
+	if (TIMER_IS_TIMEOUT_WITH_CB((uint16_t)millis(), &f_ctx.start_time, f_ctx.resp_timeout_millis, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT)) 
 		f_ctx.cb_resp(MODBUS_CB_EVT_RESP_TIMEOUT);
 	
 	// Service RX timer, timeout with data is a frame.
-	if (TIMER_IS_TIMEOUT_WITH_CB(&f_ctx.rx_timestamp_micros, RX_TIMEOUT_MICROS, MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT)) {
+	if (TIMER_IS_TIMEOUT_WITH_CB((uint16_t)micros(), &f_ctx.rx_timestamp_micros, f_ctx.rx_timeout_micros, MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT)) {
 		timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_FRAME, true);
 		if (bufferFrameLen(&f_ctx.buf_rx) > 0) {			// Do we have data, might well get spurious timeouts.
 			const uint8_t rx_frame_valid = verify_rx_frame_valid();		// Basic validity checks.
@@ -208,9 +209,8 @@ void modbusService() {
 	}
 	
 	// Receive packet.
-	// TODO: receive multiple if available. What does this even mean?
 	if (f_ctx.sRs485->available() > 0) {
-		TIMER_START_WITH_CB(&f_ctx.rx_timestamp_micros, MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT);
+		TIMER_START_WITH_CB((uint16_t)micros(), &f_ctx.rx_timestamp_micros, MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT);
 		bufferFrameAdd(&f_ctx.buf_rx, f_ctx.sRs485->read());
 	}
 }
