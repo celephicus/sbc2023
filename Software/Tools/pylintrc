@@ -216,13 +216,10 @@ attr-naming-style=snake_case
 bad-names=foo,
           bar,
           baz,
-          toto,
-          tutu,
-          tata
 
 # Bad variable names regexes, separated by a comma. If names match any regex,
 # they will always be refused
-bad-names-rgxs=
+bad-names-rgxs=.*stuff.*
 
 # Naming style matching correct class attribute names.
 class-attribute-naming-style=any
@@ -264,7 +261,10 @@ function-naming-style=snake_case
 #function-rgx=
 
 # Good variable names which should always be accepted, separated by a comma.
-good-names=i,j,k,m,n
+good-names=i,j,k,		# Loop indices, k is also a generickey value.
+           m,			# Regex match object.
+		   n,			# Generic counter.
+		   ln,			# A line of characters.
 
 # Good variable names regexes, separated by a comma. If names match any regex,
 # they will always be accepted
