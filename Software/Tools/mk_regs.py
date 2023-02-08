@@ -114,9 +114,9 @@ cg.add(parts[RegionParser.S_SEP])
 cg.add_comment('Declare the indices to the registers.', add_nl=-1)
 cg.add('enum {')
 cg.indent()
-for r in registers:
-	cg.add(f'REGS_IDX_{r},')
-cg.add('COUNT_REGS,')
+for reg_idx, reg_name in enumerate(registers):
+	cg.add(f'REGS_IDX_{reg_name} = {reg_idx},')
+cg.add(f'COUNT_REGS = {len(registers)}')
 cg.dedent()
 cg.add('};')
 

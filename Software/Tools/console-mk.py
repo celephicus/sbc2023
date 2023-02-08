@@ -20,7 +20,7 @@ def do_hash(cmd_s):
 def subber_hash(m):
 	"Produce a C snippet containing a 16 bit hash from a string in a regex match."
 	cmd_s = m.group(1).upper()
-	return f'/** {cmd_s} **/ {do_hash(cmd_s):04x}'
+	return f'/** {cmd_s} **/ 0x{do_hash(cmd_s):04x}'
 
 for infile in glob.glob(sys.argv[1], recursive=True):
 	cg = codegen.Codegen(infile)
