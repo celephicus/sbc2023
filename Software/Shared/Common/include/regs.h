@@ -3,6 +3,7 @@
 
 // Registers hold values of this type. It can be signed if required.
 typedef uint16_t regs_t;
+typedef int16_t regs_signed_t;
 static const regs_t REGS_MAXVAL = 65535U;
 
 #include "regs_local.h"

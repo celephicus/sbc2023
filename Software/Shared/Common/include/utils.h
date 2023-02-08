@@ -233,6 +233,14 @@ T utilsIsInLimit(T x, T low, T high)  {
 	return (x >= low) && (x <= high);
 }
 
+// Window discriminator whether value is below, within or above limits.
+template <typename T>
+T utilsWindow(T x, T low, T high)  {
+	if (x < low)  return (T)-1;
+	if (x > high) return (T)+1;
+	return (T)0;
+}
+
 // Update the bits matching the mask in the value. Return true if value has changed.
 template <typename T>
 static inline bool utilsUpdateFlags(T* flags, T mask, T val) { const T old = *flags; *flags = (*flags & ~mask) | val; return (old != *flags); }
