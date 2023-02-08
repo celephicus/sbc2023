@@ -92,7 +92,9 @@ static bool console_cmds_user(char* cmd) {
 		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS, (console_u_tos() > 0)); 
 		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS_FAST, (console_u_pop() > 1)); 
 		break;
-	case /** X **/ 0xb5fd:  regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS | REGS_ENABLES_MASK_DUMP_REGS_FAST, 0); break; // Shortcut for killing dump. 
+	case /** X **/ 0xb5fd: 
+		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS|REGS_ENABLES_MASK_DUMP_REGS_FAST|REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS|REGS_ENABLES_MASK_DUMP_MODBUS_DATA, 0); 
+		break; // Shortcut for killing dump. 
 
 	// Runtime errors...
     case /** RESTART **/ 0x7092: while (1) continue; break;
@@ -155,14 +157,6 @@ static void service_regs_dump() {
 		s_ticker = 0;
 }
 
-void setup() {
-	const uint16_t restart_rc = devWatchdogInit();
-	regsSetDefaultRange(0, REGS_START_NV_IDX);		// Set volatile registers. 
-	driverInit();
-	REGS[REGS_IDX_RESTART] = restart_rc;
-	console_init();
-}
-
 // Simple fault notifier that looks at various flags on the regs flags register. The first matching flag will set the corresponding LED pattern, or the OK pattern if none. 
 typedef struct {
 	uint16_t flags_mask;
@@ -183,8 +177,8 @@ static const BlinkyLedWarningDef BLINKY_LED_WARNING_DEFS[] PROGMEM = {
 #endif
 
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
-	{ REGS_FLAGS_MASK_RELAY_MODULE_FAIL, DRIVER_LED_PATTERN_NO_COMMS },
-	{ REGS_FLAGS_MASK_DC_LOW, DRIVER_LED_PATTERN_DC_LOW },
+	{ REGS_FLAGS_MASK_SENSOR_MODULE_FAIL | REGS_FLAGS_MASK_RELAY_MODULE_FAIL,	DRIVER_LED_PATTERN_NO_COMMS },
+	{ REGS_FLAGS_MASK_DC_LOW,													DRIVER_LED_PATTERN_DC_LOW },
 #endif
 
 };
@@ -201,6 +195,201 @@ static void service_blinky_led_warnings() {
 	}
 }
 
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
+#include "thread.h"
+static const uint16_t SLAVE_QUERY_PERIOD = 50U;
+static const uint16_t SENSOR_COUNT = 2U;			// We only query this number of sensors.
+UTILS_STATIC_ASSERT(SENSOR_COUNT <= SBC2022_MODBUS_SLAVE_COUNT_SENSOR);
+
+/* Command processor uses a single register to set a command, and a single extra register to get the status. */
+enum {
+	CMD_IDLE = 0,
+	
+	CMD_HEAD_UP = 1,
+	CMD_HEAD_DOWN = 2,
+	/*	
+	CMD_LEG_UP,
+	CMD_LEG_DOWN,
+	CMD_BED_UP,
+	CMD_BED_DOWN,
+	CMD_TILT_UP,
+	CMD_TILT_DOWN,
+	*/
+	CMD_SAVE_1 = 100,
+	
+	CMD_RESTORE_1 = 200,
+};
+enum {
+	CMD_STATUS_OK,
+	CMD_STATUS_BAD_CMD,
+	CMD_STATUS_FAIL,
+};
+enum {
+	RELAY_STOP = 0,
+	RELAY_HEAD_UP = 2,
+	RELAY_HEAD_DOWN = 3,
+};
+enum {
+	AXIS_SLEW_STOP = 0,
+	AXIS_SLEW_UP = 1,
+	AXIS_SLEW_DOWN = 2,
+	AXIS_SLEW_MASK = 3
+};
+static const uint16_t RELAY_RUN_DURATION_MS = 1000U;
+static const uint16_t RELAY_STOP_DURATION_MS = 200U;
+static int16_t get_slew_dir(uint8_t sensor_idx) { 
+	return utilsWindow((int16_t)REGS[REGS_IDX_POS_PRESET_0_0+sensor_idx] - (int16_t)REGS[REGS_IDX_TILT_SENSOR_0+sensor_idx], -(int16_t)REGS[REGS_IDX_SLEW_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_DEADBAND]); }
+static int8_t thread_cmd(void* arg) {
+	(void)arg;
+	
+	THREAD_BEGIN();
+	while (1) {
+		if (CMD_IDLE == REGS[REGS_IDX_CMD_ACTIVE]) {		// If idle, load new command.
+			REGS[REGS_IDX_CMD_ACTIVE] = REGS[REGS_IDX_CMD];		// Most likely still idle.
+			REGS[REGS_IDX_CMD] = CMD_IDLE;		
+		}
+	
+		switch (REGS[REGS_IDX_CMD_ACTIVE]) {
+		case CMD_IDLE:		// Nothing doing...
+			THREAD_YIELD();
+			break;
+			
+		default:			// Bad command...
+			REGS[REGS_IDX_CMD_ACTIVE] = CMD_IDLE;
+			REGS[REGS_IDX_CMD_STATUS] = CMD_STATUS_BAD_CMD;
+			THREAD_YIELD();
+			break;
+			
+		case CMD_HEAD_UP:	// Move head up...
+			REGS[REGS_IDX_RELAY_STATE] = RELAY_HEAD_UP;
+			goto do_manual;
+			
+		case CMD_HEAD_DOWN:	// Move head down...
+			REGS[REGS_IDX_RELAY_STATE] = RELAY_HEAD_DOWN;
+do_manual:	THREAD_START_DELAY();
+			THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(RELAY_RUN_DURATION_MS));
+			if (REGS[REGS_IDX_CMD_ACTIVE] == REGS[REGS_IDX_CMD]) {	// If repeat of previous, restart timing. If not then active register will either have new command or idle.
+				REGS[REGS_IDX_CMD] = CMD_IDLE;
+				goto do_manual;
+			}
+			REGS[REGS_IDX_RELAY_STATE] = RELAY_STOP;
+			THREAD_START_DELAY();
+			THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(RELAY_STOP_DURATION_MS));
+			REGS[REGS_IDX_CMD_ACTIVE] = CMD_IDLE;
+			REGS[REGS_IDX_CMD_STATUS] = CMD_STATUS_OK;
+			break;
+			
+		case CMD_SAVE_1:
+			if (regsFlags() & REGS_FLAGS_MASK_SENSOR_MODULE_FAIL)
+				REGS[REGS_IDX_CMD_STATUS] = CMD_STATUS_FAIL;
+			else {
+				fori (SENSOR_COUNT)
+					REGS[REGS_IDX_POS_PRESET_0_0 + i] = REGS[REGS_IDX_TILT_SENSOR_0 + i];
+				REGS[REGS_IDX_CMD_STATUS] = CMD_STATUS_OK;
+				// driverNvWrite();
+			}
+			break;
+			
+		case CMD_RESTORE_1: {
+			int16_t dir;
+			dir = get_slew_dir(0);
+			if (dir < 0) {
+				regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_MASK, AXIS_SLEW_DOWN);
+				REGS[REGS_IDX_RELAY_STATE] = RELAY_HEAD_DOWN;
+			}
+			if (dir > 0) {
+				regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_MASK, AXIS_SLEW_UP);
+				REGS[REGS_IDX_RELAY_STATE] = RELAY_HEAD_UP;
+			}
+			while (1) {
+				dir = get_slew_dir(0);
+				if (0 == dir) {
+					regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_MASK, AXIS_SLEW_STOP);
+					REGS[REGS_IDX_RELAY_STATE] = RELAY_STOP;
+					break;
+				}
+				THREAD_DELAY(100);
+			}
+
+			REGS[REGS_IDX_CMD_STATUS] = CMD_STATUS_OK;
+			} break;
+		}	// Closes `switch (REGS[REGS_IDX_CMD_ACTIVE]) {'
+	}
+	THREAD_END();
+}
+static int8_t thread_query_slaves(void* arg) {
+	(void)arg;
+	static BufferFrame req;
+	
+	THREAD_BEGIN();
+	while (1) {
+		static uint8_t sidx;
+		for (sidx = 0; sidx < SENSOR_COUNT; sidx += 1) {
+			THREAD_START_DELAY();
+			if (REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << sidx)) {
+				bufferFrameReset(&req);
+				bufferFrameAdd(&req, SBC2022_MODBUS_SLAVE_ID_SENSOR_0 + sidx); 
+				bufferFrameAdd(&req, MODBUS_FC_READ_HOLDING_REGISTERS); 
+				bufferFrameAddU16(&req, SBC2022_MODBUS_REGISTER_SENSOR_TILT);
+				bufferFrameAddU16(&req, 2);
+				THREAD_WAIT_UNTIL(!modbusIsBusy());
+				modbusMasterSend(req.buf, bufferFrameLen(&req));
+			}
+			THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(SLAVE_QUERY_PERIOD));
+		}
+		
+		THREAD_START_DELAY();
+		if (REGS[REGS_IDX_SLAVE_ENABLE] & REGS_SLAVE_ENABLE_MASK_RELAY) {
+			bufferFrameReset(&req);
+			bufferFrameAdd(&req, SBC2022_MODBUS_SLAVE_ID_RELAY); 
+			bufferFrameAdd(&req, MODBUS_FC_WRITE_SINGLE_REGISTER); 
+			bufferFrameAddU16(&req, SBC2022_MODBUS_REGISTER_RELAY);
+			bufferFrameAddU16(&req, REGS[REGS_IDX_RELAY_STATE]);
+			THREAD_WAIT_UNTIL(!modbusIsBusy());
+			modbusMasterSend(req.buf, bufferFrameLen(&req));
+		}
+		THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(SLAVE_QUERY_PERIOD));
+	
+		// Check all used and enabled sensors for fault state. 
+		bool fault = false;
+		fori (SENSOR_COUNT) {
+			if (REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i)) {
+				if (REGS[REGS_IDX_SENSOR_STATUS_0 + i] < 100) {
+					fault = true;
+					break;
+				}
+			}
+		}
+		regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_MODULE_FAIL, fault);
+	}		// Closes `while (1) {'.
+	THREAD_END();
+}
+
+static thread_control_t tcb_query_slaves;
+static thread_control_t tcb_cmd;
+thread_ticks_t threadGetTicks() { return (thread_ticks_t)millis(); }
+static void app_init() { 
+	threadInit(&tcb_query_slaves);
+	threadInit(&tcb_cmd);
+}
+static void app_service() { 
+	threadRun(&tcb_query_slaves, thread_query_slaves, NULL);
+	threadRun(&tcb_cmd, thread_cmd, NULL);
+}
+#else
+static void app_init() {}
+static void app_service() {}
+#endif
+
+void setup() {
+	const uint16_t restart_rc = devWatchdogInit();
+	regsSetDefaultRange(0, REGS_START_NV_IDX);		// Set volatile registers.
+	driverInit();
+	REGS[REGS_IDX_RESTART] = restart_rc;
+	console_init();
+	app_init();
+}
+
 void loop() {
 	devWatchdogPat(DEV_WATCHDOG_MASK_MAINLOOP);
 	consoleService();
@@ -209,6 +398,7 @@ void loop() {
 		service_regs_dump();
 		service_blinky_led_warnings();
 	}
+	app_service();
 }
 
 void debugRuntimeError(int fileno, int lineno, int errorno) {

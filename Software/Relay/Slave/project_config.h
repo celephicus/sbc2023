@@ -6,6 +6,7 @@
 // Special symbol to build different driver flavour for Sensor or Relay.
 #define CFG_DRIVER_BUILD_RELAY 1
 #define CFG_DRIVER_BUILD_SENSOR 2
+#define CFG_DRIVER_BUILD_SARGOOD 3
 #define CFG_DRIVER_BUILD CFG_DRIVER_BUILD_RELAY
 
 // Watchdog. 
@@ -31,10 +32,10 @@ enum {
 #define CFG_VER_MINOR 0
 
 // Build number incremented with each build by cfg-set-build.py script. 
-#define CFG_BUILD_NUMBER 530
+#define CFG_BUILD_NUMBER 537
 
 // Timestamp in ISO8601 format set by cfg-set-build.py script.
-#define CFG_BUILD_TIMESTAMP "20230119T125034"
+#define CFG_BUILD_TIMESTAMP "20230208T184547"
 
 // Do not edit below this line......
 

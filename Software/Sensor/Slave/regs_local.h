@@ -19,11 +19,12 @@ ACCEL_SAMPLE_COUNT "Incremented on every new accumulated reading from the accel.
 ACCEL_X	[signed] "Accel. raw X axis reading."
 ACCEL_Y	[signed] "Accel. raw Y axis reading."
 ACCEL_Z	[signed] "Accel. raw Z axis reading."
-ENABLES [nv hex 0x0003] "Enable flags."
+ENABLES [nv hex 0x0000] "Enable flags."
 	DUMP_MODBUS_EVENTS [0] "Dump MODBUS event value."
 	DUMP_MODBUS_DATA [1] "Dump MODBUS data."
 	DUMP_REGS [2] "Regs values dump to console."
 	DUMP_REGS_FAST [3] "Dump at 5/s rather than 1/s."
+	TILT_QUAD_CORRECT [4] "Correct for tilt angles over 90Deg."
 	DISABLE_BLINKY_LED [15] "Disable setting Blinky Led from fault states."
 ACCEL_AVG [nv 10] "Number of  accel samples to average."
 ACCEL_SAMPLE_RATE_TEST [nv 0] "Test accel sample rate check if non-zero."
@@ -33,30 +34,30 @@ ACCEL_TILT_MOVING_THRESHOLD [nv 30] "Threshold for tilt motion discrimination."
 
 // Declare the indices to the registers.
 enum {
-    REGS_IDX_FLAGS,
-    REGS_IDX_RESTART,
-    REGS_IDX_ADC_VOLTS_MON_BUS,
-    REGS_IDX_VOLTS_MON_BUS,
-    REGS_IDX_ACCEL_TILT_ANGLE,
-    REGS_IDX_ACCEL_TILT_STATUS,
-    REGS_IDX_ACCEL_TILT_ANGLE_LP,
-    REGS_IDX_ACCEL_SAMPLE_COUNT,
-    REGS_IDX_ACCEL_X,
-    REGS_IDX_ACCEL_Y,
-    REGS_IDX_ACCEL_Z,
-    REGS_IDX_ENABLES,
-    REGS_IDX_ACCEL_AVG,
-    REGS_IDX_ACCEL_SAMPLE_RATE_TEST,
-    REGS_IDX_ACCEL_TILT_ANGLE_FILTER_K,
-    REGS_IDX_ACCEL_TILT_MOVING_THRESHOLD,
-    COUNT_REGS,
+    REGS_IDX_FLAGS = 0,
+    REGS_IDX_RESTART = 1,
+    REGS_IDX_ADC_VOLTS_MON_BUS = 2,
+    REGS_IDX_VOLTS_MON_BUS = 3,
+    REGS_IDX_ACCEL_TILT_ANGLE = 4,
+    REGS_IDX_ACCEL_TILT_STATUS = 5,
+    REGS_IDX_ACCEL_TILT_ANGLE_LP = 6,
+    REGS_IDX_ACCEL_SAMPLE_COUNT = 7,
+    REGS_IDX_ACCEL_X = 8,
+    REGS_IDX_ACCEL_Y = 9,
+    REGS_IDX_ACCEL_Z = 10,
+    REGS_IDX_ENABLES = 11,
+    REGS_IDX_ACCEL_AVG = 12,
+    REGS_IDX_ACCEL_SAMPLE_RATE_TEST = 13,
+    REGS_IDX_ACCEL_TILT_ANGLE_FILTER_K = 14,
+    REGS_IDX_ACCEL_TILT_MOVING_THRESHOLD = 15,
+    COUNT_REGS = 16
 };
 
 // Define the start of the NV regs. The region is from this index up to the end of the register array.
 #define REGS_START_NV_IDX REGS_IDX_ENABLES
 
 // Define default values for the NV segment.
-#define REGS_NV_DEFAULT_VALS 3, 10, 0, 8, 30
+#define REGS_NV_DEFAULT_VALS 0, 10, 0, 8, 30
 
 // Define how to format the reg when printing.
 #define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_U, CFMT_D, CFMT_U, CFMT_D, CFMT_D, CFMT_D, CFMT_X, CFMT_U, CFMT_U, CFMT_U, CFMT_U
@@ -77,6 +78,7 @@ enum {
     	REGS_ENABLES_MASK_DUMP_MODBUS_DATA = (int)0x2,
     	REGS_ENABLES_MASK_DUMP_REGS = (int)0x4,
     	REGS_ENABLES_MASK_DUMP_REGS_FAST = (int)0x8,
+    	REGS_ENABLES_MASK_TILT_QUAD_CORRECT = (int)0x10,
     	REGS_ENABLES_MASK_DISABLE_BLINKY_LED = (int)0x8000,
 };
 
@@ -171,6 +173,7 @@ enum {
     "\n DUMP_MODBUS_DATA: 1 (Dump MODBUS data.)"                                        \
     "\n DUMP_REGS: 2 (Regs values dump to console.)"                                    \
     "\n DUMP_REGS_FAST: 3 (Dump at 5/s rather than 1/s.)"                               \
+    "\n TILT_QUAD_CORRECT: 4 (Correct for tilt angles over 90Deg.)"                     \
     "\n DISABLE_BLINKY_LED: 15 (Disable setting Blinky Led from fault states.)"         \
 
 // ]]] Declarations end

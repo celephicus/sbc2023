@@ -25,6 +25,8 @@ enum {
 	CFG_EVENT_TIMER_ID_SUPERVISOR,
 };
 
+#define CFG_LC2_USE_SWITCH 0
+
 // Product name
 #define CFG_PRODUCT_NAME_STR "TSA Sargood Bed Controller"
 
@@ -33,10 +35,10 @@ enum {
 #define CFG_VER_MINOR 0
 
 // Build number incremented with each build by cfg-set-build.py script. 
-#define CFG_BUILD_NUMBER 52
+#define CFG_BUILD_NUMBER 99
 
 // Timestamp in ISO8601 format set by cfg-set-build.py script.
-#define CFG_BUILD_TIMESTAMP "20230203T140609"
+#define CFG_BUILD_TIMESTAMP "20230208T185126"
 
 // Do not edit below this line......
 

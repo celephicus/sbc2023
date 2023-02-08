@@ -193,7 +193,7 @@ void modbus_cb(uint8_t evt) {
 		}
 		
 		else if (frame[MODBUS_FRAME_IDX_SLAVE_ID] == SBC2022_MODBUS_SLAVE_ID_RELAY) {
-			if ((6 == frame_len) && (MODBUS_FC_WRITE_SINGLE_REGISTER == frame[MODBUS_FRAME_IDX_FUNCTION])) { // REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
+			if ((8 == frame_len) && (MODBUS_FC_WRITE_SINGLE_REGISTER == frame[MODBUS_FRAME_IDX_FUNCTION])) { // REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
 				uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
 				if (SBC2022_MODBUS_REGISTER_RELAY == address)
 					regsWriteMaskFlags(REGS_FLAGS_MASK_RELAY_MODULE_FAIL, false);	// Clear fault flag as we got a response.
@@ -226,7 +226,7 @@ void modbus_timing_debug(uint8_t id, uint8_t s) {
 }
 
 static const uint32_t MODBUS_BAUDRATE = 9600UL;
-static const uint16_t MODBUS_RESPONSE_TIMEOUT_MILLIS = 20U;
+static const uint16_t MODBUS_RESPONSE_TIMEOUT_MILLIS = 30U;
 static void modbus_init() {
 	Serial.begin(MODBUS_BAUDRATE);
 	modbusInit(Serial, GPIO_PIN_RS485_TX_EN, MODBUS_BAUDRATE, MODBUS_RESPONSE_TIMEOUT_MILLIS, modbus_cb);
@@ -353,17 +353,18 @@ static void setup_devices() {
 	sensor_accel_init();
 }
 
-// Calculate pitch with given scale value for 90Deg.
+// Calculate pitch with given scale value for 90Deg. Note arg c must be the axis that doesn't change much, else the quadrant correction won't work.
+// TODO: make more robust, maybe if b & c differ in sign do correction. 
 const float TILT_FS = 9000.0;
-static float tilt(float a, float b, float c) {
-	return 2.0 * TILT_FS / M_PI * atan2(a, sqrt(b*b + c*c));
+static float tilt(float a, float b, float c, bool quad_correct) {
+	float mean = sqrt(b*b + c*c);
+	if (quad_correct && (b < 0.0)) mean = -mean;
+	return 2.0 * TILT_FS / M_PI * atan2(a, mean);
 }
 
 const uint16_t ACCEL_CHECK_PERIOD_MS = 1000;
 const uint16_t ACCEL_RAW_SAMPLE_RATE_NOMINAL = 100;
 const uint16_t ACCEL_RAW_SAMPLE_RATE_TOLERANCE_PERC = 25;
-//const int16_t ACCEL_TILT_ANGLE_FILTER_K = 4;
-//const int16_t ACCEL_TILT_MOVING_THRESHOLD = 20;
 
 template <typename U, typename T>
 U signed_filter(T* accum, U input, U k_pow_2, bool reset) {
@@ -395,8 +396,8 @@ void service_devices() {
 				clear_accel_accum();
 
 				// Since components are used as a ratio, no need to divide each by counts.
-				int16_t tilt_angle = (int16_t)(0.5 + tilt((float)(int16_t)REGS[REGS_IDX_ACCEL_Y], (float)(int16_t)REGS[REGS_IDX_ACCEL_X], (float)(int16_t)REGS[REGS_IDX_ACCEL_Z]));
-				REGS[REGS_IDX_ACCEL_TILT_ANGLE] = (regs_t)tilt_angle;
+				const float tilt_angle = tilt((float)(int16_t)REGS[REGS_IDX_ACCEL_Y], (float)(int16_t)REGS[REGS_IDX_ACCEL_X], (float)(int16_t)REGS[REGS_IDX_ACCEL_Z], REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TILT_QUAD_CORRECT);
+				REGS[REGS_IDX_ACCEL_TILT_ANGLE] = (regs_t)(int16_t)(0.5 + tilt_angle);
 			
 				// Filter tilt value a bit.
 				REGS[REGS_IDX_ACCEL_TILT_ANGLE_LP] = signed_filter(&f_accel_data.filter_accum, (int16_t)REGS[REGS_IDX_ACCEL_TILT_ANGLE], (int16_t)REGS[REGS_IDX_ACCEL_TILT_ANGLE_FILTER_K], f_accel_data.reset_filter);
@@ -621,7 +622,7 @@ void tholdScanRescan(const TholdScannerDef* def, TholdScannerState* sst, uint8_t
     }
 }
 
-static uint8_t scanner_thold_12v_mon(uint8_t tstate, uint16_t val) {  return val < (tstate ? 11500 : 11000); }
+static uint8_t scanner_thold_12v_mon(uint8_t tstate, uint16_t val) {  return val < (tstate ? 10500 : 10000); }
 static uint16_t scanner_get_delay() { return 10; }
 static const TholdScannerDef SCANDEFS[] PROGMEM = {
 
@@ -633,26 +634,22 @@ static const TholdScannerDef SCANDEFS[] PROGMEM = {
 		scanner_thold_12v_mon,						// Threshold function. 
 		scanner_get_delay,							// Delay function. 
 	},
-#endif
-
-#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
-{
-	REGS_FLAGS_MASK_DC_LOW,						// Flags mask
-	NULL,										// Callback function arg.
-	&regs_storage[REGS_IDX_VOLTS_MON_BUS],		// Input register.
-	scanner_thold_12v_mon,						// Threshold function.
-	scanner_get_delay,							// Delay function.
-},
-#endif
-
-#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
-{
-	REGS_FLAGS_MASK_DC_LOW,						// Flags mask
-	NULL,										// Callback function arg.
-	&regs_storage[REGS_IDX_VOLTS_MON_BUS],		// Input register.
-	scanner_thold_12v_mon,						// Threshold function.
-	scanner_get_delay,							// Delay function.
-},
+#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
+	{
+		REGS_FLAGS_MASK_DC_LOW,						// Flags mask
+		NULL,										// Callback function arg.
+		&regs_storage[REGS_IDX_VOLTS_MON_BUS],		// Input register.
+		scanner_thold_12v_mon,						// Threshold function.
+		scanner_get_delay,							// Delay function.
+	},
+#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
+	{
+		REGS_FLAGS_MASK_DC_LOW,						// Flags mask
+		NULL,										// Callback function arg.
+		&regs_storage[REGS_IDX_VOLTS_MON_BUS],		// Input register.
+		scanner_thold_12v_mon,						// Threshold function.
+		scanner_get_delay,							// Delay function.
+	},
 #endif
 
 };

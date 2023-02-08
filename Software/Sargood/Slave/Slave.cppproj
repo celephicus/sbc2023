@@ -279,6 +279,10 @@ build.cmd
       <SubType>compile</SubType>
       <Link>Shared\Common\console.h</Link>
     </Compile>
+    <Compile Include="..\..\Shared\Common\include\lc2.h">
+      <SubType>compile</SubType>
+      <Link>Shared\Common\lc2.h</Link>
+    </Compile>
     <Compile Include="..\..\Shared\Common\include\modbus.h">
       <SubType>compile</SubType>
       <Link>Shared\Common\modbus.h</Link>
@@ -286,6 +290,10 @@ build.cmd
     <Compile Include="..\..\Shared\Common\include\sbc2022_modbus.h">
       <SubType>compile</SubType>
       <Link>Shared\Common\sbc2022_modbus.h</Link>
+    </Compile>
+    <Compile Include="..\..\Shared\Common\include\thread.h">
+      <SubType>compile</SubType>
+      <Link>Shared\Common\thread.h</Link>
     </Compile>
     <Compile Include="..\..\Shared\Common\include\utils.h">
       <SubType>compile</SubType>
@@ -302,6 +310,10 @@ build.cmd
     <Compile Include="..\..\Shared\Common\src\modbus.cpp">
       <SubType>compile</SubType>
       <Link>Shared\Common\modbus.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\Shared\Common\src\thread.cpp">
+      <SubType>compile</SubType>
+      <Link>Shared\Common\thread.cpp</Link>
     </Compile>
     <Compile Include="..\..\Shared\Common\src\utils.cpp">
       <SubType>compile</SubType>
