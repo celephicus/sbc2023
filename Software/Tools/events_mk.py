@@ -38,13 +38,32 @@ enum {
 
 	The code generated defines enums, names and documentation strings of a number of events, small integers assigned from zero,
 	with zero predefined to be name NIL.
-	A set of additional event can be loaded with a command line switch
+	A set of additional event can be loaded with a command line switch.
 """
 
-import sys
-import re
 import argparse
+import os
+import sys
 import codegen
+
+TEMPLATE_FILE = """\
+#ifndef {guard}
+#define {guard}
+
+// [[[  Begin event definitions: format <event-name> <comment>
+
+	# Project specific events.
+	SAMPLE_1		Frobs the foo.
+	SAMPLE_2		Frobs the foo some more.
+
+// >>> End event definitions, begin generated code.
+
+THIS WILL BE REPLACED
+
+// ]]] End generated code.
+
+#endif //  {guard}
+"""
 
 # Define events as a name, then a description.
 STANDARD_EVENTS = '''\
@@ -62,37 +81,55 @@ DEFAULT_EVENTS = '''\
 '''
 
 parser = argparse.ArgumentParser(description = 'Process file with inline definitions and update source code to match.')
-parser.add_argument('infile', help='input file', default='event-local.h', nargs='?')
+parser.add_argument('infile', help='input file', default='event.local.h', nargs='?')
 parser.add_argument('--no-defaults', '-n', help='do not load default additional event definitions', action='store_true', dest='no_defaults')
 parser.add_argument('--add', '-a', help='load additional event definitions from file')
+parser.add_argument('--write-template', help='write example input file', action='store_true', dest='write_template')
+
 args = parser.parse_args()
 
+# If we want a template file...
+if args.write_template:
+	codegen.message(f"Writing template file {args.infile} ... ")
+	if os.path.isfile(args.infile):
+		codegen.error('file exists, aborting')
+	with open(args.infile, 'wt', encoding='utf-8') as f_template:
+		try:
+			f_template.write(TEMPLATE_FILE.format(guard=codegen.include_guard('args.infile')))
+		except EnvironmentError:
+			codegen.error("failed to write.")
+	codegen.message("done.\n")
+	sys.exit()
+
+# Our set of events live in a dict. Insertion order gives integer ID.
 events = {}
-def add_event(ev_def):
-	ev_def = ev_def.strip()
+def add_event(raw_ev_def):
+	"Helper to add an event definition to the global list with a modicum of error checking."
+	#print(raw_ev_def)
+	ev_def = raw_ev_def.strip()
 	if ev_def and not ev_def.startswith('#'):
 		ev_name, ev_desc = ev_def.split(None, 1)
 		if ev_name in events:
-			raise ValueError(f"Event {ev_name} already exists.")
+			codegen.error(f"event {ev_name} already exists.")
 		if not codegen.is_ident(ev_name) or ev_name != ev_name.upper():
-			raise ValueError(f"Event name {ev_name} is not valid.")
+			codegen.error(f"event name {ev_name} is not valid.")
 		events[ev_name] = ev_desc
 
 # Load standard events.
-for ev_def in STANDARD_EVENTS.splitlines():
-	add_event(ev_def)
+codegen.message("Loading standard events... ")
+for x in STANDARD_EVENTS.splitlines(): add_event(x)
 
 # Load default events.
 if not args.no_defaults:
-	for ev_def in DEFAULT_EVENTS.splitlines():
-		add_event(ev_def)
+	codegen.message("Loading default events... ")
+	for x in DEFAULT_EVENTS.splitlines(): add_event(x)
 
 # Load user's additional events.
 if args.add:
+	codegen.message(f"Loading additional events. from {args.add}... ")
 	try:
 		with open(args.add, 'rt', encoding='utf-8') as fp_add:
-			for ev_def in fp_add:
-				add_event(ev_def)
+			for x in fp_add: add_event(x)
 	except EnvironmentError:
 		codegen.error(f"opening file {args.add}")
 
@@ -102,6 +139,7 @@ rpa = codegen.RegionParser()
 text = cg.begin(rpa.read)
 
 # Add event definitions from source file.
+codegen.message("Loading events from source...")
 for ev_def in text[2]:
 	add_event(ev_def)
 

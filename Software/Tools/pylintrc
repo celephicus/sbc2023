@@ -271,7 +271,7 @@ good-names=i,j,k,		# Loop indices, k is also a generickey value.
 good-names-rgxs=
 
 # Include a hint for the correct naming format with invalid-name.
-include-naming-hint=yes
+include-naming-hint=no
 
 # Naming style matching correct inline iteration names.
 inlinevar-naming-style=any

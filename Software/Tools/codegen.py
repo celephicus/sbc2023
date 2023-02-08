@@ -71,22 +71,20 @@ class Codegen:
 			text = text.splitlines()
 		if add_nl is not None and add_nl <= 0:
 			self.add_nl()
-		if indent > 0: self.indent()
-		self.contents += [(' '*self.indent_cols + x).ljust(col_width) + trailer for x in text]
 		if indent < 0: self.dedent()
+		self.contents += [(' '*self.indent_cols + x).ljust(col_width) + trailer for x in text]
+		if indent > 0: self.indent()
 		if add_nl is not None and add_nl >= 0:
 			self.add_nl()
 
 	def add_include_guard(self):
 		"Add an include guard macro around the contents of the output file. We take care that the macro is reasonable."
-		include_guard = ident_allcaps(re.sub(r'\W', '_', os.path.basename(self.outfile))) + '__'
-		if include_guard[0].isdigit():
-			include_guard = 'F_' + include_guard
+		guard = include_guard(self.outfile)
 		self.add(f"""\
-#ifndef {include_guard}
-#define {include_guard}
+#ifndef {guard}
+#define {guard}
 """, add_nl=+1)
-		self.trailers.append(f"\n#endif   // {include_guard}")
+		self.trailers.append(f"\n#endif   // {guard}")
 	def add_comment(self, comment, *args, **kwargs):
 		"""Add a multiline string as a bunch of comments."""
 		self.add(['// ' + x for x in comment.splitlines()], *args, **kwargs)
@@ -137,10 +135,15 @@ class Codegen:
 				error(f"failed to write output file `{self.outfile}'.")
 			message(f"output file `{self.outfile}' updated.\n")
 
+def include_guard(filepath):
+	guard = ident_allcaps(re.sub(r'\W', '_', os.path.basename(filepath))) + '__'
+	if guard[0].isdigit():
+		guard = 'F_' + guard
+	return guard
 def is_ident(ident):
 	"Check if string is a valid identifier, if not a string then join is used."
 	if not isinstance(ident, str): ident = ''.join(ident)
-	return re.match(r'\w[\w\d]*$', ident)
+	return re.match(r'[a-z_][a-z0-9_]*$', ident, re.I) is not None
 
 def split_ident(ident):
 	"""Split an identifier like `foo_bar' or `fooBar' or `foo bar' or `FOO_BAR' to ['foo', 'bar']; `foo123' to ['foo', '123']. Anything not a C
@@ -151,7 +154,7 @@ def split_ident(ident):
 
 	ident_p = [x.lower() for x in ident_p if x]			# Maker lowercase & ignore blanks.
 	if not is_ident(ident_p):
-		raise ValueError(f"`{ident_p}' is not a valid C identifier.")
+		raise ValueError(f"`{''.join(ident_p)}' is not a valid C identifier.")
 	return ident_p
 
 def ident_underscore(ident):
@@ -260,13 +263,19 @@ foo     // bar''')
 		def test_caps(self):
 			self.assertEqual(split_ident('fooBar'), ['foo', 'bar'])
 			self.assertEqual(split_ident('FooBar'), ['foo', 'bar'])
-		def test_bad_ident(self):
-			with self.assertRaises(ValueError):
-				split_ident('')
-				split_ident(' ')
-				split_ident(' foo')
-				split_ident('foo ')
-				split_ident('1')
+		def test_is_ident(self):
+			self.assertTrue(is_ident('a'))
+			self.assertTrue(is_ident('A'))
+			self.assertTrue(is_ident('a0'))
+			self.assertFalse(is_ident(''))
+			self.assertFalse(is_ident(' '))
+			self.assertFalse(is_ident('a '))
+			self.assertFalse(is_ident(' a'))
+			self.assertFalse(is_ident('1'))
+		def test_bad_split_ident(self):
+			self.assertRaises(ValueError, split_ident, '')
+			self.assertRaises(ValueError, split_ident, ' ')
+			self.assertRaises(ValueError, split_ident, '1')
 		def test_ident_underscore(self):
 			self.assertEqual(ident_underscore(['foo']), 'foo')
 			self.assertEqual(ident_underscore('foo'), 'foo')
