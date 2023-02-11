@@ -63,8 +63,7 @@ static void console_accept_clear() {
 	g_console_ctx.inbidx = 0;
 }
 
-// Call on error, thanks to the magic of longjmp() it will return to the last setjmp with the error code.
-static void console_raise(console_rc_t rc) {
+void console_raise(console_rc_t rc) {
 	longjmp(g_console_ctx.jmpbuf, rc);
 }
 

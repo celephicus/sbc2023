@@ -204,6 +204,7 @@ void modbus_cb(uint8_t evt) {
 		default:
 		if (is_sensor_response) {
 			REGS[REGS_IDX_SENSOR_STATUS_0 + sensor_idx] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_NOT_PRESENT;
+			REGS[REGS_IDX_TILT_SENSOR_0 + sensor_idx] = SBC2022_MODBUS_TILT_FAULT;
 		}
 		else if (frame[MODBUS_FRAME_IDX_SLAVE_ID] == SBC2022_MODBUS_SLAVE_ID_RELAY) {
 			regsWriteMaskFlags(REGS_FLAGS_MASK_RELAY_MODULE_FAIL, true);
@@ -467,7 +468,7 @@ static void service_devices() {}
 
 // Non-volatile objects.
 
-// All data managed by NV. Complicated as only the last portion of the regsarray is written to NV.
+// All data managed by NV. Complicated as only the last portion of the regs array is written to NV.
 typedef struct {
 	regs_t regs[COUNT_REGS];		// Must be first item in struct.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
@@ -492,8 +493,8 @@ static void nv_set_defaults(void* data, const void* defaultarg) {
     (void)defaultarg;
     regsSetDefaultRange(REGS_START_NV_IDX, COUNT_REGS);	// Set default values for NV regs.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
-	fori(UTILS_ELEMENT_COUNT(NvData.pos_presets))
-		l_nv_data.pos_presets[i] = SBC2022_MODBUS_TILT_FAULT;
+	fori(DRIVER_BED_POS_PRESET_COUNT)
+		driverPresetSetInvalid(i);
 #endif
 }
 
@@ -506,8 +507,6 @@ static const DevEepromBlock EEPROM_BLK PROGMEM = {
     nv_set_defaults, 												// Fills user RAM data with default data.
 };
 
-static NvData l_nv_data;
-
 // Defined in regs, declared here since we have the storage.
 // Added define since a call to regsGetRegs() for the ADC caused strange gcc error: In function 'global constructors keyed to 65535_... in Arduino.
 #define regs_storage l_nv_data.regs
@@ -519,8 +518,12 @@ void driverNvWrite() { devEepromWrite(&EEPROM_BLK); }
 void driverNvSetDefaults() { nv_set_defaults(NULL, NULL); }
 
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
-int16_t driverPresets(uint8_t idx) {
-	return l_nv_data.pos_presets[idx * CFG_TILT_SENSOR_COUNT];
+int16_t* driverPresets(uint8_t idx) {
+	return &l_nv_data.pos_presets[idx * CFG_TILT_SENSOR_COUNT];
+}
+void driverPresetSetInvalid(uint8_t idx) {
+	fori(CFG_TILT_SENSOR_COUNT)
+		driverPresets(idx)[i] = SBC2022_MODBUS_TILT_FAULT;
 }
 #endif
 

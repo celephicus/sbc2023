@@ -88,4 +88,7 @@ console_cell_t console_u_pop();
 void console_u_push(console_cell_t x);
 void console_u_clear();
 
+// Call on error, thanks to the magic of longjmp() it will return to the last setjmp with the error code.
+void console_raise(console_rc_t rc);
+
 #endif // CONSOLE_H__

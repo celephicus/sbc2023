@@ -23,10 +23,19 @@ static bool console_cmds_user(char* cmd) {
 	// Driver
     case /** LED **/ 0xdc88: driverSetLedPattern(console_u_pop()); break;
     case /** ?LED **/ 0xdd37: consolePrint(CFMT_D, driverGetLedPattern()); break;
-#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
+#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
     case /** RLY **/ 0x07a2: REGS[REGS_IDX_RELAYS] = console_u_pop(); break;
     case /** ?RLY **/ 0xb21d: consolePrint(CFMT_D, REGS[REGS_IDX_RELAYS]); break;
-#endif
+#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
+	case /** ?PRESETS **/ 0x6f6c: fori (DRIVER_BED_POS_PRESET_COUNT) { 
+		forj (CFG_TILT_SENSOR_COUNT) consolePrint(CFMT_D, driverPresets(i)[j]); consolePrint(CFMT_NL, 0);
+		}  break;
+	case /** PRESET **/ 0x3300: { 
+		const uint8_t idx = console_u_pop(); if (idx >= DRIVER_BED_POS_PRESET_COUNT) console_raise(CONSOLE_RC_ERROR_USER); 
+		fori (CFG_TILT_SENSOR_COUNT) driverPresets(idx)[i] = console_u_pop();
+		}
+	#endif
 
 	// MODBUS
 	case /** ATN **/ 0xb87e: driverSendAtn(); break;
@@ -238,6 +247,7 @@ enum {
 	CMD_STATUS_PENDING = 1,			// Command is running.
 	CMD_STATUS_BAD_CMD = 2,			// Unknown command.
 	CMD_STATUS_RELAY_FAIL = 3,		// Relay module offline, cannot command motors.
+	CMD_STATUS_PRESET_INVALID = 4,	// Preset in NV was invalid. 
 
 	CMD_STATUS_SENSOR_FAIL_0 = 10,	// Tilt sensor 0 offline or failed.
 	CMD_STATUS_SENSOR_FAIL_1 = 11,	// Tilt sensor 1 offline or failed.
@@ -246,7 +256,7 @@ enum {
 	CMD_STATUS_NO_MOTION_1 = 21,	// No motion detected on sensor 1.
 };
 
-// We need a way of independantly controlling the relays to drive each of the 4 axes independantly.
+// We need a way of controlling the relays to drive each of the 4 axes independently.
 enum {
 	RELAY_STOP = 0,				// Stops any axis.
 
@@ -266,10 +276,11 @@ enum {
 static const uint16_t RELAY_RUN_DURATION_MS = 1000U;
 static const uint16_t RELAY_STOP_DURATION_MS = 200U;
 static int16_t get_slew_dir(uint8_t preset_idx, uint8_t sensor_idx) {
-	const int16_t const* presets = driverPresets(preset_idx);
+	const int16_t* presets = driverPresets(preset_idx);
 	const int16_t delta = presets[sensor_idx] - (int16_t)REGS[REGS_IDX_TILT_SENSOR_0+sensor_idx];
 	return utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_DEADBAND]);
 }
+
 static void cmd_start() {
 	REGS[REGS_IDX_CMD_STATUS] = CMD_STATUS_PENDING;
 }
@@ -284,22 +295,38 @@ static bool check_relay() {
 	}
 	return false;
 }
-static bool check_sensors() {
-	if (is_sensor_fault(0)) {
-		cmd_done(CMD_STATUS_SENSOR_FAIL_0);
-		return true;
+static int8_t check_sensors_faulty() {
+	fori (CFG_TILT_SENSOR_COUNT) {
+		if (
+		  (REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i)) &&
+		  (REGS[REGS_IDX_SENSOR_STATUS_0 + i] < SBC2022_MODBUS_REGISTER_SENSOR_STATUS_IDLE)
+		) return (int8_t)i;
 	}
-	else if (is_sensor_fault(1)) {
-		cmd_done(CMD_STATUS_SENSOR_FAIL_1)
-		return true;
-	}
-	return false;
+	return -1;
 }
-
+static bool check_sensors() {
+	const int8_t sensor_fault_idx = check_sensors_faulty();
+	if (sensor_fault_idx >= 0) {
+		cmd_done(CMD_STATUS_SENSOR_FAIL_0 + sensor_fault_idx);
+		return true;
+	}
+	return false;	
+}
+static bool is_preset_valid(uint8_t idx) {
+	fori(CFG_TILT_SENSOR_COUNT) {
+		if (
+		  (REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i)) &&
+		  (SBC2022_MODBUS_TILT_FAULT == driverPresets(idx)[i])
+		)
+			return false;
+	}
+	return true;
+}
 static int8_t thread_cmd(void* arg) {
 	(void)arg;
 	const bool avail = is_avail();
-
+	static uint8_t preset_idx;
+	
 	THREAD_BEGIN();
 	while (1) {
 		if (CMD_IDLE == REGS[REGS_IDX_CMD_ACTIVE]) {		// If idle, load new command.
@@ -340,51 +367,65 @@ do_manual:	cmd_start();
 				THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(RELAY_STOP_DURATION_MS));
 				cmd_done(CMD_STATUS_OK);
 			}
+			THREAD_YIELD();
 			break;
 
-		case CMD_SAVE_1:
-		case CMD_SAVE_2:
-		case CMD_SAVE_3:
-		case CMD_SAVE_4:
+		case CMD_SAVE_POS_1:
+		case CMD_SAVE_POS_2:
+		case CMD_SAVE_POS_3:
+		case CMD_SAVE_POS_4: {
 			cmd_start();
-			if (!check_sensors()) {
-				int16_t const* presets = driverPresets(REGS[REGS_IDX_CMD_ACTIVE] - CMD_SAVE_1);
-				memcpy(presets, &REGS[REGS_IDX_TILT_SENSOR_0], CFG_TILT_SENSOR_COUNT*sizeof(int16_t));
-				// driverNvWrite();
+			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - CMD_SAVE_POS_1;
+			if (!check_sensors()) {		// All _enabled_ sensors OK. 
+				fori (CFG_TILT_SENSOR_COUNT) // Read sennsor value or force it to invalid is not enabled. 
+					driverPresets(preset_idx)[i] = (REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i)) ? REGS[REGS_IDX_TILT_SENSOR_0 + i] : SBC2022_MODBUS_TILT_FAULT;
 				cmd_done(CMD_STATUS_OK);
 			}
-			break;
+			else 
+				driverPresetSetInvalid(preset_idx);
+			// driverNvWrite();
+			THREAD_YIELD();
+			} break;
 
-		case CMD_RESTORE_1:
+		case CMD_RESTORE_POS_1:
+		case CMD_RESTORE_POS_2:
+		case CMD_RESTORE_POS_3:
+		case CMD_RESTORE_POS_4: {
 			cmd_start();
-			if (!check_sensors() && !check_relay()) {	// Only proceed if nothing broken.
+			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - CMD_RESTORE_POS_1;
+			if (!is_preset_valid(preset_idx)) 
+				cmd_done(CMD_STATUS_PRESET_INVALID);
+			else if (!check_sensors() && !check_relay()) {	// Only proceed if nothing broken.
 
 				// Decide whether to move...
-				int16_t dir = get_slew_dir(0);
+				const int16_t dir = get_slew_dir(preset_idx, 0);
 				if (dir < 0) {
-					regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_MASK, AXIS_SLEW_DOWN);
+					regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_HEAD_MASK, AXIS_SLEW_HEAD_DOWN);
 					regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_DOWN);
 				}
 				else if (dir > 0) {
-					regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_MASK, AXIS_SLEW_UP);
+					regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_HEAD_MASK, AXIS_SLEW_HEAD_UP);
 					regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_UP);
 				}
 
 				// If we need to move...
-				while (REGS[REGS_IDX_AXIS_SLEW_STATE] & AXIS_SLEW_MASK) {
-					THREAD_WAIT_UNTIL(avail);		// Wait for new reading.
+				if (dir != 0) {
+					while (1) {
+						THREAD_WAIT_UNTIL(avail);		// Wait for new reading.
 
-					if (check_sensors() || check_relay()) 	// Something is broken...
-						break;
-					else {
-						const int16_t dir = get_slew_dir(0);
-						if (0 == dir)
+						if (check_sensors() || check_relay()) 	// Something is broken...
 							break;
+						else {
+							const int16_t dir = get_slew_dir(preset_idx, 0);
+							if (0 == dir)
+								break;
+						THREAD_YIELD();
+						}
 					}
 				}
-
+				
 				// Stop and let axis motors rundown...
-				regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_MASK, AXIS_SLEW_STOP);
+				regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_HEAD_MASK|AXIS_SLEW_FOOT_MASK, AXIS_SLEW_STOP);
 				REGS[REGS_IDX_RELAY_STATE] = RELAY_STOP;
 				THREAD_DELAY(100);
 			}
@@ -392,14 +433,12 @@ do_manual:	cmd_start();
 			// If no error set success status.
 			if (CMD_STATUS_PENDING == REGS[REGS_IDX_CMD_STATUS])
 				cmd_done(CMD_STATUS_OK);
-			break;
+
+			THREAD_YIELD();
+			} break;
 		}	// Closes `switch (REGS[REGS_IDX_CMD_ACTIVE]) {'
 	}	// Closes `while (1) '...
 	THREAD_END();
-}
-
-static bool is_sensor_fault(uint8_t sensor_idx) {
-	return REGS[REGS_IDX_SENSOR_STATUS_0 + sensor_idx] < SBC2022_MODBUS_REGISTER_SENSOR_STATUS_OK;
 }
 
 static int8_t thread_query_slaves(void* arg) {
@@ -436,16 +475,7 @@ static int8_t thread_query_slaves(void* arg) {
 		THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(SLAVE_QUERY_PERIOD));
 
 		// Check all used and enabled sensors for fault state.
-		bool fault = false;
-		fori (CFG_TILT_SENSOR_COUNT) {
-			if (REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i)) {
-				if (REGS[REGS_IDX_SENSOR_STATUS_0 + i] < 100) {
-					fault = true;
-					break;
-				}
-			}
-		}
-		regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_MODULE_FAIL, fault);
+		regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_MODULE_FAIL, check_sensors_faulty() >= 0);
 
 		set_avail();			// Flag new data vailable to command thread.
 	}		// Closes `while (1) {'.
