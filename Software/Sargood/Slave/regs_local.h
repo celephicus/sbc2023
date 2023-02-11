@@ -1,6 +1,10 @@
 #ifndef REGS_LOCAL_H__
 #define REGS_LOCAL_H__
 
+// Define version of NV data. If you change the schema or the implementation, increment the number to force any existing
+// EEPROM to flag as corrupt. Also increment to force the default values to be set for testing.
+const uint16_t REGS_DEF_VERSION = 2;
+
 /* [[[ Definition start...
 FLAGS [hex] "Various flags."
 	DC_LOW [0] "Bus volts low."
@@ -15,12 +19,8 @@ ADC_VOLTS_MON_BUS "Raw ADC Bus volts."
 VOLTS_MON_BUS "Bus volts /mV."
 TILT_SENSOR_0 [signed] "Tilt angle sensor 0 scaled 1000/90Deg."
 TILT_SENSOR_1 [signed] "Tilt angle sensor 1 scaled 1000/90Deg."
-TILT_SENSOR_2 [signed] "Tilt angle sensor 2 scaled 1000/90Deg."
-TILT_SENSOR_3 [signed] "Tilt angle sensor 3 scaled 1000/90Deg."
 SENSOR_STATUS_0 "Status from Sensor Module 0."
 SENSOR_STATUS_1 "Status from Sensor Module 1."
-SENSOR_STATUS_2 "Status from Sensor Module 2."
-SENSOR_STATUS_3 "Status from Sensor Module 3."
 RELAY_STATE "Value written to relays."
 CMD "Command input register."
 CMD_ACTIVE "Current running command."
@@ -28,8 +28,6 @@ CMD_STATUS "Status from previous command."
 SLAVE_ENABLE [nv hex 0x11] "Enable comms to slaves."
 	TILT_0 [0] "Tilt sensor 0."
 	TILT_1 [1] "Tilt sensor 1."
-	TILT_2 [2] "Tilt sensor 2."
-	TILT_3 [3] "Tilt sensor 3."
 	RELAY [4] "Relay Module."
 ENABLES [nv hex 0x0000] "Enable flags."
 	DUMP_MODBUS_EVENTS [0] "Dump MODBUS event value."
@@ -37,9 +35,7 @@ ENABLES [nv hex 0x0000] "Enable flags."
 	DUMP_REGS [2] "Regs values dump to console."
 	DUMP_REGS_FAST [3] "Dump at 5/s rather than 1/s."
 	DISABLE_BLINKY_LED [15] "Disable setting Blinky Led from fault states."
-SLEW_DEADBAND [nv] "If delta tilt less than deadband then stop."
-POS_PRESET_0_0 [nv signed]
-POS_PRESET_0_1 [nv signed]
+SLEW_DEADBAND [100 nv] "If delta tilt less than deadband then stop."
 
 >>>  Definition end, declaration start... */
 

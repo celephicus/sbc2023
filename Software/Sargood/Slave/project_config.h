@@ -1,4 +1,4 @@
-// project-config.h -- Project configuration file. 
+// project-config.h -- Project configuration file.
 
 #ifndef PROJECT_CONFIG_H__
 #define PROJECT_CONFIG_H__
@@ -10,8 +10,11 @@
 
 #define CFG_DRIVER_BUILD CFG_DRIVER_BUILD_SARGOOD
 
-// Watchdog. 
-#define CFG_WATCHDOG_TIMEOUT WDTO_2S   
+// The Sargood controller has just 2 sensors
+#define CFG_TILT_SENSOR_COUNT 2
+
+// Watchdog.
+#define CFG_WATCHDOG_TIMEOUT WDTO_2S
 #define CFG_WATCHDOG_ENABLE 1
 #define CFG_WATCHDOG_MODULE_COUNT 0
 
@@ -30,11 +33,11 @@ enum {
 // Product name
 #define CFG_PRODUCT_NAME_STR "TSA Sargood Bed Controller"
 
-// Version info, set by manual editing. 
-#define CFG_VER_MAJOR 1     
+// Version info, set by manual editing.
+#define CFG_VER_MAJOR 1
 #define CFG_VER_MINOR 0
 
-// Build number incremented with each build by cfg-set-build.py script. 
+// Build number incremented with each build by cfg-set-build.py script.
 #define CFG_BUILD_NUMBER 99
 
 // Timestamp in ISO8601 format set by cfg-set-build.py script.
@@ -53,7 +56,7 @@ enum {
 #define CFG_VER ((CFG_VER_MAJOR * 100) + (CFG_VER_MINOR))
 
 // Version as a string.
-#define CFG_VER_STR CFG_STRINGIFY(CFG_VER_MAJOR) "." CFG_STRINGIFY(CFG_VER_MINOR) 
+#define CFG_VER_STR CFG_STRINGIFY(CFG_VER_MAJOR) "." CFG_STRINGIFY(CFG_VER_MINOR)
 
 // Banner string combining all the information.
 #define CFG_BANNER_STR CFG_PRODUCT_NAME_STR " V" CFG_VER_STR " (" CFG_BUILD_NUMBER_STR ") " CFG_BUILD_TIMESTAMP
@@ -86,14 +89,14 @@ enum {
 	TIMER_SM_INACTIVITY = 4,
 };
 
-// Which sort of printf for serial port. 
+// Which sort of printf for serial port.
 #define CFG_SERIAL_PRINTF_USING_MYPRINTF
 
 // Console stuff.
 #define CFG_CONSOLE_BAUDRATE 9600
-#define CFG_WANT_CONSOLE_ECHO 0		// SoftwareSerial can't do echo, its sort of half-duplex. 
+#define CFG_WANT_CONSOLE_ECHO 0		// SoftwareSerial can't do echo, its sort of half-duplex.
 #define CFG_CONSOLE_INPUT_ACCEPT_BUFFER_SIZE (32)
-#endif	
+#endif
 
 #endif		// PROJECT_CONFIG_H__
-	
+

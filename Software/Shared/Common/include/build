@@ -1,0 +1,2 @@
+#! /usr/bin/bash
+gcc -m32 -o mon -I../src mon.c ../src/zz9.c
