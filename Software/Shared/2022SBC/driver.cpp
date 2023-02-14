@@ -465,6 +465,17 @@ void service_devices() {
 
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 
+#include "thread.h"
+
+int8_t driverGetFaultySensor() {
+	fori (CFG_TILT_SENSOR_COUNT) {
+		if (
+		(REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i)) &&
+		(REGS[REGS_IDX_SENSOR_STATUS_0 + i] < SBC2022_MODBUS_REGISTER_SENSOR_STATUS_IDLE)
+		) return (int8_t)i;
+	}
+	return -1;
+}
 static bool f_query_done;
 static void set_avail() { f_query_done = true; }
 bool driverSensorUpdateAvailable() { const bool avail = f_query_done;f_query_done = false; return avail; }
@@ -510,7 +521,7 @@ static int8_t thread_query_slaves(void* arg) {
 		THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(SLAVE_QUERY_PERIOD));
 
 		// Check all used and enabled sensors for fault state.
-		regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_MODULE_FAIL, check_sensors_faulty() >= 0);
+		regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_MODULE_FAIL, driverGetFaultySensor() >= 0);
 
 		set_avail();			// Flag new data available to command thread.
 		REGS[REGS_IDX_UPDATE_COUNT] += 1;
@@ -520,6 +531,10 @@ static int8_t thread_query_slaves(void* arg) {
 
 static thread_control_t tcb_query_slaves;
 static void setup_devices() {
+	gpioSpare4SetModeOutput();
+	gpioSpare5SetModeOutput();
+	gpioSpare6SetModeOutput();
+	gpioSpare7SetModeOutput();
 	threadInit(&tcb_query_slaves);
 }
 static void service_devices() {

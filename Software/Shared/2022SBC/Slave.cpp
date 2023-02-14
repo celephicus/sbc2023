@@ -26,7 +26,7 @@ static bool console_cmds_user(char* cmd) {
 	case /** ?VER **/ 0xc33b: print_banner(); break;
 
 	// Command processor.
-    case /** CMD **/ 0xdc88: cmdRun(console_u_pop()); break;
+    case /** CMD **/ 0xd00f: cmdRun(console_u_pop()); break;
 
 	// Driver
     case /** LED **/ 0xdc88: driverSetLedPattern(console_u_pop()); break;
@@ -304,17 +304,8 @@ static bool check_relay() {
 	}
 	return false;
 }
-static int8_t check_sensors_faulty() {
-	fori (CFG_TILT_SENSOR_COUNT) {
-		if (
-		  (REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i)) &&
-		  (REGS[REGS_IDX_SENSOR_STATUS_0 + i] < SBC2022_MODBUS_REGISTER_SENSOR_STATUS_IDLE)
-		) return (int8_t)i;
-	}
-	return -1;
-}
 static bool check_sensors() {
-	const int8_t sensor_fault_idx = check_sensors_faulty();
+	const int8_t sensor_fault_idx = driverGetFaultySensor();
 	if (sensor_fault_idx >= 0) {
 		cmd_done(CMD_STATUS_SENSOR_FAIL_0 + sensor_fault_idx);
 		return true;

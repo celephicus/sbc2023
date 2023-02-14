@@ -51,7 +51,7 @@ enum {
     REGS_IDX_SENSOR_STATUS_0 = 7,
     REGS_IDX_SENSOR_STATUS_1 = 8,
     REGS_IDX_RELAY_STATE = 9,
-    REGS_IDX_CMD = 10,
+    REGS_IDX_UPDATE_COUNT = 10,
     REGS_IDX_CMD_ACTIVE = 11,
     REGS_IDX_CMD_STATUS = 12,
     REGS_IDX_SLAVE_ENABLE = 13,
@@ -64,7 +64,7 @@ enum {
 #define REGS_START_NV_IDX REGS_IDX_SLAVE_ENABLE
 
 // Define default values for the NV segment.
-#define REGS_NV_DEFAULT_VALS 17, 0, 100
+#define REGS_NV_DEFAULT_VALS 17, 0, 20
 
 // Define how to format the reg when printing.
 #define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U
@@ -107,7 +107,7 @@ enum {
  static const char REGS_NAMES_7[] PROGMEM = "SENSOR_STATUS_0";                          \
  static const char REGS_NAMES_8[] PROGMEM = "SENSOR_STATUS_1";                          \
  static const char REGS_NAMES_9[] PROGMEM = "RELAY_STATE";                              \
- static const char REGS_NAMES_10[] PROGMEM = "CMD";                                     \
+ static const char REGS_NAMES_10[] PROGMEM = "UPDATE_COUNT";                            \
  static const char REGS_NAMES_11[] PROGMEM = "CMD_ACTIVE";                              \
  static const char REGS_NAMES_12[] PROGMEM = "CMD_STATUS";                              \
  static const char REGS_NAMES_13[] PROGMEM = "SLAVE_ENABLE";                            \
@@ -145,7 +145,7 @@ enum {
  static const char REGS_DESCRS_7[] PROGMEM = "Status from Sensor Module 0.";            \
  static const char REGS_DESCRS_8[] PROGMEM = "Status from Sensor Module 1.";            \
  static const char REGS_DESCRS_9[] PROGMEM = "Value written to relays.";                \
- static const char REGS_DESCRS_10[] PROGMEM = "Command input register.";                \
+ static const char REGS_DESCRS_10[] PROGMEM = "Incremented on each update cycle.";      \
  static const char REGS_DESCRS_11[] PROGMEM = "Current running command.";               \
  static const char REGS_DESCRS_12[] PROGMEM = "Status from previous command.";          \
  static const char REGS_DESCRS_13[] PROGMEM = "Enable comms to slaves.";                \
