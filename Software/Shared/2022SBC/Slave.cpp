@@ -14,7 +14,7 @@
 FILENUM(1);
 
 /* Perform a command, one of CMD_xxx. If a commandis currently running, it will be queued and run when the pending command repeats. The currently running command
- * is availablein register CMD_ACTIVE. Thecommand status isinregister CMD_STATUS. If a command is running, the status will be CMD_STATUS_PENDING. On completion,
+ * is availablein register CMD_ACTIVE. The command status is in register CMD_STATUS. If a command is running, the status will be CMD_STATUS_PENDING. On completion,
  * the status is either CMD_STATUS_OK or an error code.
  */
 void cmdRun(uint16_t cmd);
@@ -298,7 +298,8 @@ static void cmd_done(uint16_t status) {
 	REGS[REGS_IDX_CMD_STATUS] = status;
 }
 static bool check_relay() {
-	if (regsFlags() & REGS_FLAGS_MASK_RELAY_MODULE_FAIL) {	// If relay fault clear relay command and set fail status.
+	//if (regsFlags() & REGS_FLAGS_MASK_RELAY_MODULE_FAIL) {	// If relay fault clear relay command and set fail status.
+	if (REGS[REGS_IDX_RELAY_STATUS] >= SBC2022_MODBUS_REGISTER_RELAY_STATUS_OK) {
 		cmd_done(CMD_STATUS_RELAY_FAIL);
 		return true;
 	}

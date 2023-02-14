@@ -158,60 +158,89 @@ void modbus_cb(uint8_t evt) {
 	}		// Closes `switch (evt) {'
 
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
-	const uint8_t sensor_idx = modbusPeekRequestData()[MODBUS_FRAME_IDX_SLAVE_ID] - SBC2022_MODBUS_SLAVE_ID_SENSOR_0;	// Only applies to sesnors.
+	const uint8_t slave_id = modbusPeekRequestData()[MODBUS_FRAME_IDX_SLAVE_ID];
+	const uint8_t sensor_idx = slave_id - SBC2022_MODBUS_SLAVE_ID_SENSOR_0;	// Only applies to sesnors.
 	const bool is_sensor_response = sensor_idx < SBC2022_MODBUS_SLAVE_COUNT_SENSOR;
+	const bool is_relay_response = SBC2022_MODBUS_SLAVE_ID_RELAY == slave_id;
 
 	switch (evt) {
+		case MODBUS_CB_EVT_REQ_SENT:		// Request has just been sent...
+		break;
+
 		case MODBUS_CB_EVT_RESP_OK:			// Good response...
+		/* Sequence of callbacks is: MODBUS_CB_EVT_REQ_SENT when request sent. Then MODBUS_CB_EVT_RESP_OK on a correct response,
+		 * or one of:
+		 *  MODBUS_CB_EVT_INVALID_CRC MODBUS_CB_EVT_OVERFLOW MODBUS_CB_EVT_INVALID_LEN MODBUS_CB_EVT_INVALID_ID
+		 *  MODBUS_CB_EVT_RESP_TIMEOUT		(most likely)
+		 *  MODBUS_CB_EVT_RESP_BAD_SLAVE_ID MODBUS_CB_EVT_RESP_BAD_FUNC_CODE (uncommon)
+		 *
+		 * So we must record the status of each slave from these callback codes, which is only the status of this read.
+		 * Sensor callbacks write a status value to REGS_IDX_SENSOR_STATUS_nnn.
+		 * Relay callbacks just set a flag RELAY_MODULE_FAIL in the flags register.
+		 *
+		 * These statuses are used by the command thread to determine the fault state as flags SENSOR_FAULT & RELAY_FAULT, as a single error can be ignored
+		*/
+
+		bool response_ok = false;
 
 		// Handle response from Sensors.
-		if (is_sensor_response) {	// Check slave ID...
+		if (is_sensor_response) {	// Check if Sensor slave ID...
 			gpioSpare4Write(false);
+
 			if (MODBUS_FC_READ_HOLDING_REGISTERS == frame[MODBUS_FRAME_IDX_FUNCTION]) { // REQ: [ID FC=3 addr:16 count:16(max 125)] RESP: [ID FC=3 byte-count value-0:16, ...]
 				uint16_t address = modbusGetU16(&modbusPeekRequestData()[MODBUS_FRAME_IDX_DATA]); // Get register address from request frame.
 				uint8_t byte_count = frame[MODBUS_FRAME_IDX_DATA];		// Retrieve byte count from response frame.
-				if (((byte_count & 1) == 0) && (frame_len == (byte_count + 5))) {
-					bool got_tilt = false, got_status = false;
-					fori (byte_count/2) {
-						const uint16_t regval = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 1 + i*2]);
-						if (address == SBC2022_MODBUS_REGISTER_SENSOR_TILT) {
-							REGS[REGS_IDX_TILT_SENSOR_0 + sensor_idx] = regval;
-							got_tilt = true;
-						}
-						else if (address == SBC2022_MODBUS_REGISTER_SENSOR_STATUS) {
-							REGS[REGS_IDX_SENSOR_STATUS_0 + sensor_idx] = regval;
-							got_status = true;
-						}
-						address += 1;
+				if (((byte_count & 1) == 0) && (frame_len == (byte_count + 5))) { 	// Generic check for correct response to read multiple regs.
+					if ((4 == byte_count) && (SBC2022_MODBUS_REGISTER_SENSOR_TILT == address)) { 	// We expect to read two registers from this address...
+						REGS[REGS_IDX_TILT_SENSOR_0 + sensor_idx] = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 1 + 0]);
+						REGS[REGS_IDX_SENSOR_STATUS_0 + sensor_idx] = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 1 + 2]);
+						response_ok = true;
 					}
-
-					// Force a good status to be set in the unlikely event that we request a tilt value but not status.
-					// TODO: Check for rogue value for tilt.
-					if (got_tilt && (!got_status))
-						REGS[REGS_IDX_SENSOR_STATUS_0 + sensor_idx] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_IDLE;
 				}
+			}
+			if (!response_ok) {			// Response not good, set bad response status.
+				REGS[REGS_IDX_SENSOR_STATUS_0 + sensor_idx] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_BAD_RESPONSE;
+				REGS[REGS_IDX_TILT_SENSOR_0 + sensor_idx] = SBC2022_MODBUS_TILT_FAULT;
 			}
 		}
 
-		else if (frame[MODBUS_FRAME_IDX_SLAVE_ID] == SBC2022_MODBUS_SLAVE_ID_RELAY) {
+		else if (is_relay_response) {
 			gpioSpare4Write(false);
 			if ((8 == frame_len) && (MODBUS_FC_WRITE_SINGLE_REGISTER == frame[MODBUS_FRAME_IDX_FUNCTION])) { // REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
 				uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
-				if (SBC2022_MODBUS_REGISTER_RELAY == address)
-					regsWriteMaskFlags(REGS_FLAGS_MASK_RELAY_MODULE_FAIL, false);	// Clear fault flag as we got a response.
+				if (SBC2022_MODBUS_REGISTER_RELAY == address) {
+					REGS[REGS_IDX_RELAY_STATUS] = SBC2022_MODBUS_REGISTER_RELAY_STATUS_OK;
+					response_ok = true;
+				}
 			}
+			if (!response_ok) {			// Response not good, set bad response status.
+				REGS[REGS_IDX_RELAY_STATUS] = SBC2022_MODBUS_REGISTER_RELAY_STATUS_BAD_RESPONSE;
 		}
 		break;
 
-		default:
+		case MODBUS_CB_EVT_OVERFLOW: 		// Buffer overflow...
+		case MODBUS_CB_EVT_INVALID_CRC: case MODBUS_CB_EVT_INVALID_LEN: case MODBUS_CB_EVT_INVALID_ID: 	// Mangled response/
+		case MODBUS_CB_EVT_RESP_BAD_SLAVE_ID: case MODBUS_CB_EVT_RESP_BAD_FUNC_CODE:	// Unusual...
+		if (is_sensor_response) {
+			gpioSpare4Write(false);
+			REGS[REGS_IDX_SENSOR_STATUS_0 + sensor_idx] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_BAD_RESPONSE;
+			REGS[REGS_IDX_TILT_SENSOR_0 + sensor_idx] = SBC2022_MODBUS_TILT_FAULT;
+		}
+		else if (is_relay_response) {
+			gpioSpare4Write(false);
+			REGS[REGS_IDX_RELAY_STATUS] = SBC2022_MODBUS_REGISTER_RELAY_STATUS_BAD_RESPONSE;
+		}
+		break;
+
+		case MODBUS_CB_EVT_RESP_TIMEOUT:	// Most likely...
 		if (is_sensor_response) {
 			gpioSpare4Write(false);
 			REGS[REGS_IDX_SENSOR_STATUS_0 + sensor_idx] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_NOT_PRESENT;
 			REGS[REGS_IDX_TILT_SENSOR_0 + sensor_idx] = SBC2022_MODBUS_TILT_FAULT;
 		}
-		else if (frame[MODBUS_FRAME_IDX_SLAVE_ID] == SBC2022_MODBUS_SLAVE_ID_RELAY) {
+		else if (is_relay_response) {
 			gpioSpare4Write(false);
-			regsWriteMaskFlags(REGS_FLAGS_MASK_RELAY_MODULE_FAIL, true);
+			REGS[REGS_IDX_RELAY_STATUS] = SBC2022_MODBUS_REGISTER_RELAY_STATUS_NOT_PRESENT;
 		}
 		break;
 
@@ -441,7 +470,7 @@ void service_devices() {
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 
 // MAX4820 relay driver driver.
-// Made a boo-boo, connected relay driver to SCK/MOSI instead of GPIO_PIN_RDAT/GPIO_PIN_RCLK. Suggest correcting in next board spin. Till then, we use the on-chip SPI.
+// todo: Made a boo-boo, connected relay driver to SCK/MOSI instead of GPIO_PIN_RDAT/GPIO_PIN_RCLK. Suggest correcting in next board spin. Till then, we use the on-chip SPI.
 static uint8_t f_relay_data;
 static void write_relays(uint8_t v) {
 	f_relay_data = v;
@@ -470,8 +499,8 @@ void service_devices() {
 int8_t driverGetFaultySensor() {
 	fori (CFG_TILT_SENSOR_COUNT) {
 		if (
-		(REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i)) &&
-		(REGS[REGS_IDX_SENSOR_STATUS_0 + i] < SBC2022_MODBUS_REGISTER_SENSOR_STATUS_IDLE)
+		  (REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i)) &&
+		  (REGS[REGS_IDX_SENSOR_STATUS_0 + i] < SBC2022_MODBUS_REGISTER_SENSOR_STATUS_IDLE)
 		) return (int8_t)i;
 	}
 	return -1;

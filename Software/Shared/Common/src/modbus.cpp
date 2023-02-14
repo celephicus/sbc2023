@@ -7,11 +7,11 @@ static bool timer_is_active(uint16_t* then) {	// Check if timer is running, migh
 }
 static void timer_start(uint16_t now, uint16_t* then) { 	// Start timer, note extends period by 1 if necessary to make timere flag as active.
 	*then = now;
-	if (!timer_is_active(then)) 
-		*then = (uint16_t)-1; 
+	if (!timer_is_active(then))
+		*then = (uint16_t)-1;
 }
 static void timer_stop(uint16_t* then) { 	// Stop timer, it is now inactive and timer_is_timeout() will never return true;
-	*then = (uint16_t)0U; 
+	*then = (uint16_t)0U;
 }
 static bool timer_is_timeout(uint16_t now, uint16_t* then, uint16_t duration) { // Check for timeout and return true if so, then timer will be inactive.
 	if (
@@ -24,20 +24,20 @@ static bool timer_is_timeout(uint16_t now, uint16_t* then, uint16_t duration) { 
 	return false;
 }
 
-// Keep all our state in one place for easier viewing in debugger. 
+// Keep all our state in one place for easier viewing in debugger.
 typedef struct {
 	// Hardware setup...
 	uint8_t tx_en_pin;						// Arduino pin for enabling TX, also disables RX.
 	Stream* sRs485;							// Arduino stream for line.
 	uint8_t slave_id;						// Slave ID/address.
-	
+
 	// Host callbacks...
 	modbus_response_cb cb_resp;				// Callback to host.
 	modbus_timing_debug_cb debug_timing_cb;	// Callback function for debugging timing.
 
 	// TX: Master send request, slave send response.
 	int16_t expected_response_byte_size;	// Set by modbusMasterSend() with the expected response size, or -1 if we don't care or 0 for not waiting.
-	uint16_t start_time;					// Timestamp set by modbusMasterSend() for implementing master wait timeout. 
+	uint16_t start_time;					// Timestamp set by modbusMasterSend() for implementing master wait timeout.
 	BufferFrame buf_tx;						// Buffer used for TX with modbusSlaveSend() & modbusMasterSend().
 
 	// RX: Master waits for response after sending request, slaves receive requests.
@@ -45,7 +45,7 @@ typedef struct {
 	uint16_t rx_timestamp_micros;
 	uint16_t rx_timeout_micros;
 	uint16_t resp_timeout_millis;
-	
+
 } ModbusContext;
 static ModbusContext f_ctx;
 
@@ -57,21 +57,21 @@ static void timing_debug(uint8_t id, uint8_t s) {
 }
 
 // Timer functions that also send a timing debug event.
-static void TIMER_START_WITH_CB(uint16_t now, uint16_t* then, uint8_t cb_id) { 
-	timer_start(now, then); 
-	timing_debug(cb_id, true); 
+static void TIMER_START_WITH_CB(uint16_t now, uint16_t* then, uint8_t cb_id) {
+	timer_start(now, then);
+	timing_debug(cb_id, true);
 }
-static void TIMER_STOP_WITH_CB(uint16_t* then, uint8_t cb_id) { 
-	timer_stop(then); 
-	timing_debug(cb_id, false); 
+static void TIMER_STOP_WITH_CB(uint16_t* then, uint8_t cb_id) {
+	timer_stop(then);
+	timing_debug(cb_id, false);
 }
-static bool TIMER_IS_TIMEOUT_WITH_CB(uint16_t now, uint16_t* then, uint16_t duration, uint8_t cb_id) { 
-	bool timeout = timer_is_timeout(now, then, duration); 
+static bool TIMER_IS_TIMEOUT_WITH_CB(uint16_t now, uint16_t* then, uint16_t duration, uint8_t cb_id) {
+	bool timeout = timer_is_timeout(now, then, duration);
 	if (timeout) timing_debug(cb_id, false);
 	return timeout;
 }
-	
-static uint16_t get_crc(const uint8_t* buf, uint8_t len);	
+
+static uint16_t get_crc(const uint8_t* buf, uint8_t len);
 
 void modbusInit(Stream& rs485, uint8_t tx_en_pin, uint32_t baud, uint16_t response_timeout, modbus_response_cb cb) {
 	memset(&f_ctx, 0, sizeof(f_ctx));
@@ -82,7 +82,7 @@ void modbusInit(Stream& rs485, uint8_t tx_en_pin, uint32_t baud, uint16_t respon
 	f_ctx.cb_resp = cb;
 	digitalWrite(f_ctx.tx_en_pin, LOW);
 	pinMode(f_ctx.tx_en_pin, OUTPUT);
-	while(f_ctx.sRs485->available() > 0) // Flush any received chars from buffer. 
+	while(f_ctx.sRs485->available() > 0) // Flush any received chars from buffer.
 		(void)f_ctx.sRs485->read();
 	TIMER_STOP_WITH_CB(&f_ctx.start_time, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT);
 	TIMER_STOP_WITH_CB(&f_ctx.rx_timestamp_micros, MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT);
@@ -107,7 +107,7 @@ void modbusSlaveSend(const uint8_t* frame, uint8_t sz) {
 	bufferFrameReset(&f_ctx.buf_tx);
 	bufferFrameAddMem(&f_ctx.buf_tx, frame, sz);
 	bufferFrameAddU16(&f_ctx.buf_tx, get_crc(f_ctx.buf_tx.buf, bufferFrameLen(&f_ctx.buf_tx)));
-	while (modbusIsBusy())	// If we are still transmitting or waiting a response then keep doing it. 
+	while (modbusIsBusy())	// If we are still transmitting or waiting a response then keep doing it.
 		modbusService();
 	modbusSendRaw(f_ctx.buf_tx.buf, bufferFrameLen(&f_ctx.buf_tx));
 }
@@ -126,10 +126,10 @@ void modbusRelayBoardWrite(uint8_t id, uint8_t rly, uint8_t state, uint8_t delay
 
 void modbusHregWrite(uint8_t id, uint16_t address, uint16_t value) {
 	uint8_t frame[] = {
-		id,									//slave ID
-		MODBUS_FC_WRITE_SINGLE_REGISTER,	//function
-		(uint8_t)(address >> 8),			//Channel MSB
-		(uint8_t)(address & 0xff),			//Channel LSB
+		id,									// Slave ID
+		MODBUS_FC_WRITE_SINGLE_REGISTER,	// Function Code
+		(uint8_t)(address >> 8),			// Channel MSB
+		(uint8_t)(address & 0xff),			// Channel LSB
 		(uint8_t)(value >> 8),				// Value MSB.
 		(uint8_t)(value & 0xff),			// Value LSB.
 	};
@@ -137,14 +137,14 @@ void modbusHregWrite(uint8_t id, uint16_t address, uint16_t value) {
 }
 
 bool modbusIsBusy() {
-	return (timer_is_active(&f_ctx.start_time));
+	return timer_is_active(&f_ctx.start_time);
 }
 
 // Generic frame checker, checks a few things in the frame.
-static uint8_t verify_rx_frame_valid() {	
+static uint8_t verify_rx_frame_valid() {
 	if (bufferFrameOverflow(&f_ctx.buf_rx))			// If buffer overflow then just exit...
 		return MODBUS_CB_EVT_INVALID_LEN;
-	
+
 	const uint8_t frame_len = bufferFrameLen(&f_ctx.buf_rx);
 	if (frame_len < 5)							// Frame too small.
 		return MODBUS_CB_EVT_INVALID_LEN;
@@ -157,13 +157,13 @@ static uint8_t verify_rx_frame_valid() {
 
 bool modbusGetResponse(uint8_t* len, uint8_t* buf) {
 	bool rc;
-	const uint8_t resp_len = bufferFrameLen(&f_ctx.buf_rx);	// Get length of response 
+	const uint8_t resp_len = bufferFrameLen(&f_ctx.buf_rx);	// Get length of response
 	if (resp_len > *len) 						// If truncate to host buffer ...
-		rc = false;			
+		rc = false;
 	else {
-		*len = resp_len;		
+		*len = resp_len;
 		rc = true;
-	}				
+	}
 	memcpy(buf, f_ctx.buf_rx.buf, *len);
 	bufferFrameReset(&f_ctx.buf_rx);
 	return rc;
@@ -174,10 +174,10 @@ uint8_t modbusPeekRequestLen() { return bufferFrameLen(&f_ctx.buf_tx); }
 
 void modbusService() {
 	// Master may be waiting for a reply from a slave. On timeout, flag timeout to callback.
-	// This will only be called on RX timeout, which will only happen if at least one character has been received. 
-	if (TIMER_IS_TIMEOUT_WITH_CB((uint16_t)millis(), &f_ctx.start_time, f_ctx.resp_timeout_millis, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT)) 
+	// This will only be called on RX timeout, which will only happen if at least one character has been received.
+	if (TIMER_IS_TIMEOUT_WITH_CB((uint16_t)millis(), &f_ctx.start_time, f_ctx.resp_timeout_millis, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT))
 		f_ctx.cb_resp(MODBUS_CB_EVT_RESP_TIMEOUT);
-	
+
 	// Service RX timer, timeout with data is a frame.
 	if (TIMER_IS_TIMEOUT_WITH_CB((uint16_t)micros(), &f_ctx.rx_timestamp_micros, f_ctx.rx_timeout_micros, MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT)) {
 		timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_FRAME, true);
@@ -207,7 +207,7 @@ void modbusService() {
 		}
 		timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_FRAME, false);
 	}
-	
+
 	// Receive packet.
 	if (f_ctx.sRs485->available() > 0) {
 		TIMER_START_WITH_CB((uint16_t)micros(), &f_ctx.rx_timestamp_micros, MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT);
@@ -249,7 +249,7 @@ static uint16_t get_crc(const uint8_t* buf, uint8_t sz) {
 		0x8801, 0x48C0, 0x4980, 0x8941, 0x4B00, 0x8BC1, 0x8A81, 0x4A40,
 		0x4E00, 0x8EC1, 0x8F81, 0x4F40, 0x8D01, 0x4DC0, 0x4C80, 0x8C41,
 		0x4400, 0x84C1, 0x8581, 0x4540, 0x8701, 0x47C0, 0x4680, 0x8641,
-		0x8201, 0x42C0, 0x4380, 0x8341, 0x4100, 0x81C1, 0x8081, 0x4040 
+		0x8201, 0x42C0, 0x4380, 0x8341, 0x4100, 0x81C1, 0x8081, 0x4040
 	};
 
 	uint16_t crc = 0xFFFF;
@@ -258,7 +258,7 @@ static uint16_t get_crc(const uint8_t* buf, uint8_t sz) {
 		crc >>= 8;
 		crc ^= pgm_read_word(&table[exor]);
 	}
-	
+
 	return ((crc & 0x00ff) << 8) | (crc >> 8);		// These seem reversed, not sure how.
 }
-	
+
