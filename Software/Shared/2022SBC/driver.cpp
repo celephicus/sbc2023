@@ -164,8 +164,6 @@ void modbus_cb(uint8_t evt) {
 	const bool is_relay_response = SBC2022_MODBUS_SLAVE_ID_RELAY == slave_id;
 
 	switch (evt) {
-		case MODBUS_CB_EVT_REQ_SENT:		// Request has just been sent...
-		break;
 
 		case MODBUS_CB_EVT_RESP_OK:			// Good response...
 		/* Sequence of callbacks is: MODBUS_CB_EVT_REQ_SENT when request sent. Then MODBUS_CB_EVT_RESP_OK on a correct response,
@@ -199,6 +197,7 @@ void modbus_cb(uint8_t evt) {
 				}
 			}
 			if (!response_ok) {			// Response not good, set bad response status.
+				gpioSpare6Write(true);
 				REGS[REGS_IDX_SENSOR_STATUS_0 + sensor_idx] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_BAD_RESPONSE;
 				REGS[REGS_IDX_TILT_SENSOR_0 + sensor_idx] = SBC2022_MODBUS_TILT_FAULT;
 			}
@@ -214,7 +213,9 @@ void modbus_cb(uint8_t evt) {
 				}
 			}
 			if (!response_ok) {			// Response not good, set bad response status.
+				gpioSpare6Write(true);
 				REGS[REGS_IDX_RELAY_STATUS] = SBC2022_MODBUS_REGISTER_RELAY_STATUS_BAD_RESPONSE;
+			}
 		}
 		break;
 
@@ -223,11 +224,13 @@ void modbus_cb(uint8_t evt) {
 		case MODBUS_CB_EVT_RESP_BAD_SLAVE_ID: case MODBUS_CB_EVT_RESP_BAD_FUNC_CODE:	// Unusual...
 		if (is_sensor_response) {
 			gpioSpare4Write(false);
+			gpioSpare6Write(true);
 			REGS[REGS_IDX_SENSOR_STATUS_0 + sensor_idx] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_BAD_RESPONSE;
 			REGS[REGS_IDX_TILT_SENSOR_0 + sensor_idx] = SBC2022_MODBUS_TILT_FAULT;
 		}
 		else if (is_relay_response) {
 			gpioSpare4Write(false);
+			gpioSpare6Write(true);
 			REGS[REGS_IDX_RELAY_STATUS] = SBC2022_MODBUS_REGISTER_RELAY_STATUS_BAD_RESPONSE;
 		}
 		break;
@@ -235,11 +238,13 @@ void modbus_cb(uint8_t evt) {
 		case MODBUS_CB_EVT_RESP_TIMEOUT:	// Most likely...
 		if (is_sensor_response) {
 			gpioSpare4Write(false);
+			gpioSpare6Write(true);
 			REGS[REGS_IDX_SENSOR_STATUS_0 + sensor_idx] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_NOT_PRESENT;
 			REGS[REGS_IDX_TILT_SENSOR_0 + sensor_idx] = SBC2022_MODBUS_TILT_FAULT;
 		}
 		else if (is_relay_response) {
 			gpioSpare4Write(false);
+			gpioSpare6Write(true);
 			REGS[REGS_IDX_RELAY_STATUS] = SBC2022_MODBUS_REGISTER_RELAY_STATUS_NOT_PRESENT;
 		}
 		break;
@@ -519,9 +524,10 @@ static int8_t thread_query_slaves(void* arg) {
 	while (1) {
 		static uint8_t sidx;
 
-		gpioSpare5Write(true);
+		gpioSpare5Write(true);		// Trigger on rising edge for start of quert schedule.
 		for (sidx = 0; sidx < CFG_TILT_SENSOR_COUNT; sidx += 1) {
 			gpioSpare4Write(true);		// Set at start of query, clear in response handler.
+			gpioSpare6Write(false);		// Clear error indicator, might get set in response handler.
 			THREAD_START_DELAY();
 			if (REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << sidx)) {
 				bufferFrameReset(&req);
@@ -536,7 +542,8 @@ static int8_t thread_query_slaves(void* arg) {
 		}
 		gpioSpare5Write(false);
 
-		gpioSpare4Write(true);
+		gpioSpare4Write(true);		// Set at start of query, clear in response handler.
+		gpioSpare6Write(false);		// Clear error indicator, might get set in response handler.
 		THREAD_START_DELAY();
 		if (REGS[REGS_IDX_SLAVE_ENABLE] & REGS_SLAVE_ENABLE_MASK_RELAY) {
 			bufferFrameReset(&req);
