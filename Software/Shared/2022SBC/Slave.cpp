@@ -13,12 +13,20 @@
 #include "sbc2022_modbus.h"
 FILENUM(1);
 
+/* Perform a command, one of CMD_xxx. If a commandis currently running, it will be queued and run when the pending command repeats. The currently running command
+ * is availablein register CMD_ACTIVE. Thecommand status isinregister CMD_STATUS. If a command is running, the status will be CMD_STATUS_PENDING. On completion,
+ * the status is either CMD_STATUS_OK or an error code.
+ */
+void cmdRun(uint16_t cmd);
 
 // Console
 static void print_banner() { consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CFG_BANNER_STR)); }
 static bool console_cmds_user(char* cmd) {
   switch (console_hash(cmd)) {
 	case /** ?VER **/ 0xc33b: print_banner(); break;
+
+	// Command processor.
+    case /** CMD **/ 0xdc88: cmdRun(console_u_pop()); break;
 
 	// Driver
     case /** LED **/ 0xdc88: driverSetLedPattern(console_u_pop()); break;
@@ -28,11 +36,11 @@ static bool console_cmds_user(char* cmd) {
     case /** RLY **/ 0x07a2: REGS[REGS_IDX_RELAYS] = console_u_pop(); break;
     case /** ?RLY **/ 0xb21d: consolePrint(CFMT_D, REGS[REGS_IDX_RELAYS]); break;
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
-	case /** ?PRESETS **/ 0x6f6c: fori (DRIVER_BED_POS_PRESET_COUNT) { 
+	case /** ?PRESETS **/ 0x6f6c: fori (DRIVER_BED_POS_PRESET_COUNT) {
 		forj (CFG_TILT_SENSOR_COUNT) consolePrint(CFMT_D, driverPresets(i)[j]); consolePrint(CFMT_NL, 0);
 		}  break;
-	case /** PRESET **/ 0x3300: { 
-		const uint8_t idx = console_u_pop(); if (idx >= DRIVER_BED_POS_PRESET_COUNT) console_raise(CONSOLE_RC_ERROR_USER); 
+	case /** PRESET **/ 0x3300: {
+		const uint8_t idx = console_u_pop(); if (idx >= DRIVER_BED_POS_PRESET_COUNT) console_raise(CONSOLE_RC_ERROR_USER);
 		fori (CFG_TILT_SENSOR_COUNT) driverPresets(idx)[i] = console_u_pop();
 		}
 	#endif
@@ -206,12 +214,7 @@ static void service_blinky_led_warnings() {
 
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 #include "thread.h"
-static const uint16_t SLAVE_QUERY_PERIOD = 50U;
 UTILS_STATIC_ASSERT(CFG_TILT_SENSOR_COUNT <= SBC2022_MODBUS_SLAVE_COUNT_SENSOR);
-
-static bool f_query_done;
-static void set_avail() { f_query_done = true; }
-static bool is_avail() { const bool avail = f_query_done;f_query_done = false; return avail; }
 
 /* Command processor uses a single register to set a command, and a single extra register to get the status. */
 enum {
@@ -247,7 +250,7 @@ enum {
 	CMD_STATUS_PENDING = 1,			// Command is running.
 	CMD_STATUS_BAD_CMD = 2,			// Unknown command.
 	CMD_STATUS_RELAY_FAIL = 3,		// Relay module offline, cannot command motors.
-	CMD_STATUS_PRESET_INVALID = 4,	// Preset in NV was invalid. 
+	CMD_STATUS_PRESET_INVALID = 4,	// Preset in NV was invalid.
 
 	CMD_STATUS_SENSOR_FAIL_0 = 10,	// Tilt sensor 0 offline or failed.
 	CMD_STATUS_SENSOR_FAIL_1 = 11,	// Tilt sensor 1 offline or failed.
@@ -275,6 +278,12 @@ enum {
 
 static const uint16_t RELAY_RUN_DURATION_MS = 1000U;
 static const uint16_t RELAY_STOP_DURATION_MS = 200U;
+
+static uint16_t f_cmd_req;
+void cmdRun(uint16_t cmd) {
+	f_cmd_req = cmd;
+}
+
 static int16_t get_slew_dir(uint8_t preset_idx, uint8_t sensor_idx) {
 	const int16_t* presets = driverPresets(preset_idx);
 	const int16_t delta = presets[sensor_idx] - (int16_t)REGS[REGS_IDX_TILT_SENSOR_0+sensor_idx];
@@ -310,7 +319,7 @@ static bool check_sensors() {
 		cmd_done(CMD_STATUS_SENSOR_FAIL_0 + sensor_fault_idx);
 		return true;
 	}
-	return false;	
+	return false;
 }
 static bool is_preset_valid(uint8_t idx) {
 	fori(CFG_TILT_SENSOR_COUNT) {
@@ -324,14 +333,14 @@ static bool is_preset_valid(uint8_t idx) {
 }
 static int8_t thread_cmd(void* arg) {
 	(void)arg;
-	const bool avail = is_avail();
+	const bool avail = driverSensorUpdateAvailable();
 	static uint8_t preset_idx;
-	
+
 	THREAD_BEGIN();
 	while (1) {
 		if (CMD_IDLE == REGS[REGS_IDX_CMD_ACTIVE]) {		// If idle, load new command.
-			REGS[REGS_IDX_CMD_ACTIVE] = REGS[REGS_IDX_CMD];		// Most likely still idle.
-			REGS[REGS_IDX_CMD] = CMD_IDLE;
+			REGS[REGS_IDX_CMD_ACTIVE] = f_cmd_req;			// Most likely still idle.
+			f_cmd_req = CMD_IDLE;
 		}
 
 		switch (REGS[REGS_IDX_CMD_ACTIVE]) {
@@ -358,8 +367,8 @@ do_manual:	cmd_start();
 			else {
 				THREAD_START_DELAY();
 				THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(RELAY_RUN_DURATION_MS));
-				if (REGS[REGS_IDX_CMD_ACTIVE] == REGS[REGS_IDX_CMD]) {	// If repeat of previous, restart timing. If not then active register will either have new command or idle.
-					REGS[REGS_IDX_CMD] = CMD_IDLE;
+				if (REGS[REGS_IDX_CMD_ACTIVE] == f_cmd_req) {	// If repeat of previous, restart timing. If not then active register will either have new command or idle.
+					f_cmd_req = CMD_IDLE;
 					goto do_manual;
 				}
 				REGS[REGS_IDX_RELAY_STATE] = RELAY_STOP;
@@ -376,12 +385,12 @@ do_manual:	cmd_start();
 		case CMD_SAVE_POS_4: {
 			cmd_start();
 			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - CMD_SAVE_POS_1;
-			if (!check_sensors()) {		// All _enabled_ sensors OK. 
-				fori (CFG_TILT_SENSOR_COUNT) // Read sennsor value or force it to invalid is not enabled. 
+			if (!check_sensors()) {		// All _enabled_ sensors OK.
+				fori (CFG_TILT_SENSOR_COUNT) // Read sennsor value or force it to invalid is not enabled.
 					driverPresets(preset_idx)[i] = (REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i)) ? REGS[REGS_IDX_TILT_SENSOR_0 + i] : SBC2022_MODBUS_TILT_FAULT;
 				cmd_done(CMD_STATUS_OK);
 			}
-			else 
+			else
 				driverPresetSetInvalid(preset_idx);
 			// driverNvWrite();
 			THREAD_YIELD();
@@ -393,7 +402,7 @@ do_manual:	cmd_start();
 		case CMD_RESTORE_POS_4: {
 			cmd_start();
 			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - CMD_RESTORE_POS_1;
-			if (!is_preset_valid(preset_idx)) 
+			if (!is_preset_valid(preset_idx))
 				cmd_done(CMD_STATUS_PRESET_INVALID);
 			else if (!check_sensors() && !check_relay()) {	// Only proceed if nothing broken.
 
@@ -423,7 +432,7 @@ do_manual:	cmd_start();
 						}
 					}
 				}
-				
+
 				// Stop and let axis motors rundown...
 				regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_HEAD_MASK|AXIS_SLEW_FOOT_MASK, AXIS_SLEW_STOP);
 				REGS[REGS_IDX_RELAY_STATE] = RELAY_STOP;
@@ -441,56 +450,12 @@ do_manual:	cmd_start();
 	THREAD_END();
 }
 
-static int8_t thread_query_slaves(void* arg) {
-	(void)arg;
-	static BufferFrame req;
-
-	THREAD_BEGIN();
-	while (1) {
-		static uint8_t sidx;
-		for (sidx = 0; sidx < CFG_TILT_SENSOR_COUNT; sidx += 1) {
-			THREAD_START_DELAY();
-			if (REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << sidx)) {
-				bufferFrameReset(&req);
-				bufferFrameAdd(&req, SBC2022_MODBUS_SLAVE_ID_SENSOR_0 + sidx);
-				bufferFrameAdd(&req, MODBUS_FC_READ_HOLDING_REGISTERS);
-				bufferFrameAddU16(&req, SBC2022_MODBUS_REGISTER_SENSOR_TILT);
-				bufferFrameAddU16(&req, 2);
-				THREAD_WAIT_UNTIL(!modbusIsBusy());
-				modbusMasterSend(req.buf, bufferFrameLen(&req));
-			}
-			THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(SLAVE_QUERY_PERIOD));
-		}
-
-		THREAD_START_DELAY();
-		if (REGS[REGS_IDX_SLAVE_ENABLE] & REGS_SLAVE_ENABLE_MASK_RELAY) {
-			bufferFrameReset(&req);
-			bufferFrameAdd(&req, SBC2022_MODBUS_SLAVE_ID_RELAY);
-			bufferFrameAdd(&req, MODBUS_FC_WRITE_SINGLE_REGISTER);
-			bufferFrameAddU16(&req, SBC2022_MODBUS_REGISTER_RELAY);
-			bufferFrameAddU16(&req, REGS[REGS_IDX_RELAY_STATE]);
-			THREAD_WAIT_UNTIL(!modbusIsBusy());
-			modbusMasterSend(req.buf, bufferFrameLen(&req));
-		}
-		THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(SLAVE_QUERY_PERIOD));
-
-		// Check all used and enabled sensors for fault state.
-		regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_MODULE_FAIL, check_sensors_faulty() >= 0);
-
-		set_avail();			// Flag new data vailable to command thread.
-	}		// Closes `while (1) {'.
-	THREAD_END();
-}
-
-static thread_control_t tcb_query_slaves;
 static thread_control_t tcb_cmd;
 thread_ticks_t threadGetTicks() { return (thread_ticks_t)millis(); }
 static void app_init() {
-	threadInit(&tcb_query_slaves);
 	threadInit(&tcb_cmd);
 }
 static void app_service() {
-	threadRun(&tcb_query_slaves, thread_query_slaves, NULL);
 	threadRun(&tcb_cmd, thread_cmd, NULL);
 }
 #else

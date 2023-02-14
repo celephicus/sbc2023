@@ -166,6 +166,7 @@ void modbus_cb(uint8_t evt) {
 
 		// Handle response from Sensors.
 		if (is_sensor_response) {	// Check slave ID...
+			gpioSpare4Write(false);
 			if (MODBUS_FC_READ_HOLDING_REGISTERS == frame[MODBUS_FRAME_IDX_FUNCTION]) { // REQ: [ID FC=3 addr:16 count:16(max 125)] RESP: [ID FC=3 byte-count value-0:16, ...]
 				uint16_t address = modbusGetU16(&modbusPeekRequestData()[MODBUS_FRAME_IDX_DATA]); // Get register address from request frame.
 				uint8_t byte_count = frame[MODBUS_FRAME_IDX_DATA];		// Retrieve byte count from response frame.
@@ -193,6 +194,7 @@ void modbus_cb(uint8_t evt) {
 		}
 
 		else if (frame[MODBUS_FRAME_IDX_SLAVE_ID] == SBC2022_MODBUS_SLAVE_ID_RELAY) {
+			gpioSpare4Write(false);
 			if ((8 == frame_len) && (MODBUS_FC_WRITE_SINGLE_REGISTER == frame[MODBUS_FRAME_IDX_FUNCTION])) { // REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
 				uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
 				if (SBC2022_MODBUS_REGISTER_RELAY == address)
@@ -203,10 +205,12 @@ void modbus_cb(uint8_t evt) {
 
 		default:
 		if (is_sensor_response) {
+			gpioSpare4Write(false);
 			REGS[REGS_IDX_SENSOR_STATUS_0 + sensor_idx] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_NOT_PRESENT;
 			REGS[REGS_IDX_TILT_SENSOR_0 + sensor_idx] = SBC2022_MODBUS_TILT_FAULT;
 		}
 		else if (frame[MODBUS_FRAME_IDX_SLAVE_ID] == SBC2022_MODBUS_SLAVE_ID_RELAY) {
+			gpioSpare4Write(false);
 			regsWriteMaskFlags(REGS_FLAGS_MASK_RELAY_MODULE_FAIL, true);
 		}
 		break;
@@ -461,8 +465,66 @@ void service_devices() {
 
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 
-static void setup_devices() {}
-static void service_devices() {}
+static bool f_query_done;
+static void set_avail() { f_query_done = true; }
+bool driverSensorUpdateAvailable() { const bool avail = f_query_done;f_query_done = false; return avail; }
+
+/* Time for one cycle should be N * SLAVE_QUERY_PERIOD, with SLAVE_QUERY_PERIOD longer than the MODBUS response timeout. */
+static const uint16_t SLAVE_QUERY_PERIOD = 50U;
+static int8_t thread_query_slaves(void* arg) {
+	(void)arg;
+	static BufferFrame req;
+
+	THREAD_BEGIN();
+	while (1) {
+		static uint8_t sidx;
+
+		gpioSpare5Write(true);
+		for (sidx = 0; sidx < CFG_TILT_SENSOR_COUNT; sidx += 1) {
+			gpioSpare4Write(true);		// Set at start of query, clear in response handler.
+			THREAD_START_DELAY();
+			if (REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << sidx)) {
+				bufferFrameReset(&req);
+				bufferFrameAdd(&req, SBC2022_MODBUS_SLAVE_ID_SENSOR_0 + sidx);
+				bufferFrameAdd(&req, MODBUS_FC_READ_HOLDING_REGISTERS);
+				bufferFrameAddU16(&req, SBC2022_MODBUS_REGISTER_SENSOR_TILT);
+				bufferFrameAddU16(&req, 2);
+				THREAD_WAIT_UNTIL(!modbusIsBusy());
+				modbusMasterSend(req.buf, bufferFrameLen(&req));
+			}
+			THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(SLAVE_QUERY_PERIOD));
+		}
+		gpioSpare5Write(false);
+
+		gpioSpare4Write(true);
+		THREAD_START_DELAY();
+		if (REGS[REGS_IDX_SLAVE_ENABLE] & REGS_SLAVE_ENABLE_MASK_RELAY) {
+			bufferFrameReset(&req);
+			bufferFrameAdd(&req, SBC2022_MODBUS_SLAVE_ID_RELAY);
+			bufferFrameAdd(&req, MODBUS_FC_WRITE_SINGLE_REGISTER);
+			bufferFrameAddU16(&req, SBC2022_MODBUS_REGISTER_RELAY);
+			bufferFrameAddU16(&req, REGS[REGS_IDX_RELAY_STATE]);
+			THREAD_WAIT_UNTIL(!modbusIsBusy());
+			modbusMasterSend(req.buf, bufferFrameLen(&req));
+		}
+		THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(SLAVE_QUERY_PERIOD));
+
+		// Check all used and enabled sensors for fault state.
+		regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_MODULE_FAIL, check_sensors_faulty() >= 0);
+
+		set_avail();			// Flag new data available to command thread.
+		REGS[REGS_IDX_UPDATE_COUNT] += 1;
+	}		// Closes `while (1) {'.
+	THREAD_END();
+}
+
+static thread_control_t tcb_query_slaves;
+static void setup_devices() {
+	threadInit(&tcb_query_slaves);
+}
+static void service_devices() {
+	threadRun(&tcb_query_slaves, thread_query_slaves, NULL);
+}
 
 #endif
 

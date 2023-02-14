@@ -22,7 +22,7 @@ TILT_SENSOR_1 [signed] "Tilt angle sensor 1 scaled 1000/90Deg."
 SENSOR_STATUS_0 "Status from Sensor Module 0."
 SENSOR_STATUS_1 "Status from Sensor Module 1."
 RELAY_STATE "Value written to relays."
-CMD "Command input register."
+UPDATE_COUNT "Incremented on each update cycle."
 CMD_ACTIVE "Current running command."
 CMD_STATUS "Status from previous command."
 SLAVE_ENABLE [nv hex 0x11] "Enable comms to slaves."
@@ -35,7 +35,7 @@ ENABLES [nv hex 0x0000] "Enable flags."
 	DUMP_REGS [2] "Regs values dump to console."
 	DUMP_REGS_FAST [3] "Dump at 5/s rather than 1/s."
 	DISABLE_BLINKY_LED [15] "Disable setting Blinky Led from fault states."
-SLEW_DEADBAND [100 nv] "If delta tilt less than deadband then stop."
+SLEW_DEADBAND [20 nv] "If delta tilt less than deadband then stop."
 
 >>>  Definition end, declaration start... */
 

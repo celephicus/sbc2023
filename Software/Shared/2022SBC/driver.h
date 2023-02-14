@@ -12,6 +12,7 @@ void driverService();
 #define DRIVER_BED_POS_PRESET_COUNT 4
 int16_t* driverPresets(uint8_t idx);
 void driverPresetSetInvalid(uint8_t idx);
+bool driverSensorUpdateAvailable();
 #endif
 
 // LED pattern, set this and it will blink away forever.
