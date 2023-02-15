@@ -163,6 +163,8 @@ void modbus_cb(uint8_t evt) {
 	const bool is_sensor_response = sensor_idx < SBC2022_MODBUS_SLAVE_COUNT_SENSOR;
 	const bool is_relay_response = SBC2022_MODBUS_SLAVE_ID_RELAY == slave_id;
 
+	bool response_ok = false;
+
 	switch (evt) {
 
 		case MODBUS_CB_EVT_RESP_OK:			// Good response...
@@ -178,8 +180,6 @@ void modbus_cb(uint8_t evt) {
 		 *
 		 * These statuses are used by the command thread to determine the fault state as flags SENSOR_FAULT & RELAY_FAULT, as a single error can be ignored
 		*/
-
-		bool response_ok = false;
 
 		// Handle response from Sensors.
 		if (is_sensor_response) {	// Check if Sensor slave ID...
@@ -276,7 +276,7 @@ static void modbus_init() {
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 	fori (SBC2022_MODBUS_SLAVE_COUNT_SENSOR)
 		REGS[REGS_IDX_SENSOR_STATUS_0 + i] = SBC2022_MODBUS_REGISTER_SENSOR_STATUS_NOT_PRESENT;
-	regsWriteMaskFlags(REGS_FLAGS_MASK_RELAY_MODULE_FAIL, true);
+	REGS[REGS_IDX_RELAY_STATUS] = SBC2022_MODBUS_REGISTER_RELAY_STATUS_NOT_PRESENT;
 #endif
 	modbusSetTimingDebugCb(modbus_timing_debug);
 	gpioSpare1SetModeOutput();		// These are used by the RS485 debug cb.
@@ -557,7 +557,8 @@ static int8_t thread_query_slaves(void* arg) {
 		THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(SLAVE_QUERY_PERIOD));
 
 		// Check all used and enabled sensors for fault state.
-		regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_MODULE_FAIL, driverGetFaultySensor() >= 0);
+		regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_FAULT, driverGetFaultySensor() >= 0);
+		regsWriteMaskFlags(REGS_FLAGS_MASK_RELAY_FAULT, REGS[REGS_IDX_RELAY_STATUS] < SBC2022_MODBUS_REGISTER_RELAY_STATUS_OK);
 
 		set_avail();			// Flag new data available to command thread.
 		REGS[REGS_IDX_UPDATE_COUNT] += 1;
@@ -572,6 +573,7 @@ static void setup_devices() {
 	gpioSpare6SetModeOutput();
 	gpioSpare7SetModeOutput();
 	threadInit(&tcb_query_slaves);
+	regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_FAULT|REGS_FLAGS_MASK_RELAY_FAULT, true);
 }
 static void service_devices() {
 	threadRun(&tcb_query_slaves, thread_query_slaves, NULL);

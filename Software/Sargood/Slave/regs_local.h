@@ -49,16 +49,17 @@ enum {
     REGS_IDX_VOLTS_MON_BUS = 4,
     REGS_IDX_TILT_SENSOR_0 = 5,
     REGS_IDX_TILT_SENSOR_1 = 6,
-    REGS_IDX_SENSOR_STATUS_0 = 7,
-    REGS_IDX_SENSOR_STATUS_1 = 8,
-    REGS_IDX_RELAY_STATE = 9,
-    REGS_IDX_UPDATE_COUNT = 10,
-    REGS_IDX_CMD_ACTIVE = 11,
-    REGS_IDX_CMD_STATUS = 12,
-    REGS_IDX_SLAVE_ENABLE = 13,
-    REGS_IDX_ENABLES = 14,
-    REGS_IDX_SLEW_DEADBAND = 15,
-    COUNT_REGS = 16
+    REGS_IDX_RELAY_STATUS = 7,
+    REGS_IDX_SENSOR_STATUS_0 = 8,
+    REGS_IDX_SENSOR_STATUS_1 = 9,
+    REGS_IDX_RELAY_STATE = 10,
+    REGS_IDX_UPDATE_COUNT = 11,
+    REGS_IDX_CMD_ACTIVE = 12,
+    REGS_IDX_CMD_STATUS = 13,
+    REGS_IDX_SLAVE_ENABLE = 14,
+    REGS_IDX_ENABLES = 15,
+    REGS_IDX_SLEW_DEADBAND = 16,
+    COUNT_REGS = 17
 };
 
 // Define the start of the NV regs. The region is from this index up to the end of the register array.
@@ -68,13 +69,13 @@ enum {
 #define REGS_NV_DEFAULT_VALS 17, 0, 20
 
 // Define how to format the reg when printing.
-#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U
+#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U
 
 // Flags/masks for register FLAGS.
 enum {
     	REGS_FLAGS_MASK_DC_LOW = (int)0x1,
-    	REGS_FLAGS_MASK_SENSOR_MODULE_FAIL = (int)0x2,
-    	REGS_FLAGS_MASK_RELAY_MODULE_FAIL = (int)0x4,
+    	REGS_FLAGS_MASK_SENSOR_FAULT = (int)0x2,
+    	REGS_FLAGS_MASK_RELAY_FAULT = (int)0x4,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_0 = (int)0x2000,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_1 = (int)0x4000,
     	REGS_FLAGS_MASK_WATCHDOG_RESTART = (int)0x8000,
@@ -105,15 +106,16 @@ enum {
  static const char REGS_NAMES_4[] PROGMEM = "VOLTS_MON_BUS";                            \
  static const char REGS_NAMES_5[] PROGMEM = "TILT_SENSOR_0";                            \
  static const char REGS_NAMES_6[] PROGMEM = "TILT_SENSOR_1";                            \
- static const char REGS_NAMES_7[] PROGMEM = "SENSOR_STATUS_0";                          \
- static const char REGS_NAMES_8[] PROGMEM = "SENSOR_STATUS_1";                          \
- static const char REGS_NAMES_9[] PROGMEM = "RELAY_STATE";                              \
- static const char REGS_NAMES_10[] PROGMEM = "UPDATE_COUNT";                            \
- static const char REGS_NAMES_11[] PROGMEM = "CMD_ACTIVE";                              \
- static const char REGS_NAMES_12[] PROGMEM = "CMD_STATUS";                              \
- static const char REGS_NAMES_13[] PROGMEM = "SLAVE_ENABLE";                            \
- static const char REGS_NAMES_14[] PROGMEM = "ENABLES";                                 \
- static const char REGS_NAMES_15[] PROGMEM = "SLEW_DEADBAND";                           \
+ static const char REGS_NAMES_7[] PROGMEM = "RELAY_STATUS";                             \
+ static const char REGS_NAMES_8[] PROGMEM = "SENSOR_STATUS_0";                          \
+ static const char REGS_NAMES_9[] PROGMEM = "SENSOR_STATUS_1";                          \
+ static const char REGS_NAMES_10[] PROGMEM = "RELAY_STATE";                             \
+ static const char REGS_NAMES_11[] PROGMEM = "UPDATE_COUNT";                            \
+ static const char REGS_NAMES_12[] PROGMEM = "CMD_ACTIVE";                              \
+ static const char REGS_NAMES_13[] PROGMEM = "CMD_STATUS";                              \
+ static const char REGS_NAMES_14[] PROGMEM = "SLAVE_ENABLE";                            \
+ static const char REGS_NAMES_15[] PROGMEM = "ENABLES";                                 \
+ static const char REGS_NAMES_16[] PROGMEM = "SLEW_DEADBAND";                           \
                                                                                         \
  static const char* const REGS_NAMES[] PROGMEM = {                                      \
    REGS_NAMES_0,                                                                        \
@@ -132,6 +134,7 @@ enum {
    REGS_NAMES_13,                                                                       \
    REGS_NAMES_14,                                                                       \
    REGS_NAMES_15,                                                                       \
+   REGS_NAMES_16,                                                                       \
  }
 
 // Declare an array of description text for each register.
@@ -143,15 +146,16 @@ enum {
  static const char REGS_DESCRS_4[] PROGMEM = "Bus volts /mV.";                          \
  static const char REGS_DESCRS_5[] PROGMEM = "Tilt angle sensor 0 scaled 1000/90Deg.";  \
  static const char REGS_DESCRS_6[] PROGMEM = "Tilt angle sensor 1 scaled 1000/90Deg.";  \
- static const char REGS_DESCRS_7[] PROGMEM = "Status from Sensor Module 0.";            \
- static const char REGS_DESCRS_8[] PROGMEM = "Status from Sensor Module 1.";            \
- static const char REGS_DESCRS_9[] PROGMEM = "Value written to relays.";                \
- static const char REGS_DESCRS_10[] PROGMEM = "Incremented on each update cycle.";      \
- static const char REGS_DESCRS_11[] PROGMEM = "Current running command.";               \
- static const char REGS_DESCRS_12[] PROGMEM = "Status from previous command.";          \
- static const char REGS_DESCRS_13[] PROGMEM = "Enable comms to slaves.";                \
- static const char REGS_DESCRS_14[] PROGMEM = "Enable flags.";                          \
- static const char REGS_DESCRS_15[] PROGMEM = "If delta tilt less than deadband then stop.";\
+ static const char REGS_DESCRS_7[] PROGMEM = "Status from Relay Module.";               \
+ static const char REGS_DESCRS_8[] PROGMEM = "Status from Sensor Module 0.";            \
+ static const char REGS_DESCRS_9[] PROGMEM = "Status from Sensor Module 1.";            \
+ static const char REGS_DESCRS_10[] PROGMEM = "Value written to relays.";               \
+ static const char REGS_DESCRS_11[] PROGMEM = "Incremented on each update cycle.";      \
+ static const char REGS_DESCRS_12[] PROGMEM = "Current running command.";               \
+ static const char REGS_DESCRS_13[] PROGMEM = "Status from previous command.";          \
+ static const char REGS_DESCRS_14[] PROGMEM = "Enable comms to slaves.";                \
+ static const char REGS_DESCRS_15[] PROGMEM = "Enable flags.";                          \
+ static const char REGS_DESCRS_16[] PROGMEM = "If delta tilt less than deadband then stop.";\
                                                                                         \
  static const char* const REGS_DESCRS[] PROGMEM = {                                     \
    REGS_DESCRS_0,                                                                       \
@@ -170,6 +174,7 @@ enum {
    REGS_DESCRS_13,                                                                      \
    REGS_DESCRS_14,                                                                      \
    REGS_DESCRS_15,                                                                      \
+   REGS_DESCRS_16,                                                                      \
  }
 
 // Declare a multiline string description of the fields.
@@ -177,8 +182,8 @@ enum {
  static const char REGS_HELPS[] PROGMEM =                                               \
     "\nFlags:"                                                                          \
     "\n DC_LOW: 0 (Bus volts low.)"                                                     \
-    "\n SENSOR_MODULE_FAIL: 1 (Fault state of all enabled Sensors.)"                    \
-    "\n RELAY_MODULE_FAIL: 2 (Relay module fail.)"                                      \
+    "\n SENSOR_FAULT: 1 (Fault state of all _enabled_ Sensor modules.)"                 \
+    "\n RELAY_FAULT: 2 (Fault state for Relay module _if_ enabled.)"                    \
     "\n EEPROM_READ_BAD_0: 13 (EEPROM bank 0 corrupt.)"                                 \
     "\n EEPROM_READ_BAD_1: 14 (EEPROM bank 1 corrupt.)"                                 \
     "\n WATCHDOG_RESTART: 15 (Whoops.)"                                                 \

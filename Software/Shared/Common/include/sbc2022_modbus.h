@@ -23,6 +23,7 @@ enum {
 	SBC2022_MODBUS_REGISTER_RELAY_STATUS_NOT_PRESENT = 0,		// Relay no response.
 	SBC2022_MODBUS_REGISTER_RELAY_STATUS_BAD_RESPONSE = 2,		// Relay response received, but there was an error.
 	SBC2022_MODBUS_REGISTER_RELAY_STATUS_OK = 100,				// Relay OK.
+};
 
 // Slave IDs (addresses).
 enum {
