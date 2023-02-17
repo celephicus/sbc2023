@@ -1,6 +1,10 @@
 #ifndef REGS_LOCAL_H__
 #define REGS_LOCAL_H__
 
+// Define version of NV data. If you change the schema or the implementation, increment the number to force any existing
+// EEPROM to flag as corrupt. Also increment to force the default values to be set for testing.
+const uint16_t REGS_DEF_VERSION = 6;
+
 /* [[[ Definition start...
 FLAGS [hex] "Various flags."
 	MODBUS_MASTER_NO_COMMS [0] "No comms from MODBUS master."
@@ -15,6 +19,7 @@ VOLTS_MON_BUS "Bus volts /mV."
 ACCEL_TILT_ANGLE [signed] "Tilt angle scaled 1000/90Deg."
 ACCEL_TILT_STATUS "Status code for tilt sensor, 0xx are faults, 1xx are good."
 ACCEL_TILT_ANGLE_LP [signed] "Tilt angle low pass filtered."
+TILT_DELTA [signed] "Delat between current and last filtered tilt value."
 ACCEL_SAMPLE_COUNT "Incremented on every new accumulated reading from the accel."
 ACCEL_X	[signed] "Accel. raw X axis reading."
 ACCEL_Y	[signed] "Accel. raw Y axis reading."
@@ -28,8 +33,9 @@ ENABLES [nv hex 0x0000] "Enable flags."
 	DISABLE_BLINKY_LED [15] "Disable setting Blinky Led from fault states."
 ACCEL_AVG [nv 10] "Number of  accel samples to average."
 ACCEL_SAMPLE_RATE_TEST [nv 0] "Test accel sample rate check if non-zero."
-ACCEL_TILT_ANGLE_FILTER_K [nv 8] "Tilt filter constant."
-ACCEL_TILT_MOVING_THRESHOLD [nv 30] "Threshold for tilt motion discrimination."
+ACCEL_TILT_FILTER_K [nv 3] "Tilt filter constant for value returned to master ."
+ACCEL_TILT_MOTION_DISC_FILTER_K [nv 4] "Tilt filter constant for tilt motion discrimination."
+ACCEL_TILT_MOTION_DISC_THRESHOLD [nv 5] "Threshold for tilt motion discrimination."
 >>>  Definition end, declaration start... */
 
 // Declare the indices to the registers.
@@ -41,26 +47,28 @@ enum {
     REGS_IDX_ACCEL_TILT_ANGLE = 4,
     REGS_IDX_ACCEL_TILT_STATUS = 5,
     REGS_IDX_ACCEL_TILT_ANGLE_LP = 6,
-    REGS_IDX_ACCEL_SAMPLE_COUNT = 7,
-    REGS_IDX_ACCEL_X = 8,
-    REGS_IDX_ACCEL_Y = 9,
-    REGS_IDX_ACCEL_Z = 10,
-    REGS_IDX_ENABLES = 11,
-    REGS_IDX_ACCEL_AVG = 12,
-    REGS_IDX_ACCEL_SAMPLE_RATE_TEST = 13,
-    REGS_IDX_ACCEL_TILT_ANGLE_FILTER_K = 14,
-    REGS_IDX_ACCEL_TILT_MOVING_THRESHOLD = 15,
-    COUNT_REGS = 16
+    REGS_IDX_TILT_DELTA = 7,
+    REGS_IDX_ACCEL_SAMPLE_COUNT = 8,
+    REGS_IDX_ACCEL_X = 9,
+    REGS_IDX_ACCEL_Y = 10,
+    REGS_IDX_ACCEL_Z = 11,
+    REGS_IDX_ENABLES = 12,
+    REGS_IDX_ACCEL_AVG = 13,
+    REGS_IDX_ACCEL_SAMPLE_RATE_TEST = 14,
+    REGS_IDX_ACCEL_TILT_FILTER_K = 15,
+    REGS_IDX_ACCEL_TILT_MOTION_DISC_FILTER_K = 16,
+    REGS_IDX_ACCEL_TILT_MOTION_DISC_THRESHOLD = 17,
+    COUNT_REGS = 18
 };
 
 // Define the start of the NV regs. The region is from this index up to the end of the register array.
 #define REGS_START_NV_IDX REGS_IDX_ENABLES
 
 // Define default values for the NV segment.
-#define REGS_NV_DEFAULT_VALS 0, 10, 0, 8, 30
+#define REGS_NV_DEFAULT_VALS 0, 10, 0, 1, 4, 5
 
 // Define how to format the reg when printing.
-#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_U, CFMT_D, CFMT_U, CFMT_D, CFMT_D, CFMT_D, CFMT_X, CFMT_U, CFMT_U, CFMT_U, CFMT_U
+#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_D, CFMT_D, CFMT_D, CFMT_X, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U
 
 // Flags/masks for register FLAGS.
 enum {
@@ -91,15 +99,17 @@ enum {
  static const char REGS_NAMES_4[] PROGMEM = "ACCEL_TILT_ANGLE";                         \
  static const char REGS_NAMES_5[] PROGMEM = "ACCEL_TILT_STATUS";                        \
  static const char REGS_NAMES_6[] PROGMEM = "ACCEL_TILT_ANGLE_LP";                      \
- static const char REGS_NAMES_7[] PROGMEM = "ACCEL_SAMPLE_COUNT";                       \
- static const char REGS_NAMES_8[] PROGMEM = "ACCEL_X";                                  \
- static const char REGS_NAMES_9[] PROGMEM = "ACCEL_Y";                                  \
- static const char REGS_NAMES_10[] PROGMEM = "ACCEL_Z";                                 \
- static const char REGS_NAMES_11[] PROGMEM = "ENABLES";                                 \
- static const char REGS_NAMES_12[] PROGMEM = "ACCEL_AVG";                               \
- static const char REGS_NAMES_13[] PROGMEM = "ACCEL_SAMPLE_RATE_TEST";                  \
- static const char REGS_NAMES_14[] PROGMEM = "ACCEL_TILT_ANGLE_FILTER_K";               \
- static const char REGS_NAMES_15[] PROGMEM = "ACCEL_TILT_MOVING_THRESHOLD";             \
+ static const char REGS_NAMES_7[] PROGMEM = "TILT_DELTA";                               \
+ static const char REGS_NAMES_8[] PROGMEM = "ACCEL_SAMPLE_COUNT";                       \
+ static const char REGS_NAMES_9[] PROGMEM = "ACCEL_X";                                  \
+ static const char REGS_NAMES_10[] PROGMEM = "ACCEL_Y";                                 \
+ static const char REGS_NAMES_11[] PROGMEM = "ACCEL_Z";                                 \
+ static const char REGS_NAMES_12[] PROGMEM = "ENABLES";                                 \
+ static const char REGS_NAMES_13[] PROGMEM = "ACCEL_AVG";                               \
+ static const char REGS_NAMES_14[] PROGMEM = "ACCEL_SAMPLE_RATE_TEST";                  \
+ static const char REGS_NAMES_15[] PROGMEM = "ACCEL_TILT_FILTER_K";                     \
+ static const char REGS_NAMES_16[] PROGMEM = "ACCEL_TILT_MOTION_DISC_FILTER_K";         \
+ static const char REGS_NAMES_17[] PROGMEM = "ACCEL_TILT_MOTION_DISC_THRESHOLD";        \
                                                                                         \
  static const char* const REGS_NAMES[] PROGMEM = {                                      \
    REGS_NAMES_0,                                                                        \
@@ -118,6 +128,8 @@ enum {
    REGS_NAMES_13,                                                                       \
    REGS_NAMES_14,                                                                       \
    REGS_NAMES_15,                                                                       \
+   REGS_NAMES_16,                                                                       \
+   REGS_NAMES_17,                                                                       \
  }
 
 // Declare an array of description text for each register.
@@ -129,15 +141,17 @@ enum {
  static const char REGS_DESCRS_4[] PROGMEM = "Tilt angle scaled 1000/90Deg.";           \
  static const char REGS_DESCRS_5[] PROGMEM = "Status code for tilt sensor, 0xx are faults, 1xx are good.";\
  static const char REGS_DESCRS_6[] PROGMEM = "Tilt angle low pass filtered.";           \
- static const char REGS_DESCRS_7[] PROGMEM = "Incremented on every new accumulated reading from the accel.";\
- static const char REGS_DESCRS_8[] PROGMEM = "Accel. raw X axis reading.";              \
- static const char REGS_DESCRS_9[] PROGMEM = "Accel. raw Y axis reading.";              \
- static const char REGS_DESCRS_10[] PROGMEM = "Accel. raw Z axis reading.";             \
- static const char REGS_DESCRS_11[] PROGMEM = "Enable flags.";                          \
- static const char REGS_DESCRS_12[] PROGMEM = "Number of  accel samples to average.";   \
- static const char REGS_DESCRS_13[] PROGMEM = "Test accel sample rate check if non-zero.";\
- static const char REGS_DESCRS_14[] PROGMEM = "Tilt filter constant.";                  \
- static const char REGS_DESCRS_15[] PROGMEM = "Threshold for tilt motion discrimination.";\
+ static const char REGS_DESCRS_7[] PROGMEM = "Delat between current and last filtered tilt value.";\
+ static const char REGS_DESCRS_8[] PROGMEM = "Incremented on every new accumulated reading from the accel.";\
+ static const char REGS_DESCRS_9[] PROGMEM = "Accel. raw X axis reading.";              \
+ static const char REGS_DESCRS_10[] PROGMEM = "Accel. raw Y axis reading.";             \
+ static const char REGS_DESCRS_11[] PROGMEM = "Accel. raw Z axis reading.";             \
+ static const char REGS_DESCRS_12[] PROGMEM = "Enable flags.";                          \
+ static const char REGS_DESCRS_13[] PROGMEM = "Number of  accel samples to average.";   \
+ static const char REGS_DESCRS_14[] PROGMEM = "Test accel sample rate check if non-zero.";\
+ static const char REGS_DESCRS_15[] PROGMEM = "Tilt filter constant for value returned to master .";\
+ static const char REGS_DESCRS_16[] PROGMEM = "Tilt filter constant for tilt motion discrimination.";\
+ static const char REGS_DESCRS_17[] PROGMEM = "Threshold for tilt motion discrimination.";\
                                                                                         \
  static const char* const REGS_DESCRS[] PROGMEM = {                                     \
    REGS_DESCRS_0,                                                                       \
@@ -156,6 +170,8 @@ enum {
    REGS_DESCRS_13,                                                                      \
    REGS_DESCRS_14,                                                                      \
    REGS_DESCRS_15,                                                                      \
+   REGS_DESCRS_16,                                                                      \
+   REGS_DESCRS_17,                                                                      \
  }
 
 // Declare a multiline string description of the fields.

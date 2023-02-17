@@ -33,10 +33,10 @@ enum {
 #define CFG_VER_MINOR 0
 
 // Build number incremented with each build by cfg-set-build.py script. 
-#define CFG_BUILD_NUMBER 619
+#define CFG_BUILD_NUMBER 648
 
 // Timestamp in ISO8601 format set by cfg-set-build.py script.
-#define CFG_BUILD_TIMESTAMP "20230208T172929"
+#define CFG_BUILD_TIMESTAMP "20230217T164308"
 
 // Do not edit below this line......
 

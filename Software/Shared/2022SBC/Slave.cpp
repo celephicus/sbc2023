@@ -22,11 +22,14 @@ void cmdRun(uint16_t cmd);
 // Console
 static void print_banner() { consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CFG_BANNER_STR)); }
 static bool console_cmds_user(char* cmd) {
+	static int32_t f_acc;
   switch (console_hash(cmd)) {
 	case /** ?VER **/ 0xc33b: print_banner(); break;
-
+	case /** F **/ 0xb5e3:  consolePrint(CFMT_D, utilsFilter(&f_acc, console_u_pop(), 3, false)); break;
 	// Command processor.
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
     case /** CMD **/ 0xd00f: cmdRun(console_u_pop()); break;
+#endif
 
 	// Driver
     case /** LED **/ 0xdc88: driverSetLedPattern(console_u_pop()); break;
@@ -221,15 +224,18 @@ enum {
 	// No-op, also flags command processor as idle.
 	CMD_IDLE = 0,
 
+	// Stop motion.
+	CMD_STOP = 1,
+	
 	// Timed motion of a single axis. Error code RELAY_FAIL.
-	CMD_HEAD_UP = 1,
-	CMD_HEAD_DOWN = 2,
-	CMD_LEG_UP = 3,
-	CMD_LEG_DOWN = 4,
-	CMD_BED_UP = 5,
-	CMD_BED_DOWN = 5,
-	CMD_TILT_UP = 6,
-	CMD_TILT_DOWN = 7,
+	CMD_HEAD_UP = 2,
+	CMD_HEAD_DOWN = 3,
+	CMD_LEG_UP = 4,
+	CMD_LEG_DOWN = 5,
+	CMD_BED_UP = 6,
+	CMD_BED_DOWN = 7,
+	CMD_TILT_UP = 8,
+	CMD_TILT_DOWN = 9,
 
 	// Save current position as a preset. Error codes SENSOR_FAIL_x.
 	CMD_SAVE_POS_1 = 100,
@@ -323,6 +329,14 @@ static bool is_preset_valid(uint8_t idx) {
 	}
 	return true;
 }
+static bool  check_stop_command() {
+	if (CMD_STOP == f_cmd_req) {
+		REGS[REGS_IDX_CMD_ACTIVE] = CMD_STOP;
+		f_cmd_req = CMD_IDLE;
+		return true;
+	}
+	return false;
+}
 static int8_t thread_cmd(void* arg) {
 	(void)arg;
 	const bool avail = driverSensorUpdateAvailable();
@@ -354,11 +368,11 @@ static int8_t thread_cmd(void* arg) {
 			regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_DOWN);
 
 do_manual:	cmd_start();
-			if (check_relay())
+			if (check_relay())		// On relay fail set fault status for command. 
 				REGS[REGS_IDX_RELAY_STATE] = RELAY_STOP;
 			else {
 				THREAD_START_DELAY();
-				THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(RELAY_RUN_DURATION_MS));
+				THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(RELAY_RUN_DURATION_MS) || check_stop_command());
 				if (REGS[REGS_IDX_CMD_ACTIVE] == f_cmd_req) {	// If repeat of previous, restart timing. If not then active register will either have new command or idle.
 					f_cmd_req = CMD_IDLE;
 					goto do_manual;
@@ -378,7 +392,7 @@ do_manual:	cmd_start();
 			cmd_start();
 			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - CMD_SAVE_POS_1;
 			if (!check_sensors()) {		// All _enabled_ sensors OK.
-				fori (CFG_TILT_SENSOR_COUNT) // Read sennsor value or force it to invalid is not enabled.
+				fori (CFG_TILT_SENSOR_COUNT) // Read sensor value or force it to invalid is not enabled.
 					driverPresets(preset_idx)[i] = (REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i)) ? REGS[REGS_IDX_TILT_SENSOR_0 + i] : SBC2022_MODBUS_TILT_FAULT;
 				cmd_done(CMD_STATUS_OK);
 			}
@@ -394,42 +408,42 @@ do_manual:	cmd_start();
 		case CMD_RESTORE_POS_4: {
 			cmd_start();
 			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - CMD_RESTORE_POS_1;
-			if (!is_preset_valid(preset_idx))
+			if (!is_preset_valid(preset_idx)) {				// Invalid preset, abort. 
 				cmd_done(CMD_STATUS_PRESET_INVALID);
-			else if (!check_sensors() && !check_relay()) {	// Only proceed if nothing broken.
+				break;
+			}
+			
+			// Preset good, start slewing...
+			while ((!check_sensors()) && (!check_relay()) && (!check_stop_command())) {
+				THREAD_WAIT_UNTIL(avail);		// Wait for new reading. 
+				int8_t dir = (int8_t)get_slew_dir(preset_idx, 0);
 
-				// Decide whether to move...
-				const int16_t dir = get_slew_dir(preset_idx, 0);
-				if (dir < 0) {
-					regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_HEAD_MASK, AXIS_SLEW_HEAD_DOWN);
-					regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_DOWN);
+				if (REGS[REGS_IDX_AXIS_SLEW_STATE] & (AXIS_SLEW_HEAD_MASK|AXIS_SLEW_FOOT_MASK)) {	// If we are moving, check for position reached.
+					// TODO: Check for dir changing sign, indicating overrun. 
+					if (0 == dir)	// We appear to have arrived...
+						break;
 				}
-				else if (dir > 0) {
-					regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_HEAD_MASK, AXIS_SLEW_HEAD_UP);
-					regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_UP);
-				}
-
-				// If we need to move...
-				if (dir != 0) {
-					while (1) {
-						THREAD_WAIT_UNTIL(avail);		// Wait for new reading.
-
-						if (check_sensors() || check_relay()) 	// Something is broken...
-							break;
-						else {
-							const int16_t dir = get_slew_dir(preset_idx, 0);
-							if (0 == dir)
-								break;
-						THREAD_YIELD();
-						}
+				else {															// If not moving, turn on motors. 
+					if (dir < 0) {
+						regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_HEAD_MASK, AXIS_SLEW_HEAD_DOWN);
+						regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_DOWN);
 					}
+					else if (dir > 0) {
+						regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_HEAD_MASK, AXIS_SLEW_HEAD_UP);
+						regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_UP);
+					}
+					else // No slew necessary...
+						break;
 				}
+				THREAD_YIELD();	// We need to yield to allow the flag to be updated at the start of the thread. 
+			}	// Closes `while (1) {' ... 
 
-				// Stop and let axis motors rundown...
+			// Stop and let axis motors rundown if they are moving...
+			if (REGS[REGS_IDX_AXIS_SLEW_STATE] & (AXIS_SLEW_HEAD_MASK|AXIS_SLEW_FOOT_MASK)) {
 				regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_HEAD_MASK|AXIS_SLEW_FOOT_MASK, AXIS_SLEW_STOP);
 				REGS[REGS_IDX_RELAY_STATE] = RELAY_STOP;
 				THREAD_DELAY(100);
-			}
+			}	
 
 			// If no error set success status.
 			if (CMD_STATUS_PENDING == REGS[REGS_IDX_CMD_STATUS])
@@ -477,6 +491,7 @@ void loop() {
 
 void debugRuntimeError(int fileno, int lineno, int errorno) {
 	wdt_reset();
+
 
 	// Write a message to the serial port.
 	consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CONSOLE_OUTPUT_NEWLINE_STR CONSOLE_OUTPUT_NEWLINE_STR "Abort:"));

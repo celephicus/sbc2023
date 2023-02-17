@@ -22,6 +22,8 @@ TILT_SENSOR_1 [signed] "Tilt angle sensor 1 scaled 1000/90Deg."
 RELAY_STATUS "Status from Relay Module."
 SENSOR_STATUS_0 "Status from Sensor Module 0."
 SENSOR_STATUS_1 "Status from Sensor Module 1."
+RELAY_FAULT_COUNTER "Counts number of Relay faults."
+SENSOR_FAULT_COUNTER "Counts number of Sensor faults."
 RELAY_STATE "Value written to relays."
 UPDATE_COUNT "Incremented on each update cycle."
 CMD_ACTIVE "Current running command."
@@ -36,7 +38,7 @@ ENABLES [nv hex 0x0000] "Enable flags."
 	DUMP_REGS [2] "Regs values dump to console."
 	DUMP_REGS_FAST [3] "Dump at 5/s rather than 1/s."
 	DISABLE_BLINKY_LED [15] "Disable setting Blinky Led from fault states."
-SLEW_DEADBAND [20 nv] "If delta tilt less than deadband then stop."
+SLEW_DEADBAND [5 nv] "If delta tilt less than deadband then stop."
 
 >>>  Definition end, declaration start... */
 
@@ -52,24 +54,26 @@ enum {
     REGS_IDX_RELAY_STATUS = 7,
     REGS_IDX_SENSOR_STATUS_0 = 8,
     REGS_IDX_SENSOR_STATUS_1 = 9,
-    REGS_IDX_RELAY_STATE = 10,
-    REGS_IDX_UPDATE_COUNT = 11,
-    REGS_IDX_CMD_ACTIVE = 12,
-    REGS_IDX_CMD_STATUS = 13,
-    REGS_IDX_SLAVE_ENABLE = 14,
-    REGS_IDX_ENABLES = 15,
-    REGS_IDX_SLEW_DEADBAND = 16,
-    COUNT_REGS = 17
+    REGS_IDX_RELAY_FAULT_COUNTER = 10,
+    REGS_IDX_SENSOR_FAULT_COUNTER = 11,
+    REGS_IDX_RELAY_STATE = 12,
+    REGS_IDX_UPDATE_COUNT = 13,
+    REGS_IDX_CMD_ACTIVE = 14,
+    REGS_IDX_CMD_STATUS = 15,
+    REGS_IDX_SLAVE_ENABLE = 16,
+    REGS_IDX_ENABLES = 17,
+    REGS_IDX_SLEW_DEADBAND = 18,
+    COUNT_REGS = 19
 };
 
 // Define the start of the NV regs. The region is from this index up to the end of the register array.
 #define REGS_START_NV_IDX REGS_IDX_SLAVE_ENABLE
 
 // Define default values for the NV segment.
-#define REGS_NV_DEFAULT_VALS 17, 0, 20
+#define REGS_NV_DEFAULT_VALS 17, 0, 5
 
 // Define how to format the reg when printing.
-#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U
+#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U
 
 // Flags/masks for register FLAGS.
 enum {
@@ -109,13 +113,15 @@ enum {
  static const char REGS_NAMES_7[] PROGMEM = "RELAY_STATUS";                             \
  static const char REGS_NAMES_8[] PROGMEM = "SENSOR_STATUS_0";                          \
  static const char REGS_NAMES_9[] PROGMEM = "SENSOR_STATUS_1";                          \
- static const char REGS_NAMES_10[] PROGMEM = "RELAY_STATE";                             \
- static const char REGS_NAMES_11[] PROGMEM = "UPDATE_COUNT";                            \
- static const char REGS_NAMES_12[] PROGMEM = "CMD_ACTIVE";                              \
- static const char REGS_NAMES_13[] PROGMEM = "CMD_STATUS";                              \
- static const char REGS_NAMES_14[] PROGMEM = "SLAVE_ENABLE";                            \
- static const char REGS_NAMES_15[] PROGMEM = "ENABLES";                                 \
- static const char REGS_NAMES_16[] PROGMEM = "SLEW_DEADBAND";                           \
+ static const char REGS_NAMES_10[] PROGMEM = "RELAY_FAULT_COUNTER";                     \
+ static const char REGS_NAMES_11[] PROGMEM = "SENSOR_FAULT_COUNTER";                    \
+ static const char REGS_NAMES_12[] PROGMEM = "RELAY_STATE";                             \
+ static const char REGS_NAMES_13[] PROGMEM = "UPDATE_COUNT";                            \
+ static const char REGS_NAMES_14[] PROGMEM = "CMD_ACTIVE";                              \
+ static const char REGS_NAMES_15[] PROGMEM = "CMD_STATUS";                              \
+ static const char REGS_NAMES_16[] PROGMEM = "SLAVE_ENABLE";                            \
+ static const char REGS_NAMES_17[] PROGMEM = "ENABLES";                                 \
+ static const char REGS_NAMES_18[] PROGMEM = "SLEW_DEADBAND";                           \
                                                                                         \
  static const char* const REGS_NAMES[] PROGMEM = {                                      \
    REGS_NAMES_0,                                                                        \
@@ -135,6 +141,8 @@ enum {
    REGS_NAMES_14,                                                                       \
    REGS_NAMES_15,                                                                       \
    REGS_NAMES_16,                                                                       \
+   REGS_NAMES_17,                                                                       \
+   REGS_NAMES_18,                                                                       \
  }
 
 // Declare an array of description text for each register.
@@ -149,13 +157,15 @@ enum {
  static const char REGS_DESCRS_7[] PROGMEM = "Status from Relay Module.";               \
  static const char REGS_DESCRS_8[] PROGMEM = "Status from Sensor Module 0.";            \
  static const char REGS_DESCRS_9[] PROGMEM = "Status from Sensor Module 1.";            \
- static const char REGS_DESCRS_10[] PROGMEM = "Value written to relays.";               \
- static const char REGS_DESCRS_11[] PROGMEM = "Incremented on each update cycle.";      \
- static const char REGS_DESCRS_12[] PROGMEM = "Current running command.";               \
- static const char REGS_DESCRS_13[] PROGMEM = "Status from previous command.";          \
- static const char REGS_DESCRS_14[] PROGMEM = "Enable comms to slaves.";                \
- static const char REGS_DESCRS_15[] PROGMEM = "Enable flags.";                          \
- static const char REGS_DESCRS_16[] PROGMEM = "If delta tilt less than deadband then stop.";\
+ static const char REGS_DESCRS_10[] PROGMEM = "Counts number of Relay faults.";         \
+ static const char REGS_DESCRS_11[] PROGMEM = "Counts number of Sensor faults.";        \
+ static const char REGS_DESCRS_12[] PROGMEM = "Value written to relays.";               \
+ static const char REGS_DESCRS_13[] PROGMEM = "Incremented on each update cycle.";      \
+ static const char REGS_DESCRS_14[] PROGMEM = "Current running command.";               \
+ static const char REGS_DESCRS_15[] PROGMEM = "Status from previous command.";          \
+ static const char REGS_DESCRS_16[] PROGMEM = "Enable comms to slaves.";                \
+ static const char REGS_DESCRS_17[] PROGMEM = "Enable flags.";                          \
+ static const char REGS_DESCRS_18[] PROGMEM = "If delta tilt less than deadband then stop.";\
                                                                                         \
  static const char* const REGS_DESCRS[] PROGMEM = {                                     \
    REGS_DESCRS_0,                                                                       \
@@ -175,6 +185,8 @@ enum {
    REGS_DESCRS_14,                                                                      \
    REGS_DESCRS_15,                                                                      \
    REGS_DESCRS_16,                                                                      \
+   REGS_DESCRS_17,                                                                      \
+   REGS_DESCRS_18,                                                                      \
  }
 
 // Declare a multiline string description of the fields.

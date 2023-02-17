@@ -293,13 +293,16 @@ bool utilsMultiThreshold(const uint16_t* thresholds, uint8_t count, uint16_t hys
 	In order not to lose precision we do the calculation scaled by a power of 2, 2^k, which can be calculated by shifting. This does require
 	an accumulator to hold the scaled value of y.
 */
-template <typename T>
-void utilsFilterInit(T* accum, uint16_t input, uint8_t k) { utilsFilter(accum, input, k, true); }
-
-template <typename T>
-uint16_t utilsFilter(T* accum, uint16_t input, uint8_t k, bool reset) {
-	*accum = reset ? ((T)input << k) : (*accum - (*accum >> k) + (T)input);
-	return (uint16_t)(*accum >> k);
+#define UTILS_IS_SIGNED(type_) ((type_)-1 < 0)
+template <typename T, typename U>
+T utilsFilter(U* accum, T input, uint8_t k, bool reset) {
+#if ( (-1 >> 1) != -1 )	// Compiler does not implement arithmetic shift of negative numbers. 
+	UTILS_STATIC_ASSERT(!UTILS_IS_SIGNED(T));
+	UTILS_STATIC_ASSERT(!UTILS_IS_SIGNED(U));
+#endif
+	UTILS_STATIC_ASSERT(UTILS_IS_SIGNED(T) == UTILS_IS_SIGNED(U));	// Both types must be signed, or both unsigned.
+	*accum = reset ? ((U)input << k) : (*accum - (*accum >> k) + (U)input);
+	return (T)(*accum >> k);
 }
 
 /* Simple implementation of strtoul for unsigned ints. String may have leading whitespace and an optional leading '+'. Then digits up to one
