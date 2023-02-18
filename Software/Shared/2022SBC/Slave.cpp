@@ -14,7 +14,7 @@
 FILENUM(1);
 
 /* Perform a command, one of CMD_xxx. If a commandis currently running, it will be queued and run when the pending command repeats. The currently running command
- * is availablein register CMD_ACTIVE. The command status is in register CMD_STATUS. If a command is running, the status will be CMD_STATUS_PENDING. On completion,
+ * is available in register CMD_ACTIVE. The command status is in register CMD_STATUS. If a command is running, the status will be CMD_STATUS_PENDING. On completion,
  * the status is either CMD_STATUS_OK or an error code.
  */
 void cmdRun(uint16_t cmd);
@@ -219,7 +219,11 @@ static void service_blinky_led_warnings() {
 #include "thread.h"
 UTILS_STATIC_ASSERT(CFG_TILT_SENSOR_COUNT <= SBC2022_MODBUS_SLAVE_COUNT_SENSOR);
 
-/* Command processor uses a single register to set a command, and a single extra register to get the status. */
+/* Command processor runs a single command at a time, with a single level queue. On accepting a new command, a status is set to PENDING from IDLE.
+ * On completion, the status is set to OK or an error code.
+ * The STOP command is special as it will interrupt any command immediately. */
+
+// TODO: Reassign values?
 enum {
 	// No-op, also flags command processor as idle.
 	CMD_IDLE = 0,
@@ -265,21 +269,23 @@ enum {
 	CMD_STATUS_NO_MOTION_1 = 21,	// No motion detected on sensor 1.
 };
 
-// We need a way of controlling the relays to drive each of the 4 axes independently.
+// Relays are assigned in parallel with move commands like CMD_HEAD_UP. Only one relay of each set can be active at a time.
 enum {
 	RELAY_STOP = 0,				// Stops any axis.
 
-	RELAY_HEAD_UP = 0x02, RELAY_HEAD_DOWN = 0x03, RELAY_HEAD_MASK = 0x03,
-};
+	RELAY_HEAD_UP = 0x01,
+	RELAY_HEAD_DOWN = 0x02,
+	RELAY_LEG_UP = 0x04,
+	RELAY_LEG_DOWN = 0x08,
+	RELAY_BED_UP = 0x10,
+	RELAY_BED_DOWN = 0x20,
+	RELAY_TILT_UP = 0x40,
+	RELAY_TILT_DOWN = 0x80,
 
-// Each axis that can be slewed to a preset position has a set of flags that show whether it is stopped, or slewing up or down.
-// Intentionally not combined with the relay state.
-enum {
-	AXIS_SLEW_STOP = 0,
-
-	AXIS_SLEW_HEAD_UP = 0x01, AXIS_SLEW_HEAD_DOWN = 0x02, AXIS_SLEW_HEAD_MASK = 0x03,
-	AXIS_SLEW_FOOT_UP = 0x04, AXIS_SLEW_FOOT_DOWN = 0x08, AXIS_SLEW_FOOT_MASK = 0x0c,
-
+	RELAY_HEAD_MASK = 0x03,
+	RELAY_LEG_MASK = 0x0c,
+	RELAY_BED_MASK = 0x30,
+	RELAY_TILT_MASK = 0xc0,
 };
 
 static const uint16_t RELAY_RUN_DURATION_MS = 1000U;
@@ -296,22 +302,28 @@ static int16_t get_slew_dir(uint8_t preset_idx, uint8_t sensor_idx) {
 	return utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_DEADBAND]);
 }
 
+// Really place holders, start called when command started, stop may be called multiple times but only has an effect the first time.
 static void cmd_start() {
 	REGS[REGS_IDX_CMD_STATUS] = CMD_STATUS_PENDING;
 }
-static void cmd_done(uint16_t status) {
-	REGS[REGS_IDX_CMD_ACTIVE] = CMD_IDLE;
-	REGS[REGS_IDX_CMD_STATUS] = status;
+static void cmd_done(uint16_t status=CMD_STATUS_OK) {
+	assert ((CMD_STATUS_PENDING == REGS[REGS_IDX_CMD_STATUS]) || (CMD_IDLE == REGS[REGS_IDX_CMD_ACTIVE]));
+
+	if (CMD_STATUS_PENDING == REGS[REGS_IDX_CMD_STATUS]) {		// If no error set success status.
+		REGS[REGS_IDX_CMD_ACTIVE] = CMD_IDLE;
+		REGS[REGS_IDX_CMD_STATUS] = status;
+	}
 }
-static bool check_relay() {
-	//if (regsFlags() & REGS_FLAGS_MASK_RELAY_MODULE_FAIL) {	// If relay fault clear relay command and set fail status.
+
+static bool check_relay() {		// If relay fault set fail status.
+	// TODO: check if relay enabled. If disabled, flag fail.
 	if (regsFlags() & REGS_FLAGS_MASK_RELAY_FAULT) {
 		cmd_done(CMD_STATUS_RELAY_FAIL);
 		return true;
 	}
 	return false;
 }
-static bool check_sensors() {
+static bool check_sensors() {		// If sensor fault set fail status.
 	const int8_t sensor_fault_idx = driverGetFaultySensor();
 	if (sensor_fault_idx >= 0) {
 		cmd_done(CMD_STATUS_SENSOR_FAIL_0 + sensor_fault_idx);
@@ -342,8 +354,9 @@ static bool  check_stop_command() {
 }
 static int8_t thread_cmd(void* arg) {
 	(void)arg;
-	const bool avail = driverSensorUpdateAvailable();
 	static uint8_t preset_idx;
+
+	const bool avail = driverSensorUpdateAvailable();	// Check for new sensor data every time thread is run.
 
 	THREAD_BEGIN();
 	while (1) {
@@ -369,20 +382,20 @@ static int8_t thread_cmd(void* arg) {
 			regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_DOWN);
 
 do_manual:	cmd_start();
-			if (check_relay())		// On relay fail set fault status for command.
-				REGS[REGS_IDX_RELAY_STATE] = RELAY_STOP;
-			else {
+			if (!check_relay()) {	// If relay OK...
 				THREAD_START_DELAY();
 				THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(RELAY_RUN_DURATION_MS) || check_stop_command());
 				if (REGS[REGS_IDX_CMD_ACTIVE] == f_cmd_req) {	// If repeat of previous, restart timing. If not then active register will either have new command or idle.
+					cmd_done();
 					load_command();
 					goto do_manual;
 				}
-				REGS[REGS_IDX_RELAY_STATE] = RELAY_STOP;
-				THREAD_START_DELAY();
-				THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(RELAY_STOP_DURATION_MS));
-				cmd_done(CMD_STATUS_OK);
 			}
+
+			REGS[REGS_IDX_RELAY_STATE] = RELAY_STOP;
+			THREAD_START_DELAY();
+			THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(RELAY_STOP_DURATION_MS));
+			cmd_done();
 			THREAD_YIELD();
 			break;
 
@@ -395,11 +408,11 @@ do_manual:	cmd_start();
 			if (!check_sensors()) {		// All _enabled_ sensors OK.
 				fori (CFG_TILT_SENSOR_COUNT) // Read sensor value or force it to invalid is not enabled.
 					driverPresets(preset_idx)[i] = (REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i)) ? REGS[REGS_IDX_TILT_SENSOR_0 + i] : SBC2022_MODBUS_TILT_FAULT;
-				cmd_done(CMD_STATUS_OK);
 			}
 			else
 				driverPresetSetInvalid(preset_idx);
 			// driverNvWrite();
+			cmd_done();
 			THREAD_YIELD();
 			} break;
 
@@ -407,6 +420,7 @@ do_manual:	cmd_start();
 		case CMD_RESTORE_POS_2:
 		case CMD_RESTORE_POS_3:
 		case CMD_RESTORE_POS_4: {
+			regsUpdateMask(REGS_IDX_RELAY_STATE, (RELAY_HEAD_MASK|RELAY_FOOT_MASK), RELAY_STOP);	// Should always be true...
 			cmd_start();
 			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - CMD_RESTORE_POS_1;
 			if (!is_preset_valid(preset_idx)) {				// Invalid preset, abort.
@@ -415,24 +429,24 @@ do_manual:	cmd_start();
 			}
 
 			// Preset good, start slewing...
+			// TODO: Add timeout.
 			while ((!check_sensors()) && (!check_relay()) && (!check_stop_command())) {
 				THREAD_WAIT_UNTIL(avail);		// Wait for new reading.
 				int8_t dir = (int8_t)get_slew_dir(preset_idx, 0);
 
-				if (REGS[REGS_IDX_AXIS_SLEW_STATE] & (AXIS_SLEW_HEAD_MASK|AXIS_SLEW_FOOT_MASK)) {	// If we are moving, check for position reached.
-					// TODO: Check for dir changing sign, indicating overrun.
-					if (0 == dir)	// We appear to have arrived...
+				if (REGS[REGS_IDX_RELAY_STATE] & RELAY_HEAD_DOWN) {	// If we are moving in one direction, check for position reached...
+					if (dir >= 0)
+						break;
+				}
+				else if (REGS[REGS_IDX_RELAY_STATE] & RELAY_HEAD_UP) {		// Or the other...
+					if (dir <= 0)
 						break;
 				}
 				else {															// If not moving, turn on motors.
-					if (dir < 0) {
-						regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_HEAD_MASK, AXIS_SLEW_HEAD_DOWN);
+					if (dir < 0)
 						regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_DOWN);
-					}
-					else if (dir > 0) {
-						regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_HEAD_MASK, AXIS_SLEW_HEAD_UP);
+					else if (dir > 0)
 						regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_UP);
-					}
 					else // No slew necessary...
 						break;
 				}
@@ -440,16 +454,12 @@ do_manual:	cmd_start();
 			}	// Closes `while (1) {' ...
 
 			// Stop and let axis motors rundown if they are moving...
-			if (REGS[REGS_IDX_AXIS_SLEW_STATE] & (AXIS_SLEW_HEAD_MASK|AXIS_SLEW_FOOT_MASK)) {
-				regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_HEAD_MASK|AXIS_SLEW_FOOT_MASK, AXIS_SLEW_STOP);
-				REGS[REGS_IDX_RELAY_STATE] = RELAY_STOP;
-				THREAD_DELAY(100);
+			if (REGS[REGS_IDX_RELAY_STATE] & (RELAY_HEAD_MASK|RELAY_FOOT_MASK)) {
+				regsUpdateMask(REGS_IDX_RELAY_STATE, (RELAY_HEAD_MASK|RELAY_FOOT_MASK), RELAY_HEAD_STOP);
+				THREAD_DELAY(RELAY_STOP_DURATION_MS);
 			}
 
-			// If no error set success status.
-			if (CMD_STATUS_PENDING == REGS[REGS_IDX_CMD_STATUS])
-				cmd_done(CMD_STATUS_OK);
-
+			cmd_done();
 			THREAD_YIELD();
 			} break;
 		}	// Closes `switch (REGS[REGS_IDX_CMD_ACTIVE]) {'
