@@ -226,7 +226,7 @@ enum {
 
 	// Stop motion.
 	CMD_STOP = 1,
-	
+
 	// Timed motion of a single axis. Error code RELAY_FAIL.
 	CMD_HEAD_UP = 2,
 	CMD_HEAD_DOWN = 3,
@@ -329,10 +329,13 @@ static bool is_preset_valid(uint8_t idx) {
 	}
 	return true;
 }
+static void load_command() {
+	REGS[REGS_IDX_CMD_ACTIVE] = f_cmd_req;
+	f_cmd_req = CMD_IDLE;
+}
 static bool  check_stop_command() {
 	if (CMD_STOP == f_cmd_req) {
-		REGS[REGS_IDX_CMD_ACTIVE] = CMD_STOP;
-		f_cmd_req = CMD_IDLE;
+		load_command();
 		return true;
 	}
 	return false;
@@ -344,10 +347,8 @@ static int8_t thread_cmd(void* arg) {
 
 	THREAD_BEGIN();
 	while (1) {
-		if (CMD_IDLE == REGS[REGS_IDX_CMD_ACTIVE]) {		// If idle, load new command.
-			REGS[REGS_IDX_CMD_ACTIVE] = f_cmd_req;			// Most likely still idle.
-			f_cmd_req = CMD_IDLE;
-		}
+		if (CMD_IDLE == REGS[REGS_IDX_CMD_ACTIVE]) 		// If idle, load new command.
+			load_command();			// Most likely still idle.
 
 		switch (REGS[REGS_IDX_CMD_ACTIVE]) {
 		case CMD_IDLE:		// Nothing doing...
@@ -368,13 +369,13 @@ static int8_t thread_cmd(void* arg) {
 			regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_DOWN);
 
 do_manual:	cmd_start();
-			if (check_relay())		// On relay fail set fault status for command. 
+			if (check_relay())		// On relay fail set fault status for command.
 				REGS[REGS_IDX_RELAY_STATE] = RELAY_STOP;
 			else {
 				THREAD_START_DELAY();
 				THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(RELAY_RUN_DURATION_MS) || check_stop_command());
 				if (REGS[REGS_IDX_CMD_ACTIVE] == f_cmd_req) {	// If repeat of previous, restart timing. If not then active register will either have new command or idle.
-					f_cmd_req = CMD_IDLE;
+					load_command();
 					goto do_manual;
 				}
 				REGS[REGS_IDX_RELAY_STATE] = RELAY_STOP;
@@ -408,22 +409,22 @@ do_manual:	cmd_start();
 		case CMD_RESTORE_POS_4: {
 			cmd_start();
 			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - CMD_RESTORE_POS_1;
-			if (!is_preset_valid(preset_idx)) {				// Invalid preset, abort. 
+			if (!is_preset_valid(preset_idx)) {				// Invalid preset, abort.
 				cmd_done(CMD_STATUS_PRESET_INVALID);
 				break;
 			}
-			
+
 			// Preset good, start slewing...
 			while ((!check_sensors()) && (!check_relay()) && (!check_stop_command())) {
-				THREAD_WAIT_UNTIL(avail);		// Wait for new reading. 
+				THREAD_WAIT_UNTIL(avail);		// Wait for new reading.
 				int8_t dir = (int8_t)get_slew_dir(preset_idx, 0);
 
 				if (REGS[REGS_IDX_AXIS_SLEW_STATE] & (AXIS_SLEW_HEAD_MASK|AXIS_SLEW_FOOT_MASK)) {	// If we are moving, check for position reached.
-					// TODO: Check for dir changing sign, indicating overrun. 
+					// TODO: Check for dir changing sign, indicating overrun.
 					if (0 == dir)	// We appear to have arrived...
 						break;
 				}
-				else {															// If not moving, turn on motors. 
+				else {															// If not moving, turn on motors.
 					if (dir < 0) {
 						regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_HEAD_MASK, AXIS_SLEW_HEAD_DOWN);
 						regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_DOWN);
@@ -435,15 +436,15 @@ do_manual:	cmd_start();
 					else // No slew necessary...
 						break;
 				}
-				THREAD_YIELD();	// We need to yield to allow the flag to be updated at the start of the thread. 
-			}	// Closes `while (1) {' ... 
+				THREAD_YIELD();	// We need to yield to allow the flag to be updated at the start of the thread.
+			}	// Closes `while (1) {' ...
 
 			// Stop and let axis motors rundown if they are moving...
 			if (REGS[REGS_IDX_AXIS_SLEW_STATE] & (AXIS_SLEW_HEAD_MASK|AXIS_SLEW_FOOT_MASK)) {
 				regsUpdateMask(REGS_IDX_AXIS_SLEW_STATE, AXIS_SLEW_HEAD_MASK|AXIS_SLEW_FOOT_MASK, AXIS_SLEW_STOP);
 				REGS[REGS_IDX_RELAY_STATE] = RELAY_STOP;
 				THREAD_DELAY(100);
-			}	
+			}
 
 			// If no error set success status.
 			if (CMD_STATUS_PENDING == REGS[REGS_IDX_CMD_STATUS])
