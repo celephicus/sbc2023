@@ -334,7 +334,7 @@ static bool check_sensors() {		// If sensor fault set fail status.
 static bool is_preset_valid(uint8_t idx) {
 	fori(CFG_TILT_SENSOR_COUNT) {
 		if (
-		  (REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i)) &&
+		  (!(REGS[REGS_IDX_SLAVE_DISABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i))) &&
 		  (SBC2022_MODBUS_TILT_FAULT == driverPresets(idx)[i])
 		)
 			return false;
@@ -407,7 +407,8 @@ do_manual:	cmd_start();
 			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - CMD_SAVE_POS_1;
 			if (!check_sensors()) {		// All _enabled_ sensors OK.
 				fori (CFG_TILT_SENSOR_COUNT) // Read sensor value or force it to invalid is not enabled.
-					driverPresets(preset_idx)[i] = (REGS[REGS_IDX_SLAVE_ENABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i)) ? REGS[REGS_IDX_TILT_SENSOR_0 + i] : SBC2022_MODBUS_TILT_FAULT;
+					driverPresets(preset_idx)[i] = (!(REGS[REGS_IDX_SLAVE_DISABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i))) ?
+					  REGS[REGS_IDX_TILT_SENSOR_0 + i] : SBC2022_MODBUS_TILT_FAULT;
 			}
 			else
 				driverPresetSetInvalid(preset_idx);
