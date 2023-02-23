@@ -35,7 +35,7 @@ class GPIOParse(csv_parser.CSVparse):
 	def validate_col_Port(self, port): # pylint: disable=no-self-use,invalid-name
 		"Expected either blank or port like `PA3'"
 		if port.startswith('P'):
-			mport = re.match(r'P([A-D])([0-7])$', port)	# Parse out port, bit from like `PA3'.
+			mport = re.match(r'P([A-Z])([0-7])$', port)	# Parse out port, bit from like `PA3'.
 			assert mport
 			self.add_extra('io_port', mport.group(1))
 			self.add_extra('io_bit', int(mport.group(2)))
