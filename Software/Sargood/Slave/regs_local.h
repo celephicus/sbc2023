@@ -18,9 +18,9 @@ ADC_VOLTS_MON_BUS "Raw ADC Bus volts."
 VOLTS_MON_BUS "Bus volts /mV."
 TILT_SENSOR_0 [signed] "Tilt angle sensor 0 scaled 1000/90Deg."
 TILT_SENSOR_1 [signed] "Tilt angle sensor 1 scaled 1000/90Deg."
-RELAY_STATUS "Status from Relay Module."
 SENSOR_STATUS_0 "Status from Sensor Module 0."
 SENSOR_STATUS_1 "Status from Sensor Module 1."
+RELAY_STATUS "Status from Relay Module."
 RELAY_FAULT_COUNTER "Counts number of Relay faults."
 SENSOR_FAULT_COUNTER "Counts number of Sensor faults."
 RELAY_STATE "Value written to relays."
@@ -43,35 +43,34 @@ SLEW_DEADBAND [5 nv] "If delta tilt less than deadband then stop."
 // Declare the indices to the registers.
 enum {
     REGS_IDX_FLAGS = 0,
-    REGS_IDX_AXIS_SLEW_STATE = 1,
-    REGS_IDX_RESTART = 2,
-    REGS_IDX_ADC_VOLTS_MON_BUS = 3,
-    REGS_IDX_VOLTS_MON_BUS = 4,
-    REGS_IDX_TILT_SENSOR_0 = 5,
-    REGS_IDX_TILT_SENSOR_1 = 6,
-    REGS_IDX_RELAY_STATUS = 7,
-    REGS_IDX_SENSOR_STATUS_0 = 8,
-    REGS_IDX_SENSOR_STATUS_1 = 9,
-    REGS_IDX_RELAY_FAULT_COUNTER = 10,
-    REGS_IDX_SENSOR_FAULT_COUNTER = 11,
-    REGS_IDX_RELAY_STATE = 12,
-    REGS_IDX_UPDATE_COUNT = 13,
-    REGS_IDX_CMD_ACTIVE = 14,
-    REGS_IDX_CMD_STATUS = 15,
-    REGS_IDX_SLAVE_ENABLE = 16,
-    REGS_IDX_ENABLES = 17,
-    REGS_IDX_SLEW_DEADBAND = 18,
-    COUNT_REGS = 19
+    REGS_IDX_RESTART = 1,
+    REGS_IDX_ADC_VOLTS_MON_BUS = 2,
+    REGS_IDX_VOLTS_MON_BUS = 3,
+    REGS_IDX_TILT_SENSOR_0 = 4,
+    REGS_IDX_TILT_SENSOR_1 = 5,
+    REGS_IDX_SENSOR_STATUS_0 = 6,
+    REGS_IDX_SENSOR_STATUS_1 = 7,
+    REGS_IDX_RELAY_STATUS = 8,
+    REGS_IDX_RELAY_FAULT_COUNTER = 9,
+    REGS_IDX_SENSOR_FAULT_COUNTER = 10,
+    REGS_IDX_RELAY_STATE = 11,
+    REGS_IDX_UPDATE_COUNT = 12,
+    REGS_IDX_CMD_ACTIVE = 13,
+    REGS_IDX_CMD_STATUS = 14,
+    REGS_IDX_SLAVE_DISABLE = 15,
+    REGS_IDX_ENABLES = 16,
+    REGS_IDX_SLEW_DEADBAND = 17,
+    COUNT_REGS = 18
 };
 
 // Define the start of the NV regs. The region is from this index up to the end of the register array.
-#define REGS_START_NV_IDX REGS_IDX_SLAVE_ENABLE
+#define REGS_START_NV_IDX REGS_IDX_SLAVE_DISABLE
 
 // Define default values for the NV segment.
-#define REGS_NV_DEFAULT_VALS 17, 0, 5
+#define REGS_NV_DEFAULT_VALS 2, 0, 5
 
 // Define how to format the reg when printing.
-#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U
+#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U
 
 // Flags/masks for register FLAGS.
 enum {
@@ -83,11 +82,10 @@ enum {
     	REGS_FLAGS_MASK_WATCHDOG_RESTART = (int)0x8000,
 };
 
-// Flags/masks for register SLAVE_ENABLE.
+// Flags/masks for register SLAVE_DISABLE.
 enum {
-    	REGS_SLAVE_ENABLE_MASK_TILT_0 = (int)0x1,
-    	REGS_SLAVE_ENABLE_MASK_TILT_1 = (int)0x2,
-    	REGS_SLAVE_ENABLE_MASK_RELAY = (int)0x10,
+    	REGS_SLAVE_DISABLE_MASK_TILT_0 = (int)0x1,
+    	REGS_SLAVE_DISABLE_MASK_TILT_1 = (int)0x2,
 };
 
 // Flags/masks for register ENABLES.
@@ -102,24 +100,23 @@ enum {
 // Declare an array of names for each register.
 #define DECLARE_REGS_NAMES()                                                            \
  static const char REGS_NAMES_0[] PROGMEM = "FLAGS";                                    \
- static const char REGS_NAMES_1[] PROGMEM = "AXIS_SLEW_STATE";                          \
- static const char REGS_NAMES_2[] PROGMEM = "RESTART";                                  \
- static const char REGS_NAMES_3[] PROGMEM = "ADC_VOLTS_MON_BUS";                        \
- static const char REGS_NAMES_4[] PROGMEM = "VOLTS_MON_BUS";                            \
- static const char REGS_NAMES_5[] PROGMEM = "TILT_SENSOR_0";                            \
- static const char REGS_NAMES_6[] PROGMEM = "TILT_SENSOR_1";                            \
- static const char REGS_NAMES_7[] PROGMEM = "RELAY_STATUS";                             \
- static const char REGS_NAMES_8[] PROGMEM = "SENSOR_STATUS_0";                          \
- static const char REGS_NAMES_9[] PROGMEM = "SENSOR_STATUS_1";                          \
- static const char REGS_NAMES_10[] PROGMEM = "RELAY_FAULT_COUNTER";                     \
- static const char REGS_NAMES_11[] PROGMEM = "SENSOR_FAULT_COUNTER";                    \
- static const char REGS_NAMES_12[] PROGMEM = "RELAY_STATE";                             \
- static const char REGS_NAMES_13[] PROGMEM = "UPDATE_COUNT";                            \
- static const char REGS_NAMES_14[] PROGMEM = "CMD_ACTIVE";                              \
- static const char REGS_NAMES_15[] PROGMEM = "CMD_STATUS";                              \
- static const char REGS_NAMES_16[] PROGMEM = "SLAVE_ENABLE";                            \
- static const char REGS_NAMES_17[] PROGMEM = "ENABLES";                                 \
- static const char REGS_NAMES_18[] PROGMEM = "SLEW_DEADBAND";                           \
+ static const char REGS_NAMES_1[] PROGMEM = "RESTART";                                  \
+ static const char REGS_NAMES_2[] PROGMEM = "ADC_VOLTS_MON_BUS";                        \
+ static const char REGS_NAMES_3[] PROGMEM = "VOLTS_MON_BUS";                            \
+ static const char REGS_NAMES_4[] PROGMEM = "TILT_SENSOR_0";                            \
+ static const char REGS_NAMES_5[] PROGMEM = "TILT_SENSOR_1";                            \
+ static const char REGS_NAMES_6[] PROGMEM = "SENSOR_STATUS_0";                          \
+ static const char REGS_NAMES_7[] PROGMEM = "SENSOR_STATUS_1";                          \
+ static const char REGS_NAMES_8[] PROGMEM = "RELAY_STATUS";                             \
+ static const char REGS_NAMES_9[] PROGMEM = "RELAY_FAULT_COUNTER";                      \
+ static const char REGS_NAMES_10[] PROGMEM = "SENSOR_FAULT_COUNTER";                    \
+ static const char REGS_NAMES_11[] PROGMEM = "RELAY_STATE";                             \
+ static const char REGS_NAMES_12[] PROGMEM = "UPDATE_COUNT";                            \
+ static const char REGS_NAMES_13[] PROGMEM = "CMD_ACTIVE";                              \
+ static const char REGS_NAMES_14[] PROGMEM = "CMD_STATUS";                              \
+ static const char REGS_NAMES_15[] PROGMEM = "SLAVE_DISABLE";                           \
+ static const char REGS_NAMES_16[] PROGMEM = "ENABLES";                                 \
+ static const char REGS_NAMES_17[] PROGMEM = "SLEW_DEADBAND";                           \
                                                                                         \
  static const char* const REGS_NAMES[] PROGMEM = {                                      \
    REGS_NAMES_0,                                                                        \
@@ -140,30 +137,28 @@ enum {
    REGS_NAMES_15,                                                                       \
    REGS_NAMES_16,                                                                       \
    REGS_NAMES_17,                                                                       \
-   REGS_NAMES_18,                                                                       \
  }
 
 // Declare an array of description text for each register.
 #define DECLARE_REGS_DESCRS()                                                           \
  static const char REGS_DESCRS_0[] PROGMEM = "Various flags.";                          \
- static const char REGS_DESCRS_1[] PROGMEM = "Tracks which axes are slewing.";          \
- static const char REGS_DESCRS_2[] PROGMEM = "MCUSR in low byte, wdog in high byte.";   \
- static const char REGS_DESCRS_3[] PROGMEM = "Raw ADC Bus volts.";                      \
- static const char REGS_DESCRS_4[] PROGMEM = "Bus volts /mV.";                          \
- static const char REGS_DESCRS_5[] PROGMEM = "Tilt angle sensor 0 scaled 1000/90Deg.";  \
- static const char REGS_DESCRS_6[] PROGMEM = "Tilt angle sensor 1 scaled 1000/90Deg.";  \
- static const char REGS_DESCRS_7[] PROGMEM = "Status from Relay Module.";               \
- static const char REGS_DESCRS_8[] PROGMEM = "Status from Sensor Module 0.";            \
- static const char REGS_DESCRS_9[] PROGMEM = "Status from Sensor Module 1.";            \
- static const char REGS_DESCRS_10[] PROGMEM = "Counts number of Relay faults.";         \
- static const char REGS_DESCRS_11[] PROGMEM = "Counts number of Sensor faults.";        \
- static const char REGS_DESCRS_12[] PROGMEM = "Value written to relays.";               \
- static const char REGS_DESCRS_13[] PROGMEM = "Incremented on each update cycle.";      \
- static const char REGS_DESCRS_14[] PROGMEM = "Current running command.";               \
- static const char REGS_DESCRS_15[] PROGMEM = "Status from previous command.";          \
- static const char REGS_DESCRS_16[] PROGMEM = "Enable comms to slaves.";                \
- static const char REGS_DESCRS_17[] PROGMEM = "Enable flags.";                          \
- static const char REGS_DESCRS_18[] PROGMEM = "If delta tilt less than deadband then stop.";\
+ static const char REGS_DESCRS_1[] PROGMEM = "MCUSR in low byte, wdog in high byte.";   \
+ static const char REGS_DESCRS_2[] PROGMEM = "Raw ADC Bus volts.";                      \
+ static const char REGS_DESCRS_3[] PROGMEM = "Bus volts /mV.";                          \
+ static const char REGS_DESCRS_4[] PROGMEM = "Tilt angle sensor 0 scaled 1000/90Deg.";  \
+ static const char REGS_DESCRS_5[] PROGMEM = "Tilt angle sensor 1 scaled 1000/90Deg.";  \
+ static const char REGS_DESCRS_6[] PROGMEM = "Status from Sensor Module 0.";            \
+ static const char REGS_DESCRS_7[] PROGMEM = "Status from Sensor Module 1.";            \
+ static const char REGS_DESCRS_8[] PROGMEM = "Status from Relay Module.";               \
+ static const char REGS_DESCRS_9[] PROGMEM = "Counts number of Relay faults.";          \
+ static const char REGS_DESCRS_10[] PROGMEM = "Counts number of Sensor faults.";        \
+ static const char REGS_DESCRS_11[] PROGMEM = "Value written to relays.";               \
+ static const char REGS_DESCRS_12[] PROGMEM = "Incremented on each update cycle.";      \
+ static const char REGS_DESCRS_13[] PROGMEM = "Current running command.";               \
+ static const char REGS_DESCRS_14[] PROGMEM = "Status from previous command.";          \
+ static const char REGS_DESCRS_15[] PROGMEM = "Disable errors from selected sensors.";  \
+ static const char REGS_DESCRS_16[] PROGMEM = "Enable flags.";                          \
+ static const char REGS_DESCRS_17[] PROGMEM = "If delta tilt less than deadband then stop.";\
                                                                                         \
  static const char* const REGS_DESCRS[] PROGMEM = {                                     \
    REGS_DESCRS_0,                                                                       \
@@ -184,7 +179,6 @@ enum {
    REGS_DESCRS_15,                                                                      \
    REGS_DESCRS_16,                                                                      \
    REGS_DESCRS_17,                                                                      \
-   REGS_DESCRS_18,                                                                      \
  }
 
 // Declare a multiline string description of the fields.
@@ -197,10 +191,9 @@ enum {
     "\n EEPROM_READ_BAD_0: 13 (EEPROM bank 0 corrupt.)"                                 \
     "\n EEPROM_READ_BAD_1: 14 (EEPROM bank 1 corrupt.)"                                 \
     "\n WATCHDOG_RESTART: 15 (Whoops.)"                                                 \
-    "\nSlave_Enable:"                                                                   \
+    "\nSlave_Disable:"                                                                  \
     "\n TILT_0: 0 (Tilt sensor 0.)"                                                     \
     "\n TILT_1: 1 (Tilt sensor 1.)"                                                     \
-    "\n RELAY: 4 (Relay Module.)"                                                       \
     "\nEnables:"                                                                        \
     "\n DUMP_MODBUS_EVENTS: 0 (Dump MODBUS event value.)"                               \
     "\n DUMP_MODBUS_DATA: 1 (Dump MODBUS data.)"                                        \

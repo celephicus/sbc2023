@@ -16,6 +16,9 @@ bool driverSensorUpdateAvailable();
 
 // Return index of first faulty _AND_ enabled sensor, else -1.
 int8_t driverGetFaultySensor();
+
+bool driverSlaveIsEnabled(uint8_t slave_idx);
+
 #endif
 
 // LED pattern, set this and it will blink away forever.

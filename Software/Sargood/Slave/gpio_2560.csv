@@ -1,31 +1,105 @@
-#Arduino Pro Mini,,,,,,,,,
-"# For Sensor board, similar to Relay board. ",,,,,,,,,
+#Arduino Pin,Signal,Function,Description,Group,Arduino Pin No.,Processor Pin No.,Proc Port,Proc Alt Func,Comment
+D0/RX0,RX0,,,USB Serial,,2,PE0,RXD0/PCINT8,Bootloader/USB
+D1/TX0,TX0,,,USB Serial,,3,PE1,TXD0,Bootloader/USB
+D2,IR_REC,input,IR receiver input,Misc,,6,PE4,OC3B/INT4,PWM
+D3,,,,,,7,PE5,OC3C/INT5,PWM
+D4,LCD_BL,PWM,LCD backlight,LCD,,1,PG5,OC0B,PWM
+D5,,,,,,5,PE3,OC3A/AIN1,PWM
+D6,,,,,,15,PH3,OC4A,PWM
+D7,,,,,,16,PH4,OC4B,PWM
+D8,,,,,,17,PH5,OC4C,PWM
+D9,,,,,,18,PH6,OC2B,PWM
+D10,,,,,,23,PB4,OC2A/PCINT4,PWM
+D11,,,,,,24,PB5,OC1A/PCINT5,PWM
+D12,,,,,,25,PB6,OC1B/PCINT6,PWM
+D13,,,,,,26,PB7,OC0A/OC1C/PCINT7,PWM
+D14/TX3,CONS_TX0,TX3,Console FDTI serial,Console,,64,PJ1,TXD3/PCINT10,
+D15/RX3,CONS_RX0,RX3,Console FDTI serial,Console,,63,PJ0,RXD3/PCINT9,
+D16/TX2,RS485_TXD,TXD,RS485 TX,Bus,,13,PH1,TXD2,
+D17/RX2,RS485_RXD,RXD,RS485 RX,Bus,,12,PH0,RXD2,
+D18/TX1,,,,,,46,PD3,TXD1/INT3,
+D19/RX1,,,,,,45,PD2,RXDI/INT2,
+D20/SDA,,,,,,44,PD1,SDA/INT1,
+D21/SCL,,,,,,43,PD0,SCL/INT0,
+D22,D0,output direct,Spare IO,Spare,,78,PA0,AD0,
+D23,D1,output direct,Spare IO,Spare,,77,PA1,AD1,
+D24,D2,output direct,Spare IO,Spare,,76,PA2,AD2,
+D25,D3,output direct,Spare IO,Spare,,75,PA3,AD3,
+D26,D4,output direct,Spare IO,Spare,,74,PA4,AD4,
+D27,D5,output direct,Spare IO,Spare,,73,PA5,AD5,
+D28,D6,output direct,Spare IO,Spare,,72,PA6,AD6,
+D29,D7,output direct,Spare IO,Spare,,71,PA7,AD7,
+D30,LED,output,Blinky LED,Misc,,60,PC7,A15,
+D31,ATN,output,Pulse high to signal ATN low on bus.,Bus,,59,PC6,A14,
+D32,RS485_TX_EN,output,Enable RS485 xmitter,Bus,,58,PC5,A13,
+D33,TS_RIGHT,input,Touchswitch module,Misc,,57,PC4,A12,
+D34,TS_LEFT,input,Touchswitch module,Misc,,56,PC3,A11,
+D35,TS_MENU,input,Touchswitch module,Misc,,55,PC2,A10,
+D36,TS_RET,input,Touchswitch module,Misc,,54,PC1,A9,
+D37,,,,,,53,PC0,A8,
+D38,,,,,,50,PD7,T0,
+D39,,,,,,70,PG2,ALE,
+D40,,,,,,52,PG1,RD,
+D41,,,,,,51,PG0,WR,
+D44,LCD_E,,,LCD,,40,PL5,OC5C,PWM
+D45,LCD_RS,,,LCD,,39,PL4,OC5B,PWM
+D46,LCD_D7,,,LCD,,38,PL3,OC5A,PWM
+D47,LCD_D6,,,LCD,,37,PL2,T5,
+D48,LCD_D5,,,LCD,,36,PL1,ICP5,
+D49,LCD_D4,,,LCD,,35,PL0,ICP4,
 ,,,,,,,,,
-#Arduino Pin,Signal,Function,Description,Group,Arduino Pin No.,Processor Pin No.,Processor Port,Processor Alternate Function,Comment
-D1/TXO,RS485_TXD,TXD,RS485 TX,Bus,J7/12,31,PD1,TXD/PCINT17,Bootloader
-D0/RXI,RS485_RXD,RXD,RS485 RX,Bus,J7/11,30,PD0,RXD/PCINT16,Bootloader
-D2,ATN,output,Pulse high to signal ATN low on bus.,Bus,J7/8,32,PD2,INT0/PCINT18,
-D3,LCD_BL,output PWM,Active high for LCD backlight. ,LCD,J7/7,1,PD3,PCINT19/OC2B/INT1,PWM
-D4,SPARE_1,output direct,Spare for debugging,Debug,J7/6,2,PD4,PCINT20/XCK/T0,
-D5,SPARE_2,output direct,Spare for debugging,Debug,J7/5,9,PD5,PCINT21/OC0B/T1,PWM
-D6,SPARE_3,output direct,Spare for debugging,Debug,J7/4,10,PD6,PCINT22/OC0A/AIN0,PWM
-D7,IR_RECV,input,,,J7/3,11,PD7,PCINT23/AIN1,
-D8,CONS_RX,input,console serial data in,Console,J7/2,12,PB0,PCINT0/CLKO/ICP1,
-D9,CONS_TX,output,console serial data out,Console,J7/1,13,PB1,PCINT1/OC1A,PWM
-D10,LCD_D4,output,,LCD,J6/12,14,PB2,PCINT2/SS/OC1B,PWM
-D11/MOSI,LCD_D5,output,,LCD,J6/11,15,PB3,PCINT3/OC2A/MOSI,PWM
-D12/MISO,LCD_D6,output,,LCD,J6/10,16,PB4,PCINT4/MISO,
-D13/SCK,LCD_D7,output,,LCD,J6/9,17,PB5,SCK/PCINT5,LED returned to GND.
-A0,LCD_EN,,,LCD,J6/8,23,PC0,ADC0/PCINT8,
-A1,LCD_RS,,,LCD,J6/7,24,PC1,ADC1/PCINT9,
-A2,RS485_TX_EN,output,Enable RS485 xmitter,Bus,J6/6,25,PC2,ADC2/PCINT10,
-A3,LED,output direct,Blinky LED,Misc,J6/5,26,PC3,ADC3/PCINT11,
-A4,,unused,,Spare,,27,PC4,ADC4/SDA/PCINT12,
-A5,,unused,,Spare,,28,PC5,ADC5/SCL/PCINT13,
-A6,,,,Spare,,19,ADC6,ADC6,Analogue input only.
-A7,VOLTS_MON_BUS,ADC7,Monitor volts on bus,Bus,,22,ADC7,ADC7,Analogue input only.
-RST,,,,,"J7/10, J6/3",29,PC6,RESET/PCINT14,
-GND,,,,,"J7/9, J6/2","3, 5, 21",GND,,
-VCC,,,,,J6/4,"4, 6",VCC,,
-RAW,,,,,J6/1,,,,Max 12V.
-,,,,,,7,PB6,PCINT6/XTAL1/TOSC1,Resonator
+D50/MISO,MISO,MISO,ISP,Debug,,22,PB3,MISO/PCINT3,
+D51/MOSI,MOSI,MOSI,ISP,Debug,,21,PB2,MOSI/PCINT2,
+D52/SCK,SCK,SCK,ISP,Debug,,20,PB1,SCK/PCINT1,
+D53/SS,,,,,,19,PB0,SS/PCINT0,
+A0,MON_12V_BUS,A0 ,Monitors 12V bus.,Analogue,,97,PF0,ADC0,
+A1,,,,,,96,PF1,ADC1,
+A2,,,,,,95,PF2,ADC2,
+A3,,,,,,94,PF3,ADC3,
+A4,TCK,TCK,JTAG Debug,Debug,,93,PF4,ADC4/TCK,
+A5,TMS,TMS,JTAG Debug,Debug,,92,PF5,ADC5/TMS,
+A6,TDO,TDO,JTAG Debug,Debug,,91,PF6,ADC6/TDO,
+A7,TDI,TDI,JTAG Debug,Debug,,90,PF7,ADC7/TDI,
+A8,,,,,,89,PK0,ADC8/PCINT16,
+A9,,,,,,88,PK1,ADC9/PCINT17,
+A10,,,,,,87,PK2,ADC10/PCINT18,
+A11,,,,,,86,PK3,ADC11/PCINT19,
+A12,,,,,,85,PK4,ADC12/PCINT20,
+A13,,,,,,84,PK5,ADC13/PCINT21,
+A14,,,,,,83,PK6,ADC14/PCINT22,
+A15,,,,,,82,PK7,ADC15/PCINT23,
+AREF,,,,,,98,AREF,,
+RESET,,,JTAG / ISP,,,30,RESET,RESET,
+3V3,,,,,,,,,
+VIN,,,,,,,,,
+,,,,,,4,PE2,XCK0/AIN0,
+,,,,,,8,PE6,T3/INT6,
+,,,,,,9,PE7,CLKO/ICP3/INT7,
+,,,,,,10,VCC,VCC,
+,,,,,,11,GND,GND,
+,,,,,,14,PH2,XCK2,
+,,,,,,27,PH7,T4,
+,,,,,,28,PG3,TOSC2,
+,,,,,,29,PG4,TOSC1,
+,,,,,,31,VCC,VCC,
+,,,,,,32,GND,GND,
+,,,,,,33,XTAL2,XTAL2,
+,,,,,,34,XTAL1,XTAL1,
+,,,,,,41,PL6,D43,
+,,,,,,42,PL7,D42,
+,,,,,,47,PD4,ICP1,
+,,,,,,48,PD5,XCK1,
+,,,,,,49,PD6,T1,
+,,,,,,61,VCC,VCC,
+,,,,,,62,GND,GND,
+,,,,,,65,PJ2,XCK3/PCINT11,
+,,,,,,66,PJ3,PCINT12,
+,,,,,,67,PJ4,PCINT13,
+,,,,,,68,PJ5,PCINT14,
+,,,,,,69,PJ6,PCINT 15,
+,,,,,,79,PJ7,,
+,,,,,,80,VCC,VCC,
+,,,,,,81,GND,GND,
+,,,,,,,,,
+,,,,,,99,GND,GND,
+,,,,,,100,AVCC,VCC,

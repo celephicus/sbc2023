@@ -275,15 +275,15 @@ enum {
 
 	RELAY_HEAD_UP = 0x01,
 	RELAY_HEAD_DOWN = 0x02,
-	RELAY_LEG_UP = 0x04,
-	RELAY_LEG_DOWN = 0x08,
+	RELAY_FOOT_UP = 0x04,
+	RELAY_FOOT_DOWN = 0x08,
 	RELAY_BED_UP = 0x10,
 	RELAY_BED_DOWN = 0x20,
 	RELAY_TILT_UP = 0x40,
 	RELAY_TILT_DOWN = 0x80,
 
 	RELAY_HEAD_MASK = 0x03,
-	RELAY_LEG_MASK = 0x0c,
+	RELAY_FOOT_MASK = 0x0c,
 	RELAY_BED_MASK = 0x30,
 	RELAY_TILT_MASK = 0xc0,
 };
@@ -307,7 +307,7 @@ static void cmd_start() {
 	REGS[REGS_IDX_CMD_STATUS] = CMD_STATUS_PENDING;
 }
 static void cmd_done(uint16_t status=CMD_STATUS_OK) {
-	assert ((CMD_STATUS_PENDING == REGS[REGS_IDX_CMD_STATUS]) || (CMD_IDLE == REGS[REGS_IDX_CMD_ACTIVE]));
+	ASSERT((CMD_STATUS_PENDING == REGS[REGS_IDX_CMD_STATUS]) || (CMD_IDLE == REGS[REGS_IDX_CMD_ACTIVE]));
 
 	if (CMD_STATUS_PENDING == REGS[REGS_IDX_CMD_STATUS]) {		// If no error set success status.
 		REGS[REGS_IDX_CMD_ACTIVE] = CMD_IDLE;
@@ -316,7 +316,6 @@ static void cmd_done(uint16_t status=CMD_STATUS_OK) {
 }
 
 static bool check_relay() {		// If relay fault set fail status.
-	// TODO: check if relay enabled. If disabled, flag fail.
 	if (regsFlags() & REGS_FLAGS_MASK_RELAY_FAULT) {
 		cmd_done(CMD_STATUS_RELAY_FAIL);
 		return true;
@@ -333,10 +332,7 @@ static bool check_sensors() {		// If sensor fault set fail status.
 }
 static bool is_preset_valid(uint8_t idx) {
 	fori(CFG_TILT_SENSOR_COUNT) {
-		if (
-		  (!(REGS[REGS_IDX_SLAVE_DISABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i))) &&
-		  (SBC2022_MODBUS_TILT_FAULT == driverPresets(idx)[i])
-		)
+		if (driverSlaveIsEnabled(i) && (SBC2022_MODBUS_TILT_FAULT == driverPresets(idx)[i]))
 			return false;
 	}
 	return true;
@@ -407,8 +403,7 @@ do_manual:	cmd_start();
 			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - CMD_SAVE_POS_1;
 			if (!check_sensors()) {		// All _enabled_ sensors OK.
 				fori (CFG_TILT_SENSOR_COUNT) // Read sensor value or force it to invalid is not enabled.
-					driverPresets(preset_idx)[i] = (!(REGS[REGS_IDX_SLAVE_DISABLE] & (REGS_SLAVE_ENABLE_MASK_TILT_0 << i))) ?
-					  REGS[REGS_IDX_TILT_SENSOR_0 + i] : SBC2022_MODBUS_TILT_FAULT;
+					driverPresets(preset_idx)[i] = driverSlaveIsEnabled(i) ?  REGS[REGS_IDX_TILT_SENSOR_0 + i] : SBC2022_MODBUS_TILT_FAULT;
 			}
 			else
 				driverPresetSetInvalid(preset_idx);
@@ -456,7 +451,7 @@ do_manual:	cmd_start();
 
 			// Stop and let axis motors rundown if they are moving...
 			if (REGS[REGS_IDX_RELAY_STATE] & (RELAY_HEAD_MASK|RELAY_FOOT_MASK)) {
-				regsUpdateMask(REGS_IDX_RELAY_STATE, (RELAY_HEAD_MASK|RELAY_FOOT_MASK), RELAY_HEAD_STOP);
+				regsUpdateMask(REGS_IDX_RELAY_STATE, (RELAY_HEAD_MASK|RELAY_FOOT_MASK), RELAY_STOP);
 				THREAD_DELAY(RELAY_STOP_DURATION_MS);
 			}
 
