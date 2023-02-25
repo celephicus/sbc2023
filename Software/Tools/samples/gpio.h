@@ -43,55 +43,40 @@ enum {
 };
 
 // Direct access ports.
+#define CC(a, b) a##b
+#define C(a, b) CC(a, b)
+#define CC3(a, b, c) a##b##c
+#define C3(a, b, c) CC3(a, b, c)
+
+// Generate lots of inline functions to access a port pin.
+#define GPIO_DECLARE_PIN_ACCESS_FUNCS(name_, port_, bit_) 																				
+ static inline void C3(gpio, name_, SetModeOutput)() { C(DDR, port_) |= _BV(bit_); }													
+ static inline void C3(gpio, name_, SetModeInput)() { C(DDR, port_) &= ~_BV(bit_); }													
+ static inline void C3(gpio, name_, SetMode)(bool fout) { if (fout) C(DDR, port_) |= _BV(bit_); else C(DDR, port_) &= ~_BV(bit_);}		
+ static inline bool C3(gpio, name_, Read)() { return !!(C(PIN, port_) | _BV(bit_)); }													
+ static inline void C3(gpio, name_, Toggle)() { C(PORT, port_) ^= _BV(bit_); }															
+ static inline void C3(gpio, name_, Set)() { C(PORT, port_) |= _BV(bit_); }																
+ static inline void C3(gpio, name_, Clear)() { C(PORT, port_) &= ~_BV(bit_); }															
+ static inline void C3(gpio, name_, Write)(bool b) { if (b) C(PORT, port_) |= _BV(bit_); else C(PORT, port_) &= ~_BV(bit_); }			
+
 
 // WDOG: Falling edge pats output relay watchdog.
-static inline void gpioWdogSetModeOutput() { DDRD |= _BV(3; }
-static inline void gpioWdogSetModeInput() { DDRD &= ~_BV(3; }
-static inline void gpioWdogSetMode(bool fout) { if (fout) DDRD |= _BV(3); else DDRD &= ~_BV(3); }
-static inline bool gpioWdogRead() { return PIND | _BV(3); }
-static inline void gpioWdogToggle() { PORTD ^= _BV(3; }
-static inline void gpioWdogSet() { PORTD |= _BV(3; }
-static inline void gpioWdogClear() { PORTD &= ~_BV(3; }
-static inline void gpioWdogWrite(bool b) { if (b) PORTD |= _BV(3); else PORTD &= ~_BV(3); }
+GPIO_DECLARE_PIN_ACCESS_FUNCS(Wdog, D, 3);
 
 // SPARE_3: Spare to adaptor board
-static inline void gpioSpare3SetModeOutput() { DDRB |= _BV(1; }
-static inline void gpioSpare3SetModeInput() { DDRB &= ~_BV(1; }
-static inline void gpioSpare3SetMode(bool fout) { if (fout) DDRB |= _BV(1); else DDRB &= ~_BV(1); }
-static inline bool gpioSpare3Read() { return PINB | _BV(1); }
-static inline void gpioSpare3Toggle() { PORTB ^= _BV(1; }
-static inline void gpioSpare3Set() { PORTB |= _BV(1; }
-static inline void gpioSpare3Clear() { PORTB &= ~_BV(1; }
-static inline void gpioSpare3Write(bool b) { if (b) PORTB |= _BV(1); else PORTB &= ~_BV(1); }
+GPIO_DECLARE_PIN_ACCESS_FUNCS(Spare3, B, 1);
 
 // LED: Blinky LED
-static inline void gpioLedSetModeOutput() { DDRC |= _BV(1; }
-static inline void gpioLedSetModeInput() { DDRC &= ~_BV(1; }
-static inline void gpioLedSetMode(bool fout) { if (fout) DDRC |= _BV(1); else DDRC &= ~_BV(1); }
-static inline bool gpioLedRead() { return PINC | _BV(1); }
-static inline void gpioLedToggle() { PORTC ^= _BV(1; }
-static inline void gpioLedSet() { PORTC |= _BV(1; }
-static inline void gpioLedClear() { PORTC &= ~_BV(1; }
-static inline void gpioLedWrite(bool b) { if (b) PORTC |= _BV(1); else PORTC &= ~_BV(1); }
+GPIO_DECLARE_PIN_ACCESS_FUNCS(Led, C, 1);
 
 // SPARE_1: Spare to adaptor board
-static inline void gpioSpare1SetModeOutput() { DDRC |= _BV(2; }
-static inline void gpioSpare1SetModeInput() { DDRC &= ~_BV(2; }
-static inline void gpioSpare1SetMode(bool fout) { if (fout) DDRC |= _BV(2); else DDRC &= ~_BV(2); }
-static inline bool gpioSpare1Read() { return PINC | _BV(2); }
-static inline void gpioSpare1Toggle() { PORTC ^= _BV(2; }
-static inline void gpioSpare1Set() { PORTC |= _BV(2; }
-static inline void gpioSpare1Clear() { PORTC &= ~_BV(2; }
-static inline void gpioSpare1Write(bool b) { if (b) PORTC |= _BV(2); else PORTC &= ~_BV(2); }
+GPIO_DECLARE_PIN_ACCESS_FUNCS(Spare1, C, 2);
 
 // SPARE_2: Spare to adaptor board
-static inline void gpioSpare2SetModeOutput() { DDRC |= _BV(3; }
-static inline void gpioSpare2SetModeInput() { DDRC &= ~_BV(3; }
-static inline void gpioSpare2SetMode(bool fout) { if (fout) DDRC |= _BV(3); else DDRC &= ~_BV(3); }
-static inline bool gpioSpare2Read() { return PINC | _BV(3); }
-static inline void gpioSpare2Toggle() { PORTC ^= _BV(3; }
-static inline void gpioSpare2Set() { PORTC |= _BV(3; }
-static inline void gpioSpare2Clear() { PORTC &= ~_BV(3; }
-static inline void gpioSpare2Write(bool b) { if (b) PORTC |= _BV(3); else PORTC &= ~_BV(3); }
+GPIO_DECLARE_PIN_ACCESS_FUNCS(Spare2, C, 3);
+#undef CC
+#undef C
+#undef CC3
+#undef C3
 
 #endif   // GPIO_H__

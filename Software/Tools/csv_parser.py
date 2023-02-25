@@ -91,16 +91,16 @@ class CSVparse:
 		self.extra = {}			# Extra data holds anything that the derived class might need, usually from directives.
 
 	def get_error_msg(self, category, msg):
-		"Called from read, formats an error message."
+		"""Called from read, formats an error message."""
 		return f'{os.path.basename(__file__)}: Input file {self.filename}:{self.lineno} {category} {msg}.'
 	def warning(self, msg):
-		"Print a warning message."
+		"""Print a warning message."""
 		print(self.get_error_msg('warning', msg), file=sys.stderr)
 	def error(self, msg):
-		"Print an error message."
+		"""Print an error message."""
 		raise CSVparseError(self.get_error_msg('error', msg))
 	def add_extra(self, key, val):
-		"Add some extra data to a dict."
+		"""Add some extra data to a dict."""
 		self.extra[key] = val
 
 	# Directives start with this string.
@@ -173,6 +173,7 @@ class CSVparse:
 
 # pylint: disable=missing-function-docstring,missing-class-docstring,consider-using-with,invalid-name
 if __name__ == "__main__":
+	"""Sample parser, try changing values in the source string and seeing what errors you get."""
 	from io import StringIO
 	import pprint
 	
