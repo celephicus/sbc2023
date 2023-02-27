@@ -1,6 +1,56 @@
 #ifndef CONSOLE_H__
 #define CONSOLE_H__
 
+/* Easy console for Arduino. To use:
+	Write a function to recognise your commands, e.g. console_cmds_user() below.
+	Run the python script below on your source which computes hashes for the command names and overwrites the values.
+	In setup, start a serial port and call consoleInit() with an open port.
+	Call consoleService in loop().
+*/
+
+#if 0
+" Lines that match `/** <PRINTABLE-CHARS> **/ 0x<hex-chars>:' have the hex chars replaced with a hash of the printable chars. """
+import re, sys
+
+def subber_hash(m):
+    h = 33;		# Magic numbers from Wikipedia article on hashes. 
+    w = m.group(1).upper()
+    for c in w:
+        h = ((h * 5381) & 0xffff) ^ ord(c)
+    return '/** %s **/ 0x%04x' % (w, h)  
+
+text = open(sys.argv[1], 'rt').read()
+text = re.sub(r'/\*\*\s*(\S+)\s*\*\*/\s*(0[x])?([0-9a-z]*)', subber_hash, text, flags=re.I)
+open(infile, 'wt').write(text)
+		
+		
+static bool console_cmds_user(char* cmd) {
+	switch (console_hash(cmd)) {
+    case /** LED **/ 0xdc88: digitalWrite(LED_PIN, consoleStackPop()); break;
+    case /** PIN **/ 0x1012: {
+        const uint8_t pin = consoleStackPop();
+        digitalWrite(pin, consoleStackPop());
+      } break;
+    case /** PMODE **/ 0x48d6: {
+        const uint8_t pin = consoleStackPop();
+        pinMode(pin, consoleStackPop());
+      } break;
+    case /** ?T **/ 0x688e: consolePrint(CFMT_U, (console_ucell_t)millis()); break;
+
+    default: return false;
+  }
+  return true;
+}
+
+void setup() {
+	consoleInit(console_cmds_user, Serial, 0U);
+}
+
+void loop() {
+	consoleService();
+}
+#endif
+
 // Our little language only works with one integral type, called a "cell" like FORTH. Usually it is the natural int for the part. For Arduino this is 16 bits.
 // Define to allow different types for the 'cell'. console_cell_t must be a signed type, console_ucell_t must be unsigned, and they must both be the same size.
 #include <stdint.h>
@@ -12,9 +62,12 @@
  typedef uint32_t console_ucell_t;
 #endif
 
-/* Recognisers are little parser functions that can turn a string into a value or values that are pushed onto the stack. They return
-	false if they cannot parse the input string. If they do parse it, they might call raise() if they cannot push a value onto the stack. 
-	Note that the parser may write to the input buffer, but not beyond the terminating nul. */
+/* Recognisers are little parser functions that take a string parsed from the input buffer. They then try to "recognise" it, returnig true if they 
+	can, false otherwise. 
+	A recogniser can also flag an error by calling the consoleRaise() function with an error code, if it finds an error, such as overflow when
+	parsing a number, or failing to push a value to the stack.
+	They can also write back to the input buffer, but not beyond the termininating nul.
+	The exact behaviour of the various recognisers will be documented. */
 typedef bool (*console_recogniser_func)(char* cmd);
 
 // Hash function for implementing command lookup in recogniser functions. 
@@ -28,13 +81,13 @@ enum {
 	CONSOLE_FLAG_NO_PROMPT = 1,
 	CONSOLE_FLAG_NO_ECHO = 2,
 };
-void consoleInit(console_recogniser_func r, Stream& s, uint8_t flags=0U);
+void consoleInit(console_recogniser_func r, Stream& s, uint8_t flags);
 
 // Print a prompt. Call after consoleInit().
 void consolePrompt();
 
-/* Define possible error codes. The convention is that positive codes are actual errors, zero is OK, and negative values are more like status codes that
-	do not indicate an error. */
+/* Define possible error codes. The convention is that positive codes are actual errors, zero is OK, and negative values are more like 
+	status codes that do not indicate an error. */
 enum {
 	CONSOLE_RC_OK =								0,	// Returned by consoleProcess() for no errors and by consoleAccept() for a newline with no overflow.
 
@@ -63,32 +116,48 @@ console_rc_t consoleService();
 // Newline on output.
 #define CONSOLE_OUTPUT_NEWLINE_STR "\r\n"
 
-// Print various datatypes on the console. 
+// Print various datatypes in the second arg to consolePrint().
 enum {
-	CFMT_NL,		// Prints the newline string CONSOLE_OUTPUT_NEWLINE_STR, second arg ignored, no seperator is printed.
-	CFMT_D,			// Prints second arg as a signed integer, e.g `-123 ', `0 ', `456 '.
-	CFMT_U,			// Print second arg as an unsigned integer, e.g `+0 ', `+123 '.
-	CFMT_U_D,
-	CFMT_X,			// Print second arg as a hex integer, e.g `$0000 ', `$abcd '.
-	CFMT_STR,		// Print second arg as pointer to string in RAM.
-	CFMT_STR_P,		// Print second arg as pointer to string in PROGMEM.
-	CFMT_C,			// Print second arg as char.
-	CFMT_X2, 		// Print as 2 hex digits.
+	CFMT_NL,				// Prints the newline string CONSOLE_OUTPUT_NEWLINE_STR, second arg ignored, no trailing space is printed.
+	CFMT_D,					// Prints a signed integer, e.g `-123 ', `0 ', `456 '.
+	CFMT_U,					// Print an unsigned integer, e.g `+0 ', `+123 '.
+	CFMT_U_D,				// Print an unsigned long integer from pointer.
+	CFMT_X,					// Print a hex integer, e.g `$0000 ', `$abcd '.
+	CFMT_STR,				// Print pointer to string in RAM.
+	CFMT_STR_P,				// Print pointer to string in PROGMEM.
+	CFMT_C,					// Print char.
+	CFMT_X2, 				// Print as 2 hex digits.
 	CFMT_M_NO_LEAD = 0x40,	// OR with option to _NOT_ print a leading `+' or `$'.
 	CFMT_M_NO_SEP = 0x80	// OR with option to _NOT_ print a trailing space.
 };
 void consolePrint(uint8_t opt, console_cell_t x);
 
-// Stack primitives.
-console_cell_t console_u_pick(uint8_t i);
-console_cell_t& console_u_tos();
-console_cell_t& console_u_nos();
-console_cell_t console_u_depth();
-console_cell_t console_u_pop();
-void console_u_push(console_cell_t x);
-void console_u_clear();
+/* Stack primitives, note that these should only be called from inside a recogniser function as they may call consoleRaise() on error. If they
+	are called OUTSIDE of a recogniser where th handler has not been set up then you will likely crash. */
+	
+// Returns the stack depth (number of items on the stack). Raises nothing. 
+console_cell_t consoleStackDepth();
 
-// Call on error, thanks to the magic of longjmp() it will return to the last setjmp with the error code.
-void console_raise(console_rc_t rc);
+// Clear (empty) the stack.
+void consoleStackClear();
+
+// Return the i'th stack item, with 0 being the top. Raises CONSOLE_RC_ERROR_DSTACK_UNDERFLOW on error.	
+console_cell_t consoleStackPick(uint8_t i);
+
+// Return the top stack item, raises CONSOLE_RC_ERROR_DSTACK_UNDERFLOW if depth < 1.	
+console_cell_t& consoleStackTos();
+
+// Return the item under the top stack item, raises CONSOLE_RC_ERROR_DSTACK_UNDERFLOW if depth < 2.	
+console_cell_t& consoleStackNos();
+
+// Remove and return the top stack item, raises CONSOLE_RC_ERROR_DSTACK_UNDERFLOW if depth < 1.	
+console_cell_t consoleStackPop();
+
+// Add the value to the top of the stack. Raises CONSOLE_RC_ERROR_DSTACK_OVERFLOW on error.	
+void consoleStackPush(console_cell_t x);
+
+/* Call on error, thanks to the magic of longjmp() it will return to the last setjmp with the error code.
+	DO NOT CALL outside of a recogniser function, it will likely crash. */
+void consoleRaise(console_rc_t rc);
 
 #endif // CONSOLE_H__
