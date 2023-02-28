@@ -25,72 +25,72 @@ static bool console_cmds_user(char* cmd) {
 	static int32_t f_acc;
   switch (console_hash(cmd)) {
 	case /** ?VER **/ 0xc33b: print_banner(); break;
-	case /** F **/ 0xb5e3:  consolePrint(CFMT_D, utilsFilter(&f_acc, console_u_pop(), 3, false)); break;
+	case /** F **/ 0xb5e3:  consolePrint(CFMT_D, utilsFilter(&f_acc, consoleStackPop(), 3, false)); break;
 	// Command processor.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
-    case /** CMD **/ 0xd00f: cmdRun(console_u_pop()); break;
+    case /** CMD **/ 0xd00f: cmdRun(consoleStackPop()); break;
 #endif
 
 	// Driver
-    case /** LED **/ 0xdc88: driverSetLedPattern(console_u_pop()); break;
+    case /** LED **/ 0xdc88: driverSetLedPattern(consoleStackPop()); break;
     case /** ?LED **/ 0xdd37: consolePrint(CFMT_D, driverGetLedPattern()); break;
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
-    case /** RLY **/ 0x07a2: REGS[REGS_IDX_RELAYS] = console_u_pop(); break;
+    case /** RLY **/ 0x07a2: REGS[REGS_IDX_RELAYS] = consoleStackPop(); break;
     case /** ?RLY **/ 0xb21d: consolePrint(CFMT_D, REGS[REGS_IDX_RELAYS]); break;
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 	case /** ?PRESETS **/ 0x6f6c: fori (DRIVER_BED_POS_PRESET_COUNT) {
 		forj (CFG_TILT_SENSOR_COUNT) consolePrint(CFMT_D, driverPresets(i)[j]); consolePrint(CFMT_NL, 0);
 		}  break;
 	case /** PRESET **/ 0x3300: {
-		const uint8_t idx = console_u_pop(); if (idx >= DRIVER_BED_POS_PRESET_COUNT) console_raise(CONSOLE_RC_ERROR_USER);
-		fori (CFG_TILT_SENSOR_COUNT) driverPresets(idx)[i] = console_u_pop();
+		const uint8_t idx = consoleStackPop(); if (idx >= DRIVER_BED_POS_PRESET_COUNT) consoleRaise(CONSOLE_RC_ERROR_USER);
+		fori (CFG_TILT_SENSOR_COUNT) driverPresets(idx)[i] = consoleStackPop();
 		}
 	#endif
 
 	// MODBUS
 	case /** ATN **/ 0xb87e: driverSendAtn(); break;
-    case /** SL **/ 0x74fa: modbusSetSlaveId(console_u_pop()); break;
+    case /** SL **/ 0x74fa: modbusSetSlaveId(consoleStackPop()); break;
     case /** ?SL **/ 0x79e5: consolePrint(CFMT_D, modbusGetSlaveId()); break;
     case /** SEND-RAW **/ 0xf690: {
-        uint8_t* d = (uint8_t*)console_u_pop(); uint8_t sz = *d; modbusSendRaw(d + 1, sz);
+        uint8_t* d = (uint8_t*)consoleStackPop(); uint8_t sz = *d; modbusSendRaw(d + 1, sz);
       } break;
     case /** SEND **/ 0x76f9: {
-        uint8_t* d = (uint8_t*)console_u_pop(); uint8_t sz = *d; modbusMasterSend(d + 1, sz);
+        uint8_t* d = (uint8_t*)consoleStackPop(); uint8_t sz = *d; modbusMasterSend(d + 1, sz);
       } break;
     case /** RELAY **/ 0x1da6: { // (state relay slave -- )
-        uint8_t slave_id = console_u_pop();
-        uint8_t rly = console_u_pop();
-        modbusRelayBoardWrite(slave_id, rly, console_u_pop());
+        uint8_t slave_id = consoleStackPop();
+        uint8_t rly = consoleStackPop();
+        modbusRelayBoardWrite(slave_id, rly, consoleStackPop());
       } break;
 
     case /** WRITE **/ 0xa8f8: { // (val addr sl -) REQ: [FC=6 addr:16 value:16] -- RESP: [FC=6 addr:16 value:16]
 		uint8_t req[RESP_SIZE];
-		req[MODBUS_FRAME_IDX_SLAVE_ID] = console_u_pop();
+		req[MODBUS_FRAME_IDX_SLAVE_ID] = consoleStackPop();
 		req[MODBUS_FRAME_IDX_FUNCTION] = MODBUS_FC_WRITE_SINGLE_REGISTER;
-		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 0], console_u_pop());
-		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 2], console_u_pop());
+		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 0], consoleStackPop());
+		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 2], consoleStackPop());
 		modbusMasterSend(req, 6);
       } break;
     case /** READ **/ 0xd8b7: { // (count addr sl -) REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
 		uint8_t req[RESP_SIZE];
-		req[MODBUS_FRAME_IDX_SLAVE_ID] = console_u_pop();
+		req[MODBUS_FRAME_IDX_SLAVE_ID] = consoleStackPop();
 		req[MODBUS_FRAME_IDX_FUNCTION] = MODBUS_FC_READ_HOLDING_REGISTERS;
-		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 0], console_u_pop());
-		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 2], console_u_pop());
+		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 0], consoleStackPop());
+		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 2], consoleStackPop());
 		modbusMasterSend(req, 6);
 	  } break;
 
 	// Regs
     case /** ?V **/ 0x688c:
-	    { const uint8_t idx = console_u_pop();
+	    { const uint8_t idx = consoleStackPop();
 		    if (idx < COUNT_REGS)
 				regsPrintValue(idx);
 			else
 				consolePrint(CFMT_C, (console_cell_t)'?');
 		} break;
     case /** V **/ 0xb5f3:
-	    { const uint8_t idx = console_u_pop(); const uint16_t v = (uint16_t)console_u_pop();
+	    { const uint8_t idx = consoleStackPop(); const uint16_t v = (uint16_t)consoleStackPop();
 		    if (idx < COUNT_REGS)
 				CRITICAL( REGS[idx] = v ); // Might be interrupted by an ISR part way through.
 		} break;
@@ -109,8 +109,8 @@ static bool console_cmds_user(char* cmd) {
 		}
 		break;
     case /** DUMP **/ 0x4fe9:
-		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS, (console_u_tos() > 0));
-		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS_FAST, (console_u_pop() > 1));
+		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS, (consoleStackTos() > 0));
+		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS_FAST, (consoleStackPop() > 1));
 		break;
 	case /** X **/ 0xb5fd:
 		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS|REGS_ENABLES_MASK_DUMP_REGS_FAST|REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS|REGS_ENABLES_MASK_DUMP_MODBUS_DATA, 0);
@@ -119,8 +119,8 @@ static bool console_cmds_user(char* cmd) {
 	// Runtime errors...
     case /** RESTART **/ 0x7092: while (1) continue; break;
     case /** CLI **/ 0xd063: cli(); break;
-    case /** ABORT **/ 0xfeaf: RUNTIME_ERROR(console_u_pop()); break;
-	case /** ASSERT **/ 0x5007: ASSERT(console_u_pop()); break;
+    case /** ABORT **/ 0xfeaf: RUNTIME_ERROR(consoleStackPop()); break;
+	case /** ASSERT **/ 0x5007: ASSERT(consoleStackPop()); break;
 
 	// EEPROM data
 	case /** NV-DEFAULT **/ 0xfcdb: driverNvSetDefaults(); break;
@@ -129,12 +129,12 @@ static bool console_cmds_user(char* cmd) {
 
 	// Arduino system access...
     case /** PIN **/ 0x1012: {
-        uint8_t pin = console_u_pop();
-        digitalWrite(pin, console_u_pop());
+        uint8_t pin = consoleStackPop();
+        digitalWrite(pin, consoleStackPop());
       } break;
     case /** PMODE **/ 0x48d6: {
-        uint8_t pin = console_u_pop();
-        pinMode(pin, console_u_pop());
+        uint8_t pin = consoleStackPop();
+        pinMode(pin, consoleStackPop());
       } break;
     case /** ?T **/ 0x688e: consolePrint(CFMT_U, (console_ucell_t)millis()); break;
 
@@ -146,7 +146,7 @@ static bool console_cmds_user(char* cmd) {
 static SoftwareSerial consSerial(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); // RX, TX
 static void console_init() {
 	consSerial.begin(38400);
-	consoleInit(console_cmds_user, consSerial);
+	consoleInit(console_cmds_user, consSerial, 0U);
 	// Signon message, note two newlines to leave a gap from any preceding output on the terminal.
 	consolePrint(CFMT_NL, 0); consolePrint(CFMT_NL, 0);
 	print_banner();

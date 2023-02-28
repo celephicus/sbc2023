@@ -1,6 +1,5 @@
-"""Open an input file and write it back. Lines like
-		case /** . **/ 0xb58b: console_print_signed_decimal(); break;
-	have the hex chars replaced with a hash of the printable chars.
+"""Open an input file and write it back with text like `case /** <xxx> **/ 0xb58b:' 
+	having the hex chars replaced with a hash of the printable chars <xxx>.
 """
 
 import re

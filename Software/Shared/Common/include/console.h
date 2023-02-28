@@ -8,51 +8,8 @@
 	Call consoleService in loop().
 */
 
-#if 0
-" Lines that match `/** <PRINTABLE-CHARS> **/ 0x<hex-chars>:' have the hex chars replaced with a hash of the printable chars. """
-import re, sys
-
-def subber_hash(m):
-    h = 33;		# Magic numbers from Wikipedia article on hashes. 
-    w = m.group(1).upper()
-    for c in w:
-        h = ((h * 5381) & 0xffff) ^ ord(c)
-    return '/** %s **/ 0x%04x' % (w, h)  
-
-text = open(sys.argv[1], 'rt').read()
-text = re.sub(r'/\*\*\s*(\S+)\s*\*\*/\s*(0[x])?([0-9a-z]*)', subber_hash, text, flags=re.I)
-open(infile, 'wt').write(text)
-		
-		
-static bool console_cmds_user(char* cmd) {
-	switch (console_hash(cmd)) {
-    case /** LED **/ 0xdc88: digitalWrite(LED_PIN, consoleStackPop()); break;
-    case /** PIN **/ 0x1012: {
-        const uint8_t pin = consoleStackPop();
-        digitalWrite(pin, consoleStackPop());
-      } break;
-    case /** PMODE **/ 0x48d6: {
-        const uint8_t pin = consoleStackPop();
-        pinMode(pin, consoleStackPop());
-      } break;
-    case /** ?T **/ 0x688e: consolePrint(CFMT_U, (console_ucell_t)millis()); break;
-
-    default: return false;
-  }
-  return true;
-}
-
-void setup() {
-	consoleInit(console_cmds_user, Serial, 0U);
-}
-
-void loop() {
-	consoleService();
-}
-#endif
-
-// Our little language only works with one integral type, called a "cell" like FORTH. Usually it is the natural int for the part. For Arduino this is 16 bits.
-// Define to allow different types for the 'cell'. console_cell_t must be a signed type, console_ucell_t must be unsigned, and they must both be the same size.
+/* Our little language only works with one integral type, called a "cell" like FORTH. Usually it is the natural int for the part. For Arduino this is 16 bits.
+Define to allow different types for the 'cell'. console_cell_t must be a signed type, console_ucell_t must be unsigned, and they must both be the same size. */
 #include <stdint.h>
 #if defined(AVR)
  typedef int16_t  console_cell_t;

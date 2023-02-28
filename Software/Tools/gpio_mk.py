@@ -33,12 +33,14 @@ class GPIOParse(csv_parser.CSVparse):
 		"Set to explicit `None' rather than empty."
 		return x if x else 'None'
 	def validate_col_Port(self, port): # pylint: disable=no-self-use,invalid-name
-		"Expected either blank or port like `PA3'"
+		"""Expected either blank or port like `PA3'."""
+		# If present then set extra keys to row io_port & io_bit.
+		# TODO: Pattern should be configurable for diffferent processors.
 		if port.startswith('P'):
-			mport = re.match(r'P([A-Z])([0-7])$', port)	# Parse out port, bit from like `PA3'.
-			assert mport
-			self.add_extra('io_port', mport.group(1))
-			self.add_extra('io_bit', int(mport.group(2)))
+			m = re.match(r'(?:(?:P([A-Z]))|(ADC))([0-7])$', port)	# Parse out port, bit from like `PA3'.
+			print(m.groups())
+			self.add_extra('io_port', m.group(1) or m.group(2))
+			self.add_extra('io_bit', int(m.group(3)))
 		return port
 
 # Parse...
