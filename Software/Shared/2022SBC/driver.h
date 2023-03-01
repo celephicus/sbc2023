@@ -7,6 +7,9 @@ void driverInit();
 // Call in mainloop to perform services.
 void driverService();
 
+// Get pointer to event tracemask, array of size EVENT_TRACE_MASK_SIZE. This function must be declared and memory assigned.
+uint8_t* eventGetTraceMask();
+
 // Special for controller to read/write position presets. There are DRIVER_BED_POS_PRESET_COUNT sets of presets. Each preset has CFG_TILT_SENSOR_COUNT items.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 #define DRIVER_BED_POS_PRESET_COUNT 4

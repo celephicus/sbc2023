@@ -48,14 +48,13 @@ void eventInit() {
 
 static const char NO_NAME[] PROGMEM = "";
 const char* eventGetEventName(uint8_t ev_id) {
-    DECLARE_EVENT_NAMES()
+    DECLARE_EVENT_NAMES();
 	return (ev_id < COUNT_EV) ? (const char*)pgm_read_ptr(&EVENT_NAMES[ev_id]) : NO_NAME;
 }
 const char* eventGetEventDesc(uint8_t ev_id) {
-    DECLARE_EVENT_DESCS()
+    DECLARE_EVENT_DESCS();
 	return (ev_id < COUNT_EV) ? (const char*)pgm_read_ptr(&EVENT_DESCS[ev_id]) : NO_NAME;
 }
-
 
 // Event queue
 //
@@ -196,7 +195,7 @@ void eventSmInit(EventSmFunc sm, EventSmContextBase* state, uint8_t id) {
 }
 
 void eventSmService(EventSmFunc sm, EventSmContextBase* state, t_event ev) {
-	// Don't bother sending event expiredtimeout events to the non-targetted SMs.
+	// Don't bother sending event expired timeout events to the non-targeted SMs.
 	if (EV_TIMER == event_id(ev)) {
 		uint8_t timer_idx = event_p8(ev);
 		if ((timer_idx >= CFG_EVENT_TIMER_COUNT) || (eventSmGetTimerCookie(timer_idx) != event_p16(ev)))

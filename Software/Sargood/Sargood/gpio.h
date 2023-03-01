@@ -62,6 +62,8 @@ enum {
 // Extra symbols from symbol directive.
 #define GPIO_SERIAL_CONSOLE Serial // Serial port for console.
 #define GPIO_SERIAL_RS485 Serial2 // Serial port for RS485.
+#define GPIO_LCD_NUM_ROWS 2 // ff
+#define GPIO_LCD_NUM_COLS 16 // gg
 
 
 // Direct access ports.

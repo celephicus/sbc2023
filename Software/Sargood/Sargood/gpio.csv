@@ -1,7 +1,9 @@
 @processor,Arduino Mega2560,,,,,,,,,
 ,,,,,,,,,,
-@symbol,GPIO_SERIAL_CONSOLE,Serial,Serial port for console.,,,,,,,
-@symbol,GPIO_SERIAL_RS485,Serial2,Serial port for RS485.,,,,,,,
+@symbol,SERIAL_CONSOLE,Serial,Serial port for console.,,,,,,,
+@symbol,SERIAL_RS485,Serial2,Serial port for RS485.,,,,,,,
+@symbol,LCD_NUM_ROWS,2,ff,,,,,,,
+@symbol,LCD_NUM_COLS,16,gg,,,,,,,
 ,,,,,,,,,,
 #Arduino Pin,Signal,Function,Description,Group,Arduino Pin No.,Processor Pin No.,Proc Port,Proc Alt Func,Comment,Note
 D0/RX0,RX0,RXD0,Onboard USB serial port,Serial,0,2,PE0,RXD0/PCINT8,Bootloader/USB,

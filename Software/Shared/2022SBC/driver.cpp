@@ -635,15 +635,22 @@ static void service_devices() {
 
 // Non-volatile objects.
 
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
+#include "event.h"
+#endif
+
 // All data managed by NV. Complicated as only the last portion of the regs array is written to NV.
 typedef struct {
 	regs_t regs[COUNT_REGS];		// Must be first item in struct.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 	int16_t pos_presets[DRIVER_BED_POS_PRESET_COUNT * CFG_TILT_SENSOR_COUNT];
+	uint8_t trace_mask[EVENT_TRACE_MASK_SIZE];
 #endif
 } NvData;
 
 static NvData l_nv_data;
+
+uint8_t* eventGetTraceMask() { return l_nv_data.trace_mask; }
 
 // The NV only managed the latter part of regs and whatever else is in the NvData struct.
 #define NV_DATA_NV_SIZE (sizeof(NvData) - offsetof(NvData, regs[REGS_START_NV_IDX]))

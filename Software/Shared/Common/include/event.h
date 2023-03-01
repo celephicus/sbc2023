@@ -1,7 +1,7 @@
 #ifndef EVENT_H__
 #define EVENT_H__
 
-#include "event-defs.auto.h"
+#include "event.local.h"
 
 // EV_SW_xxx events have these values in p8.
 enum {

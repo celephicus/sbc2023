@@ -50,13 +50,13 @@ TEMPLATE_FILE = """\
 #ifndef {guard}
 #define {guard}
 
-// [[[  Begin event definitions: format <event-name> <comment>
+/* [[[  Begin event definitions: format <event-name> <comment>
 
 	# Project specific events.
 	SAMPLE_1		Frobs the foo.
 	SAMPLE_2		Frobs the foo some more.
 
-// >>> End event definitions, begin generated code.
+ >>> End event definitions, begin generated code. */
 
 THIS WILL BE REPLACED
 
@@ -74,9 +74,11 @@ DEFAULT_EVENTS = '''\
 	DEBUG_SM_STATE_CHANGE  		Debug event to signal a state change, p8 has SM ID, p16 has new state. Not queued.
 	SM_ENTRY  					Sent by state machine runner, never traced.
 	SM_EXIT  					Sent by state machine runner, never traced.
+	SM_SELF						Used by state machine to send an event to self. 
 	TIMER						Event timer, p8 = state machine, p16 = cookie.
 	DEBUG_TIMER_ARM 	 		Debug event, timer start, p8 is timer ID, p16 is timeout.
 	DEBUG_TIMER_STOP	  		Debug event, timer stop, p8 is timer ID, p16 is timeout.
+	DEBUG_QUEUE_FULL			Debug event, failed to queue event ID in p8. 
 	DEBUG  						Generic debug event.
 '''
 
@@ -161,12 +163,12 @@ cg.add(f'#define EVENT_TRACE_MASK_SIZE {(len(events)+7)//8}', add_nl=+1)
 
 # Event names as strings.
 cg.add_comment('Event Names.')
-cg.add_avr_array_strings('EVENT_NAME', events.keys())
+cg.add_avr_array_strings('EVENT_NAMES', events.keys())
 cg.add_nl()
 
 # Event descriptions as strings.
 cg.add_comment('Event Descriptions.')
-cg.add_avr_array_strings('EVENT_DESC', events.values(), col=140)
+cg.add_avr_array_strings('EVENT_DESCS', events.values(), col=140)
 cg.add_nl()
 
 # Add rest of source file that we want to keep as is.

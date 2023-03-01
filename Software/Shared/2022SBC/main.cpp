@@ -12,7 +12,12 @@
 #include "sbc2022_modbus.h"
 FILENUM(1);
 
-/* Perform a command, one of CMD_xxx. If a commandis currently running, it will be queued and run when the pending command repeats. The currently running command
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
+#include "lcd_driver.h"
+#include "event.h"
+#endif
+
+/* Perform a command, one of CMD_xxx. If a command is currently running, it will be queued and run when the pending command repeats. The currently running command
  * is available in register CMD_ACTIVE. The command status is in register CMD_STATUS. If a command is running, the status will be CMD_STATUS_PENDING. On completion,
  * the status is either CMD_STATUS_OK or an error code.
  */
@@ -44,8 +49,21 @@ static bool console_cmds_user(char* cmd) {
 	case /** PRESET **/ 0x3300: {
 		const uint8_t idx = consoleStackPop(); if (idx >= DRIVER_BED_POS_PRESET_COUNT) consoleRaise(CONSOLE_RC_ERROR_USER);
 		fori (CFG_TILT_SENSOR_COUNT) driverPresets(idx)[i] = consoleStackPop();
-		}
-	#endif
+		} break;
+	case /** LCD **/ 0xdcce: {
+		const char* msg = (const char*)consoleStackPop();
+		const uint8_t timeout = (uint8_t)consoleStackPop();
+		lcdDriverWrite(consoleStackPop(), timeout, PSTR("%s"), msg);
+		} break;
+
+	// Events & trace...
+	case /** EVENT **/ 0x8a29: eventPublish(consoleStackPop()); break;
+	case /** EVENT-EX **/ 0x2f99: { const uint16_t p16 = consoleStackPop(); const uint8_t p8 = consoleStackPop(); eventPublish(consoleStackPop(), p8, p16); } break;
+	case /** CTM **/ 0xd17f: eventTraceMaskClear(); break;
+	case /** DTM **/ 0xbcb8: eventTraceMaskSetDefault(); break;
+	case /** ?TM **/ 0x7a03: fori ((COUNT_EV + 15) / 16) consolePrint(CFMT_X, ((uint16_t)eventGetTraceMask()[i*2+1]<<8) | (uint16_t)eventGetTraceMask()[i*2]); break;
+	case /** STM **/ 0x116f: { const uint8_t ev_id = consoleStackPop(); eventTraceMaskSet(ev_id, consoleStackPop()); } break;
+#endif
 
 	// MODBUS
 	case /** ATN **/ 0xb87e: driverSendAtn(); break;
@@ -466,14 +484,41 @@ do_manual:	cmd_start();
 	THREAD_END();
 }
 
+bool service_trace_log() {
+	EventTraceItem evt;
+	if (eventTraceRead(&evt)) {
+		const uint8_t id = event_id(evt.event);
+		//printf_s(PSTR("Ev: %lu: %S %u(%u,%u)\r\n"), evt.timestamp - commonGetTimestampOffset(), eventGetEventName(id), id, event_get_param8(evt.event), event_get_param16(evt.event));
+		GPIO_SERIAL_CONSOLE.print(F("Ev: ")); GPIO_SERIAL_CONSOLE.print(evt.timestamp);	GPIO_SERIAL_CONSOLE.print(F(" : "));
+		GPIO_SERIAL_CONSOLE.print((__FlashStringHelper*)eventGetEventName(id)); GPIO_SERIAL_CONSOLE.print(' ');
+		GPIO_SERIAL_CONSOLE.print(id); 
+		GPIO_SERIAL_CONSOLE.print('('); GPIO_SERIAL_CONSOLE.print(event_p8(evt.event)); GPIO_SERIAL_CONSOLE.print(','); GPIO_SERIAL_CONSOLE.print(event_p16(evt.event)); GPIO_SERIAL_CONSOLE.print('(');
+		return true;
+	}
+	return false;
+}
+
 static thread_control_t tcb_cmd;
 thread_ticks_t threadGetTicks() { return (thread_ticks_t)millis(); }
 static void app_init() {
 	threadInit(&tcb_cmd);
-}
+	lcdDriverInit();
+	eventInit();
+	}
 static void app_service() {
 	threadRun(&tcb_cmd, thread_cmd, NULL);
+	t_event ev;
+	while (EV_NIL != (ev = eventGet())) {	// Read events until there are no more left.
+		//eventServiceSm(sm_leds, (EventSmContextBase*)&sm_leds_context, &ev, 1);
+		(void)ev;
+	}
+	service_trace_log();		// Just dump one trace record as it can take time to print and we want to keep responsive. 
 }
+static void app_service_10hz() { 
+	lcdDriverService_10Hz(); 
+}
+
+
 #else
 static void app_init() {}
 static void app_service() {}
@@ -495,6 +540,7 @@ void loop() {
 	utilsRunEvery(100) {				// Basic 100ms timebase.
 		service_regs_dump();
 		service_blinky_led_warnings();
+		app_service_10hz();
 	}
 	app_service();
 }

@@ -90,8 +90,8 @@ cg.add('};', indent=-1, eat_nl=True)
 if parser.metadata['symbol']:
 	cg.add_comment("Extra symbols from symbol directive.")
 	for sym, vc in parser.metadata['symbol'].items():
-		val, comment = vc
-		cg.add(f"#define {sym} {val} // {comment}")
+		val, comment = (list(vc) + [''])[:2]
+		cg.add(f"#define GPIO_{sym} {val} // {comment}")
 	cg.add_nl()
 	
 if direct:
