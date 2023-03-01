@@ -1,5 +1,5 @@
-#Arduino Pro Mini,,,,,,,,,
-"# For Sensor board, similar to Relay board. ",,,,,,,,,
+@processor,"Arduino Pro Mini",,,,,,,,,
+@project,"TSA SBC2022 Sargood Controller"
 ,,,,,,,,,
 #Arduino Pin,Signal,Function,Description,Group,Arduino Pin No.,Processor Pin No.,Processor Port,Processor Alternate Function,Comment
 D1/TXO,RS485_TXD,TXD,RS485 TX,Bus,J7/12,31,PD1,TXD/PCINT17,Bootloader

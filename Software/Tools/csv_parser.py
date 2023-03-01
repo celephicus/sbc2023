@@ -35,7 +35,7 @@ class CSVparse:
 	value is valid, this can be a simple regex or a more complex function that converts the item from a string to say a list. Attention has been
 	given to providing good error messages with file & line information. Each row in the input that contains data results in an item in the `data'
 	attribute. There is also provision for directives, commands that are not data but are read by the parser, these can be used to modify
-	behaviour or add to the `extras' attribute, a dict.
+	behaviour or add data to an attribute in the derived class.
 
 	To construct a basic parser, subclass CSVparse and set COLS to the column names. This is the test code at the end of this file. 
 
