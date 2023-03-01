@@ -13,11 +13,13 @@ class GPIOParse(csv_parser.CSVparse):
 	def __init__(self):
 		csv_parser.CSVparse.__init__(self)
 		self.COLUMN_NAMES = 'Pin Sig Func Description Group Apin Ppin Port AltFunc Comment'.split() # pylint: disable=invalid-name
-		self.metadata = {}
+		self.metadata = { 'symbol': {}}
 	def handle_directive(self, directive, data):
 		directive = directive.lower()
 		if directive in 'processor project'.split():
 			self.metadata[directive] = data[0]
+		elif directive == 'symbol':
+			self.metadata['symbol'][data[0]] = data[1], data[2]
 		else:
 			super().handle_directive(directive, data)
 	def validate_col_Pin(self, pin_name): # pylint: disable=no-self-use,invalid-name
@@ -85,6 +87,13 @@ for group, pins in pins.items():
 	cg.add_nl()
 cg.add('};', indent=-1, eat_nl=True)
 
+if parser.metadata['symbol']:
+	cg.add_comment("Extra symbols from symbol directive.")
+	for sym, vc in parser.metadata['symbol'].items():
+		val, comment = vc
+		cg.add(f"#define {sym} {val} // {comment}")
+	cg.add_nl()
+	
 if direct:
 	cg.add_comment('Direct access ports.', add_nl=-1)
 	for sig, desc, io_port, io_bit in direct:

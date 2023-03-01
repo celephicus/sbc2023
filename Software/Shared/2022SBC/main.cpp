@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include <SoftwareSerial.h>
 #include <avr/wdt.h>
 
 #include "project_config.h"
@@ -143,10 +142,14 @@ static bool console_cmds_user(char* cmd) {
   return true;
 }
 
-static SoftwareSerial consSerial(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); // RX, TX
+#if (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR) || (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY)
+#include <SoftwareSerial.h>
+static SoftwareSerial GPIO_SERIAL_CONSOLE(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); // RX, TX
+#endif
+
 static void console_init() {
-	consSerial.begin(38400);
-	consoleInit(console_cmds_user, consSerial, 0U);
+	GPIO_SERIAL_CONSOLE.begin(38400);
+	consoleInit(console_cmds_user, GPIO_SERIAL_CONSOLE, 0U);
 	// Signon message, note two newlines to leave a gap from any preceding output on the terminal.
 	consolePrint(CFMT_NL, 0); consolePrint(CFMT_NL, 0);
 	print_banner();

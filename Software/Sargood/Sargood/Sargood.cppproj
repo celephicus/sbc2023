@@ -5,7 +5,7 @@
     <ProjectVersion>7.0</ProjectVersion>
     <ToolchainName>com.Atmel.AVRGCC8.CPP</ToolchainName>
     <ProjectGuid>dce6c7e3-ee26-4d79-826b-08594b9ad897</ProjectGuid>
-    <avrdevice>atmega328p</avrdevice>
+    <avrdevice>ATmega2560</avrdevice>
     <avrdeviceseries>none</avrdeviceseries>
     <OutputType>Executable</OutputType>
     <Language>CPP</Language>
@@ -26,7 +26,7 @@
     <preserveEEPROM>true</preserveEEPROM>
     <OverrideVtorValue>exception_table</OverrideVtorValue>
     <BootSegment>2</BootSegment>
-    <eraseonlaunchrule>1</eraseonlaunchrule>
+    <eraseonlaunchrule>0</eraseonlaunchrule>
     <AssemblyName>Sargood</AssemblyName>
     <ResetRule>0</ResetRule>
     <EraseKey />
@@ -44,23 +44,26 @@
     </AsfFrameworkConfig>
     <avrtool>com.atmel.avrdbg.tool.atmelice</avrtool>
     <avrtoolserialnumber>J41800088132</avrtoolserialnumber>
-    <avrdeviceexpectedsignature>0x1E950F</avrdeviceexpectedsignature>
+    <avrdeviceexpectedsignature>0x1E9801</avrdeviceexpectedsignature>
     <com_atmel_avrdbg_tool_atmelice>
       <ToolOptions>
         <InterfaceProperties>
+          <JtagDbgClock>3800000</JtagDbgClock>
         </InterfaceProperties>
-        <InterfaceName>debugWIRE</InterfaceName>
+        <InterfaceName>JTAG</InterfaceName>
       </ToolOptions>
       <ToolType>com.atmel.avrdbg.tool.atmelice</ToolType>
       <ToolNumber>J41800088132</ToolNumber>
       <ToolName>Atmel-ICE</ToolName>
     </com_atmel_avrdbg_tool_atmelice>
-    <avrtoolinterface>debugWIRE</avrtoolinterface>
+    <avrtoolinterface>JTAG</avrtoolinterface>
+    <avrtoolinterfaceclock>3800000</avrtoolinterfaceclock>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
     <ToolchainSettings>
       <AvrGccCpp>
-  <avrgcc.common.Device>-mmcu=atmega328p -B "%24(PackRepoDir)\atmel\ATmega_DFP\1.7.374\gcc\dev\atmega328p"</avrgcc.common.Device>
+  <avrgcc.common.Device>-mmcu=atmega2560 -B "%24(PackRepoDir)\atmel\ATmega_DFP\1.7.374\gcc\dev\atmega2560"</avrgcc.common.Device>
+  <avrgcc.common.optimization.RelaxBranches>True</avrgcc.common.optimization.RelaxBranches>
   <avrgcc.common.outputfiles.hex>True</avrgcc.common.outputfiles.hex>
   <avrgcc.common.outputfiles.lss>True</avrgcc.common.outputfiles.lss>
   <avrgcc.common.outputfiles.eep>True</avrgcc.common.outputfiles.eep>
@@ -72,22 +75,27 @@
     <ListValues>
       <Value>NDEBUG</Value>
       <Value>F_CPU=16000000L</Value>
-      <Value>ARDUINO=108019</Value>
-      <Value>ARDUINO_AVR_PRO</Value>
+      <Value>ARDUINO=108012</Value>
+      <Value>ARDUINO_AVR_MEGA2560</Value>
       <Value>ARDUINO_ARCH_AVR</Value>
+      <Value>USB_VID=0x2341</Value>
+      <Value>USB_PID=0x0010</Value>
+      <Value>USB_MANUFACTURER="\"Arduino LLC\""</Value>
     </ListValues>
   </avrgcc.compiler.symbols.DefSymbols>
   <avrgcc.compiler.directories.IncludePaths>
     <ListValues>
-      <Value>%24(PackRepoDir)\atmel\ATmega_DFP\1.7.374\include\</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include\core</Value>
-      <Value>%24(ProjectDir)\..\ArduinoCore\include\libraries\SoftwareSerial</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include\libraries\SPI</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include\libraries\Wire</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include\libraries\Wire\utility</Value>
-      <Value>%24(ProjectDir)\..\ArduinoCore\include\variants\eightanaloginputs</Value>
-      <Value>%24(ProjectDir)\..\ArduinoCore\include\variants\standard</Value>
+      <Value>%24(ProjectDir)\..\ArduinoCore\include\variants\mega</Value>
+      <Value>../../../Shared/Common/include</Value>
+      <Value>../../../Shared/AVR/include</Value>
+      <Value>../../../Shared/2022SBC</Value>
+      <Value>..</Value>
+      <Value>%24(PackRepoDir)\atmel\ATmega_DFP\1.7.374\include\</Value>
     </ListValues>
   </avrgcc.compiler.directories.IncludePaths>
   <avrgcc.compiler.optimization.level>Optimize for size (-Os)</avrgcc.compiler.optimization.level>
@@ -102,14 +110,16 @@
     <ListValues>
       <Value>NDEBUG</Value>
       <Value>F_CPU=16000000L</Value>
-      <Value>ARDUINO=108019</Value>
-      <Value>ARDUINO_AVR_PRO</Value>
+      <Value>ARDUINO=108012</Value>
+      <Value>ARDUINO_AVR_MEGA2560</Value>
       <Value>ARDUINO_ARCH_AVR</Value>
+      <Value>USB_VID=0x2341</Value>
+      <Value>USB_PID=0x0010</Value>
+      <Value>USB_MANUFACTURER="\"Arduino LLC\""</Value>
     </ListValues>
   </avrgcccpp.compiler.symbols.DefSymbols>
   <avrgcccpp.compiler.directories.IncludePaths>
     <ListValues>
-      <Value>%24(PackRepoDir)\atmel\ATmega_DFP\1.7.374\include\</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include\core</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include\libraries\SoftwareSerial</Value>
@@ -121,6 +131,7 @@
       <Value>../../../Shared/Common/include</Value>
       <Value>../../../Shared/AVR/include</Value>
       <Value>..</Value>
+      <Value>%24(PackRepoDir)\atmel\ATmega_DFP\1.7.374\include\</Value>
     </ListValues>
   </avrgcccpp.compiler.directories.IncludePaths>
   <avrgcccpp.compiler.optimization.level>Optimize for size (-Os)</avrgcccpp.compiler.optimization.level>
@@ -149,7 +160,8 @@
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <ToolchainSettings>
       <AvrGccCpp>
-  <avrgcc.common.Device>-mmcu=atmega328p -B "%24(PackRepoDir)\atmel\ATmega_DFP\1.7.374\gcc\dev\atmega328p"</avrgcc.common.Device>
+  <avrgcc.common.Device>-mmcu=atmega2560 -B "%24(PackRepoDir)\atmel\ATmega_DFP\1.7.374\gcc\dev\atmega2560"</avrgcc.common.Device>
+  <avrgcc.common.optimization.RelaxBranches>True</avrgcc.common.optimization.RelaxBranches>
   <avrgcc.common.outputfiles.hex>True</avrgcc.common.outputfiles.hex>
   <avrgcc.common.outputfiles.lss>True</avrgcc.common.outputfiles.lss>
   <avrgcc.common.outputfiles.eep>True</avrgcc.common.outputfiles.eep>
@@ -161,26 +173,27 @@
     <ListValues>
       <Value>DEBUG</Value>
       <Value>F_CPU=16000000L</Value>
-      <Value>ARDUINO=108019</Value>
-      <Value>ARDUINO_AVR_PRO</Value>
+      <Value>ARDUINO=108012</Value>
+      <Value>ARDUINO_AVR_MEGA2560</Value>
       <Value>ARDUINO_ARCH_AVR</Value>
+      <Value>USB_VID=0x2341</Value>
+      <Value>USB_PID=0x0010</Value>
+      <Value>USB_MANUFACTURER="\"Arduino LLC\""</Value>
     </ListValues>
   </avrgcc.compiler.symbols.DefSymbols>
   <avrgcc.compiler.directories.IncludePaths>
     <ListValues>
-      <Value>%24(PackRepoDir)\atmel\ATmega_DFP\1.7.374\include\</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include\core</Value>
-      <Value>%24(ProjectDir)\..\ArduinoCore\include\libraries\SoftwareSerial</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include\libraries\SPI</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include\libraries\Wire</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include\libraries\Wire\utility</Value>
-      <Value>%24(ProjectDir)\..\ArduinoCore\include\variants\eightanaloginputs</Value>
-      <Value>%24(ProjectDir)\..\ArduinoCore\include\variants\standard</Value>
+      <Value>%24(ProjectDir)\..\ArduinoCore\include\variants\mega</Value>
       <Value>../../../Shared/Common/include</Value>
       <Value>../../../Shared/AVR/include</Value>
       <Value>../../../Shared/2022SBC</Value>
       <Value>..</Value>
+      <Value>%24(PackRepoDir)\atmel\ATmega_DFP\1.7.374\include\</Value>
     </ListValues>
   </avrgcc.compiler.directories.IncludePaths>
   <avrgcc.compiler.optimization.level>Optimize debugging experience (-Og)</avrgcc.compiler.optimization.level>
@@ -198,25 +211,27 @@
     <ListValues>
       <Value>DEBUG</Value>
       <Value>F_CPU=16000000L</Value>
-      <Value>ARDUINO=108019</Value>
-      <Value>ARDUINO_AVR_PRO</Value>
+      <Value>ARDUINO=108012</Value>
+      <Value>ARDUINO_AVR_MEGA2560</Value>
       <Value>ARDUINO_ARCH_AVR</Value>
+      <Value>USB_VID=0x2341</Value>
+      <Value>USB_PID=0x0010</Value>
+      <Value>USB_MANUFACTURER="\"Arduino LLC\""</Value>
     </ListValues>
   </avrgcccpp.compiler.symbols.DefSymbols>
   <avrgcccpp.compiler.directories.IncludePaths>
     <ListValues>
-      <Value>%24(PackRepoDir)\atmel\ATmega_DFP\1.7.374\include\</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include\core</Value>
-      <Value>%24(ProjectDir)\..\ArduinoCore\include\libraries\SoftwareSerial</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include\libraries\SPI</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include\libraries\Wire</Value>
       <Value>%24(ProjectDir)\..\ArduinoCore\include\libraries\Wire\utility</Value>
-      <Value>%24(ProjectDir)\..\ArduinoCore\include\variants\eightanaloginputs</Value>
-      <Value>%24(ProjectDir)\..\ArduinoCore\include\variants\standard</Value>
+      <Value>%24(ProjectDir)\..\ArduinoCore\include\variants\mega</Value>
       <Value>../../../Shared/Common/include</Value>
       <Value>../../../Shared/AVR/include</Value>
+      <Value>../../../Shared/2022SBC</Value>
       <Value>..</Value>
+      <Value>%24(PackRepoDir)\atmel\ATmega_DFP\1.7.374\include\</Value>
     </ListValues>
   </avrgcccpp.compiler.directories.IncludePaths>
   <avrgcccpp.compiler.optimization.level>Optimize debugging experience (-Og)</avrgcccpp.compiler.optimization.level>

@@ -34,14 +34,14 @@ enum {
 #define CFG_PRODUCT_NAME_STR "TSA Sargood Bed Controller"
 
 // Version info, set by manual editing.
-#define CFG_VER_MAJOR 1
+#define CFG_VER_MAJOR 2
 #define CFG_VER_MINOR 0
 
 // Build number incremented with each build by cfg-set-build.py script.
-#define CFG_BUILD_NUMBER 218
+#define CFG_BUILD_NUMBER 239
 
 // Timestamp in ISO8601 format set by cfg-set-build.py script.
-#define CFG_BUILD_TIMESTAMP "20230301T120334"
+#define CFG_BUILD_TIMESTAMP "20230301T150554"
 
 // Do not edit below this line......
 
