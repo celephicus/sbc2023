@@ -58,7 +58,6 @@ def warning(msg):
 pins = {}
 direct = []
 unused = []
-print(parser.metadata)
 for d in parser.data:
 	# print(d)
 	if 'unused' in d['Func']:							# An unused pins is just listed as unused with not further definitions.
@@ -75,8 +74,7 @@ for d in parser.data:
 # Write output file...
 cg.add_include_guard()
 cg.add_autogen_comment()
-if proc := parser.metadata.get("processor"):
-	cg.add_comment(f'Pin Assignments for {proc}.')
+cg.add_comment(f'Pin Assignments for {parser.metadata.get("processor", "<none>")}, project: {parser.metadata.get("project", "<none>")}.')
 
 cg.add('enum {')
 cg.indent()
