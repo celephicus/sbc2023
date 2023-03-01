@@ -15,13 +15,29 @@ FILENUM(1);
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 #include "lcd_driver.h"
 #include "event.h"
-#endif
+#include "myprintf.h"
 
 /* Perform a command, one of CMD_xxx. If a command is currently running, it will be queued and run when the pending command repeats. The currently running command
  * is available in register CMD_ACTIVE. The command status is in register CMD_STATUS. If a command is running, the status will be CMD_STATUS_PENDING. On completion,
  * the status is either CMD_STATUS_OK or an error code.
  */
 void cmdRun(uint16_t cmd);
+
+// Helper for myprintf to write a single character to the serial port. 
+static void myprintf_of(char c, void* arg) {
+	(void)arg;
+	GPIO_SERIAL_CONSOLE.write(c);
+}
+
+// Minimal printf. 
+void printf_s(PGM_P fmt, ...) {
+	va_list ap;
+	va_start(ap, fmt);
+	myprintf(myprintf_of, NULL, fmt, ap);
+	va_end(ap);
+}
+
+#endif
 
 // Console
 static void print_banner() { consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CFG_BANNER_STR)); }
@@ -62,7 +78,13 @@ static bool console_cmds_user(char* cmd) {
 	case /** CTM **/ 0xd17f: eventTraceMaskClear(); break;
 	case /** DTM **/ 0xbcb8: eventTraceMaskSetDefault(); break;
 	case /** ?TM **/ 0x7a03: fori ((COUNT_EV + 15) / 16) consolePrint(CFMT_X, ((uint16_t)eventGetTraceMask()[i*2+1]<<8) | (uint16_t)eventGetTraceMask()[i*2]); break;
-	case /** STM **/ 0x116f: { const uint8_t ev_id = consoleStackPop(); eventTraceMaskSet(ev_id, consoleStackPop()); } break;
+	case /** ??TM **/ 0x3fbc: {
+		fori (COUNT_EV) {
+			printf_s(PSTR("\r\n%d: %S: %c"), i, eventGetEventName(i), eventTraceMaskGetBit(i) + '0');
+			wdt_reset();
+		}
+	} break;
+	case /** STM **/ 0x116f: { const uint8_t ev_id = consoleStackPop(); eventTraceMaskSetBit(ev_id, consoleStackPop()); } break;
 #endif
 
 	// MODBUS
@@ -488,11 +510,7 @@ bool service_trace_log() {
 	EventTraceItem evt;
 	if (eventTraceRead(&evt)) {
 		const uint8_t id = event_id(evt.event);
-		//printf_s(PSTR("Ev: %lu: %S %u(%u,%u)\r\n"), evt.timestamp - commonGetTimestampOffset(), eventGetEventName(id), id, event_get_param8(evt.event), event_get_param16(evt.event));
-		GPIO_SERIAL_CONSOLE.print(F("Ev: ")); GPIO_SERIAL_CONSOLE.print(evt.timestamp);	GPIO_SERIAL_CONSOLE.print(F(" : "));
-		GPIO_SERIAL_CONSOLE.print((__FlashStringHelper*)eventGetEventName(id)); GPIO_SERIAL_CONSOLE.print(' ');
-		GPIO_SERIAL_CONSOLE.print(id); 
-		GPIO_SERIAL_CONSOLE.print('('); GPIO_SERIAL_CONSOLE.print(event_p8(evt.event)); GPIO_SERIAL_CONSOLE.print(','); GPIO_SERIAL_CONSOLE.print(event_p16(evt.event)); GPIO_SERIAL_CONSOLE.print('(');
+		printf_s(PSTR("Ev: %lu: %S %u(%u,%u)\r\n"), evt.timestamp, eventGetEventName(id), id, event_p8(evt.event), event_p16(evt.event));
 		return true;
 	}
 	return false;

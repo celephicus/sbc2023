@@ -120,17 +120,20 @@ bool eventTraceRead(EventTraceItem* b) {
 }
 
 void eventTraceMaskClear() { memset(eventGetTraceMask(), 0, EVENT_TRACE_MASK_SIZE); }
-void eventTraceMaskSet(uint8_t ev_id, bool f) {
+void eventTraceMaskSetBit(uint8_t ev_id, bool f) {
     utilsWriteFlags(&eventGetTraceMask()[ev_id / 8], (uint8_t)_BV(ev_id & 7), f);
+}
+bool eventTraceMaskGetBit(uint8_t ev_id) {
+	return eventGetTraceMask()[ev_id / 8] & (uint8_t)_BV(ev_id & 7);
 }
 void eventTraceMaskSetList(const uint8_t* ev_ids, uint8_t count) {
     while (count-- > 0)
-        eventTraceMaskSet(pgm_read_byte(ev_ids++), true);
+        eventTraceMaskSetBit(pgm_read_byte(ev_ids++), true);
 }
 
 void eventTraceMaskSetDefault() {
 	for (uint8_t i = EV_NIL+1; i < COUNT_EV; i += 1)
-		eventTraceMaskSet(i, true);
+		eventTraceMaskSetBit(i, true);
 }
 
 // Timers, only used with SMs.

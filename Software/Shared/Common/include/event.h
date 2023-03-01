@@ -74,10 +74,10 @@ uint8_t* eventGetTraceMask();
 void eventTraceMaskClear();
 
 // Set/clear a single bit in the trace mask.
-void eventTraceMaskSet(uint8_t ev_id, bool f);
+void eventTraceMaskSetBit(uint8_t ev_id, bool f);
 
 // Get value of a single bit in the trace mask.
-bool eventTraceMaskGet(uint8_t ev_id);
+bool eventTraceMaskGetBit(uint8_t ev_id);
 
 // Set a list of trace masks from a pointer to program memory.
 void eventTraceMaskSetList(const uint8_t* ev_ids, uint8_t count);
