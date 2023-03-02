@@ -11,6 +11,26 @@
 #include "sbc2022_modbus.h"
 FILENUM(2);
 
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
+
+#include "myprintf.h"
+
+// Helper for myprintf to write a single character to the serial port.
+static void myprintf_of(char c, void* arg) {
+	(void)arg;
+	GPIO_SERIAL_CONSOLE.write(c);
+}
+
+// Minimal printf.
+void printf_s(PGM_P fmt, ...) {
+	va_list ap;
+	va_start(ap, fmt);
+	myprintf(myprintf_of, NULL, fmt, ap);
+	va_end(ap);
+}
+
+#endif
+
 // Simple timer to set flags on timeout for error checking. Defined by a regs flags mask value with a SINGLE bit set and a timeout. Calling clear_fault_timer(m) will restart the timer and clear the flag.
 //  On timeout, the flag is set.
 //

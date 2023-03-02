@@ -123,7 +123,8 @@ void lcdDriverWrite(uint8_t row, uint8_t timeout, PGM_P fmt, ...) {
     vsnprintf_P(tmp_buf, LCD_DRIVER_MAX_MESSAGE_LENGTH + 1, fmt, ap);  // Don't overwrite buffer, note max length includes nul terminator. 
     va_end(ap);
 
-	if (0 != strcmp(f_lcdMgrData[row].message_buffer[is_temporary_message], tmp_buf)) {
+	// TODO: Why was this added? It breaks redisplaying the same temporary message and will not display any temporary if the row is blank.
+	{ //if (0 != strcmp(f_lcdMgrData[row].message_buffer[is_temporary_message], tmp_buf)) {
 		strcpy(f_lcdMgrData[row].message_buffer[is_temporary_message], tmp_buf);
 		set_new_static_message(row, is_temporary_message);       // Set line to display to start of new message
 		do_display_lcd(row);

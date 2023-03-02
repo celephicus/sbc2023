@@ -8,8 +8,8 @@ enum {
     // Serial
     GPIO_PIN_RX0 = 0,                              // Onboard USB serial port
     GPIO_PIN_TX0 = 1,                              // Onboard USB serial port
-    GPIO_PIN_CONS_TXO = 14,                        // Console FDTI serial
-    GPIO_PIN_CONS_RXI = 15,                        // Console FDTI serial
+    GPIO_PIN_CONS_TXO = 16,                        // Console FDTI serial
+    GPIO_PIN_CONS_RXI = 17,                        // Console FDTI serial
     GPIO_PIN_EXT_TXD = 18,                         // Ext. RS232 port
     GPIO_PIN_EXT_RXD = 19,                         // Ext. RS232 port
 
@@ -32,8 +32,8 @@ enum {
     GPIO_PIN_LCD_D7 = 27,                          // LCD data
 
     // Bus
-    GPIO_PIN_RS485_TXD = 16,                       // RS485 TX
-    GPIO_PIN_RS485_RXD = 17,                       // RS485 RX
+    GPIO_PIN_RS485_TXD = 14,                       // RS485 TX
+    GPIO_PIN_RS485_RXD = 15,                       // RS485 RX
     GPIO_PIN_ATN = 31,                             // Pulse high to signal ATN low on bus.
     GPIO_PIN_RS485_TX_EN = 32,                     // Enable RS485 xmitter
 
@@ -61,9 +61,9 @@ enum {
 };
 // Extra symbols from symbol directive.
 #define GPIO_SERIAL_CONSOLE Serial // Serial port for console.
-#define GPIO_SERIAL_RS485 Serial2 // Serial port for RS485.
-#define GPIO_LCD_NUM_ROWS 2 // ff
-#define GPIO_LCD_NUM_COLS 16 // gg
+#define GPIO_SERIAL_RS485 Serial3 // Serial port for RS485.
+#define GPIO_LCD_NUM_ROWS 2 // 
+#define GPIO_LCD_NUM_COLS 16 // 
 
 
 // Direct access ports.

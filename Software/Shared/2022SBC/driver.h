@@ -22,6 +22,9 @@ int8_t driverGetFaultySensor();
 
 bool driverSlaveIsEnabled(uint8_t slave_idx);
 
+// Minimal printf.
+void printf_s(PGM_P fmt, ...);
+
 #endif
 
 // LED pattern, set this and it will blink away forever.

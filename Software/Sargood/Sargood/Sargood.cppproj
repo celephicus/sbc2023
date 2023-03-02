@@ -350,6 +350,12 @@ build.cmd
       <SubType>compile</SubType>
       <Link>Shared\Common\regs.cpp</Link>
     </Compile>
+    <Compile Include="app.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="app.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="event.local.h">
       <SubType>compile</SubType>
     </Compile>

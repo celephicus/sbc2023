@@ -15,7 +15,9 @@ class GPIOParse(csv_parser.CSVparse):
 		self.COLUMN_NAMES = 'Pin Sig Func Description Group Apin Ppin Port AltFunc Comment'.split() # pylint: disable=invalid-name
 		self.metadata = { 'symbol': {}}
 	def handle_directive(self, directive, data):
+		# TODO: error handline for directives!
 		directive = directive.lower()
+		data += ['', '']
 		if directive in 'processor project'.split():
 			self.metadata[directive] = data[0]
 		elif directive == 'symbol':
@@ -90,7 +92,7 @@ cg.add('};', indent=-1, eat_nl=True)
 if parser.metadata['symbol']:
 	cg.add_comment("Extra symbols from symbol directive.")
 	for sym, vc in parser.metadata['symbol'].items():
-		val, comment = (list(vc) + [''])[:2]
+		val, comment = vc
 		cg.add(f"#define GPIO_{sym} {val} // {comment}")
 	cg.add_nl()
 	
