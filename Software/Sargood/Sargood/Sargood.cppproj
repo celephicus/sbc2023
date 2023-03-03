@@ -286,6 +286,14 @@ build.cmd
       <SubType>compile</SubType>
       <Link>Shared\AVR\dev.cpp</Link>
     </Compile>
+    <Compile Include="..\..\Shared\AVR\include\lcd_driver.h">
+      <SubType>compile</SubType>
+      <Link>Shared\AVR\lcd_driver.h</Link>
+    </Compile>
+    <Compile Include="..\..\Shared\AVR\src\lcd_driver.cpp">
+      <SubType>compile</SubType>
+      <Link>Shared\AVR\lcd_driver.cpp</Link>
+    </Compile>
     <Compile Include="..\..\Shared\Common\include\console.h">
       <SubType>compile</SubType>
       <Link>Shared\Common\console.h</Link>
@@ -360,9 +368,6 @@ build.cmd
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="gpio.h">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="lcd_driver.cpp">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="lcd_driver.h">

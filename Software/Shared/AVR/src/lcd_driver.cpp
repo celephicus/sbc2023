@@ -5,6 +5,7 @@
 #include "utils.h"
 FILENUM(4);
 
+#include "myprintf.h"
 #include "lcd_driver.h"
 
 LiquidCrystal g_lcd(GPIO_PIN_LCD_RS, GPIO_PIN_LCD_E, GPIO_PIN_LCD_D4, GPIO_PIN_LCD_D5, GPIO_PIN_LCD_D6, GPIO_PIN_LCD_D7);
@@ -119,16 +120,11 @@ void lcdDriverWrite(uint8_t row, uint8_t timeout, PGM_P fmt, ...) {
     f_lcdMgrData[row].timer_temporary = timeout;        // If a timeout is supplied message is temporary, else it is static.
     const bool is_temporary_message = (f_lcdMgrData[row].timer_temporary > 0);
     
-	char tmp_buf[LCD_DRIVER_MAX_MESSAGE_LENGTH + 1];
-    vsnprintf_P(tmp_buf, LCD_DRIVER_MAX_MESSAGE_LENGTH + 1, fmt, ap);  // Don't overwrite buffer, note max length includes nul terminator. 
+    myprintf_snprintf(f_lcdMgrData[row].message_buffer[is_temporary_message], LCD_DRIVER_MAX_MESSAGE_LENGTH + 1, fmt, ap);  // Don't overwrite buffer, note max length includes nul terminator. 
     va_end(ap);
 
-	// TODO: Why was this added? It breaks redisplaying the same temporary message and will not display any temporary if the row is blank.
-	{ //if (0 != strcmp(f_lcdMgrData[row].message_buffer[is_temporary_message], tmp_buf)) {
-		strcpy(f_lcdMgrData[row].message_buffer[is_temporary_message], tmp_buf);
-		set_new_static_message(row, is_temporary_message);       // Set line to display to start of new message
-		do_display_lcd(row);
-	}
+	set_new_static_message(row, is_temporary_message);       // Set line to display to start of new message
+	do_display_lcd(row);
 }
 
 void lcdDriverInit() { // Called at startup, set current message to start of message_buffer which will be zeroed.

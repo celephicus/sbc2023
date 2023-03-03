@@ -20,15 +20,34 @@
 	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
 
-
-/* Generic function to write a character to whatever output device is required, arg can be used to keep track of state. */
+/* Simple printf formatter. Formats:
+	
+	%[-0][<width>][lL]<spec>
+	
+	leading -	right justify in field width
+	leading 0 	zero fill in field width (numbers only)
+	<width>		field width
+	l or L before spec:	number is long
+	<spec>	% 	literal percent
+			s	string, will print nothing for NULL pointer.
+			S	string in PROGMEM (AVR target only)
+			c	single character
+			d	signed (possibly long) int
+			u   unsigned (possibly long) int in decimal
+			b	unsigned (possibly long) int in binary (optional)
+			x	unsigned (possibly long) int in hex with lower case a-f
+			X	unsigned (possibly long) int in hex with upper case A-F
+*/			
+			
+/* Function used vy myprintf to write a character to whatever output device is required, arg can be used to keep track of state. */
 typedef void (*myprintf_putchar)(char c, void* arg);
 
 /* Formatter function that writes to the putfunc, passes arg directly, according to the format string fmt. */
 void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap);
 
-/* Simple sprintf implementation. */
-void myprintf_sprintf(char* buf, const char* fmt, ...);
+/* Safer sprintf that will not overwrite its buffer. At most (len-1) characters are written. The function returns true if all chars were were written to the buffer.
+	The buffer is always terminated with a nul even on overflow. */
+char myprintf_snprintf(char* buf, unsigned len, const char* fmt, ...);
 
 /* Example
 
@@ -48,7 +67,7 @@ void m_sprintf_of(char c, void* arg) {
 	*(*(char*)arg)++ = c;
 }
 
-void m_printf(char* str, const char* fmt, ...) {
+void m_sprintf(char* str, const char* fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
 	myprintf(m_sprintf_of, (void*)&str, fmt, ap);

@@ -9,7 +9,7 @@ void appService10hz();
  * is available in register APP_CMD_ACTIVE. The command status is in register APP_CMD_STATUS. If a command is running, the status will be APP_CMD_STATUS_PENDING. On completion,
  * the status is either APP_CMD_STATUS_OK or an error code.
  */
-void appCmdRun(uint16_t cmd);
+void appCmdRun(uint8_t cmd);
 
 /* Command processor runs a single command at a time, with a single level queue. On accepting a new command, a status is set to PENDING from IDLE.
  * On completion, the status is set to OK or an error code.

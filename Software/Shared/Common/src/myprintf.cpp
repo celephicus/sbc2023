@@ -80,20 +80,31 @@ MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_LONG_QUALIFIER) == CFG_MYPRINTF_SIZEO
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #pragma GCC diagnostic ignored "-Wunused-label"
 
-static void myprintf_sprintf_of(char c, void* arg) {
-	char** s = (char**)arg;
-	**s = c;
-	*s += 1;
+struct snprintf_state {
+	char* p;	/* Next char pos to be written to buffer. */
+	char* end;	/* Next char after last char in buffer. Don't write here. */
+};
+
+static void myprintf_snprintf_of(char c, void* arg) {
+	struct snprintf_state* s = (struct snprintf_state*)arg;
+	if (s->p < s->end)	/* Will write entire buffer but no more. */
+		*s->p++ = c;
 }
 
-void myprintf_sprintf(char* buf, const char* fmt, ...) {
+char myprintf_snprintf(char* buf, unsigned len, const char* fmt, ...) {
+	struct snprintf_state s = { buf, buf + len }; 
+	char rc = 1;
 	va_list ap;
 	va_start(ap, fmt);
-	myprintf(myprintf_sprintf_of, (void*)(&buf), fmt, ap);
-	*buf = '\0';
+	myprintf(myprintf_snprintf_of, (void*)(&s), fmt, ap);
 	va_end(ap);
+	if (s.p >= s.end) { /* Overflow! */
+		rc = 0;
+		s.p -= 1;
+	}
+	s.p = '\0';
+	return rc;
 }
-
 
 void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) {
 	uint_least8_t width;			// Holds field width.
@@ -154,7 +165,7 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 				if (NULL == str.c) {					/* Catch null ptr. */
 					buf[0] = '\0';
 #ifdef MYPRINTF_WANT_PGM_STR
-					flags &= ~FLAG_STR_PGM;;			/* Might have been set by `%s' so clear. */
+					flags &= ~FLAG_STR_PGM;;			/* Might have been set by `%S' so clear. */
 #endif // MYPRINTF_WANT_PGM_STR
 					goto p_char;						/* Will be treated as zero length string. */
 				}
@@ -166,6 +177,7 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 				buf[0] = (char)va_arg(ap, int);			/* Gcc can give a warning about char promotion when using va_arg(). */
 p_char:			buf[1] = '\0';
 				str.c = &buf[0];
+				/* TODO: remove this? */
 #if 0
 				flags &= ~FLAG_PAD_RIGHT;				/* Only pad strings with a space. */
 #endif

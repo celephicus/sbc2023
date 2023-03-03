@@ -50,10 +50,10 @@ static const uint16_t RELAY_STOP_DURATION_MS = 200U;
 
 static struct {
 	thread_control_t tcb_cmd;
-	uint16_t cmd_req;
+	uint8_t cmd_req;
 } f_app_ctx;
 
-void appCmdRun(uint16_t cmd) {
+void appCmdRun(uint8_t cmd) {
 	f_app_ctx.cmd_req = cmd;
 }
 
@@ -237,7 +237,7 @@ bool service_trace_log() {
 	return false;
 }
 
-static const char* get_cmd_desc(uint16_t cmd) {
+static const char* get_cmd_desc(uint8_t cmd) {
 	switch(cmd) {
 	case APP_CMD_STOP:			return PSTR("Stop");
 	
@@ -260,7 +260,23 @@ static const char* get_cmd_desc(uint16_t cmd) {
 	case APP_CMD_RESTORE_POS_3:	return PSTR("Goto Pos 3");
 	case APP_CMD_RESTORE_POS_4:	return PSTR("Goto Pos 4");
 
-	default: return PSTR("");
+	default: return PSTR("Unknown Command");
+	}
+}
+
+static const char* get_cmd_status_desc(uint8_t cmd) {
+	switch(cmd) {
+	case APP_CMD_STATUS_OK:				return PSTR("OK");
+	case APP_CMD_STATUS_PENDING:		return PSTR("Pending");
+	case APP_CMD_STATUS_BAD_CMD:		return PSTR("Unknown");
+	case APP_CMD_STATUS_RELAY_FAIL:		return PSTR("Int. Fail");
+	case APP_CMD_STATUS_PRESET_INVALID:	return PSTR("Preset Invalid");
+	case APP_CMD_STATUS_SENSOR_FAIL_0:	return PSTR("Head Sensor Bad");
+	case APP_CMD_STATUS_SENSOR_FAIL_1:	return PSTR("Foot Sensor Bad");
+	case APP_CMD_STATUS_NO_MOTION_0:	return PSTR("Head No Motion");
+	case APP_CMD_STATUS_NO_MOTION_1:	return PSTR("Foot No Motion");
+
+	default: return PSTR("Unknown Status");
 	}
 }
 
@@ -288,12 +304,16 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 		case ST_RUN:
 		switch(event_id(ev)) {
 			case EV_SM_ENTRY:
-			lcdDriverWrite(LCD_DRIVER_ROW_1, 0, PSTR("TSA Bed Controller"));
-			lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("Ready..."));
+			lcdDriverWrite(LCD_DRIVER_ROW_1, 0, PSTR("  TSA MBC 2022"));
+			lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("    Ready..."));
 			break;
 
 			case EV_COMMAND_START:
-			lcdDriverWrite(LCD_DRIVER_ROW_2, DISPLAY_CMD_START_DURATION_MS/100, get_cmd_desc(event_p8(ev)));
+			lcdDriverWrite(LCD_DRIVER_ROW_1, 100, get_cmd_desc(event_p8(ev)));
+			break;
+			case EV_COMMAND_DONE:
+			lcdDriverWrite(LCD_DRIVER_ROW_1, DISPLAY_CMD_START_DURATION_MS/100, get_cmd_desc(event_p8(ev)));
+			lcdDriverWrite(LCD_DRIVER_ROW_2, DISPLAY_CMD_START_DURATION_MS/100, get_cmd_status_desc(event_p16(ev)));
 			break;
 		}	// Closes ST_RUN...
 		break;
