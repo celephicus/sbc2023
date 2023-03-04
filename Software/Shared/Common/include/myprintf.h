@@ -47,6 +47,8 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap);
 
 /* Safer sprintf that will not overwrite its buffer. At most (len-1) characters are written. The function returns true if all chars were were written to the buffer.
 	The buffer is always terminated with a nul even on overflow. */
+	
+char myprintf_vsnprintf(char* buf, unsigned len, const char* fmt, va_list ap);
 char myprintf_snprintf(char* buf, unsigned len, const char* fmt, ...);
 
 /* Example

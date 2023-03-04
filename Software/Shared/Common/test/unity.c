@@ -545,25 +545,34 @@ static void UnityTestResultsFailBegin(const UNITY_LINE_TYPE line)
 /*-----------------------------------------------*/
 void UnityConcludeTest(void)
 {
+	char want_result = 0;
     if (Unity.CurrentTestIgnored)
     {
         Unity.TestIgnores++;
     }
-    else if (!Unity.CurrentTestFailed)
-    {
-        UnityTestResultsBegin(Unity.TestFile, Unity.CurrentTestLineNumber);
-        UnityPrint(UnityStrPass);
+    else if (!Unity.CurrentTestFailed) 
+	{
+		if (OUTPUT_CONTROL_PRINT_RESULT_PASS())
+		{
+			UnityTestResultsBegin(Unity.TestFile, Unity.CurrentTestLineNumber);
+			UnityPrint(UnityStrPass);
+			want_result = 1;
+		}
     }
     else
     {
         Unity.TestFailures++;
+		want_result = 1;
     }
 
     Unity.CurrentTestFailed = 0;
     Unity.CurrentTestIgnored = 0;
-    UNITY_PRINT_EXEC_TIME();
-    UNITY_PRINT_EOL();
-    UNITY_FLUSH_CALL();
+    if (want_result)
+	{
+		UNITY_PRINT_EXEC_TIME();
+		UNITY_PRINT_EOL();
+		UNITY_FLUSH_CALL();
+	}
 }
 
 /*-----------------------------------------------*/
@@ -2052,6 +2061,11 @@ void UnitySetTestFile(const char* filename)
 }
 
 /*-----------------------------------------------*/
+void UnityVerbosity(int no_pass) {
+	Unity.Verbosity = no_pass;
+}
+
+/*-----------------------------------------------*/
 void UnityBegin(const char* filename)
 {
     Unity.TestFile = filename;
@@ -2062,7 +2076,8 @@ void UnityBegin(const char* filename)
     Unity.TestIgnores = 0;
     Unity.CurrentTestFailed = 0;
     Unity.CurrentTestIgnored = 0;
-
+	Unity.Verbosity = 0;
+	
     UNITY_CLR_DETAILS();
     UNITY_OUTPUT_START();
 }

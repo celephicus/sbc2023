@@ -90,19 +90,23 @@ static void myprintf_snprintf_of(char c, void* arg) {
 	if (s->p < s->end)	/* Will write entire buffer but no more. */
 		*s->p++ = c;
 }
-
-char myprintf_snprintf(char* buf, unsigned len, const char* fmt, ...) {
+char myprintf_vsnprintf(char* buf, unsigned len, const char* fmt, va_list ap) {
 	struct snprintf_state s = { buf, buf + len }; 
 	char rc = 1;
-	va_list ap;
-	va_start(ap, fmt);
 	myprintf(myprintf_snprintf_of, (void*)(&s), fmt, ap);
-	va_end(ap);
 	if (s.p >= s.end) { /* Overflow! */
 		rc = 0;
 		s.p -= 1;
 	}
-	s.p = '\0';
+	*s.p = '\0';
+	return rc;
+}
+
+char myprintf_snprintf(char* buf, unsigned len, const char* fmt, ...) {
+	va_list ap;
+	va_start(ap, fmt);
+	char rc = myprintf_vsnprintf(buf, len, fmt, ap);
+	va_end(ap);
 	return rc;
 }
 
@@ -233,8 +237,8 @@ p_str:		// Print string `str' justified in `width' with padding char `pad'.
 
 			// Get length of string. Could replace with strlen()
 			if (width > 0) {
-				register int len;
-				register const char* p;
+				int len;
+				const char* p;
 				for (p = str.c, len = 0; '\0' != (flags & FLAG_STR_PGM) ? MYPRINTF_DEREF_PGM_STR_CHAR(p) : *p; p += 1)
 					len += 1;
 

@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<CodeLite_Project Name="test" Version="10.0.0" InternalType="Console">
+<CodeLite_Project Name="test" Version="11000" InternalType="Console">
   <VirtualDirectory Name="Common">
+    <File Name="../src/myprintf.cpp"/>
+    <File Name="../include/myprintf.h"/>
     <File Name="../src/event.cpp"/>
     <File Name="../src/utils.cpp"/>
     <File Name="../include/event.h"/>
     <File Name="../include/utils.h"/>
   </VirtualDirectory>
   <VirtualDirectory Name="test_framework">
+    <File Name="unity_internals.h"/>
     <File Name="unity.c"/>
     <File Name="unity.h"/>
     <File Name="unity_config.h"/>
@@ -14,10 +17,11 @@
   <Description/>
   <Dependencies/>
   <VirtualDirectory Name="test">
+    <File Name="project_config.h"/>
+    <File Name="test_printf.cpp"/>
     <File Name="support_test.cpp"/>
     <File Name="support_test.h"/>
     <File Name="test_event.cpp"/>
-    <File Name="project_config.test.h"/>
     <File Name="test_utils.cpp"/>
     <File Name="main.cpp"/>
   </VirtualDirectory>
@@ -40,7 +44,7 @@
       </Compiler>
       <Linker Options="" Required="yes"/>
       <ResourceCompiler Options="" Required="no"/>
-      <General OutputFile="$(IntermediateDirectory)/$(ProjectName)" IntermediateDirectory="./Debug" Command="./$(ProjectName)" CommandArguments="" UseSeparateDebugArgs="no" DebugArguments="" WorkingDirectory="$(IntermediateDirectory)" PauseExecWhenProcTerminates="yes" IsGUIProgram="no" IsEnabled="yes"/>
+      <General OutputFile="$(IntermediateDirectory)/$(ProjectName)" IntermediateDirectory="./Debug" Command="./$(ProjectName)" CommandArguments="-f" UseSeparateDebugArgs="no" DebugArguments="-f" WorkingDirectory="$(IntermediateDirectory)" PauseExecWhenProcTerminates="yes" IsGUIProgram="no" IsEnabled="yes"/>
       <BuildSystem Name="Default"/>
       <Environment EnvVarSetName="&lt;Use Defaults&gt;" DbgSetName="&lt;Use Defaults&gt;">
         <![CDATA[]]>
@@ -51,8 +55,8 @@
         <StartupCommands/>
       </Debugger>
       <PreBuild>
-        <Command Enabled="yes">../../../Tools/mk-event-defs.py</Command>
-        <Command Enabled="yes">./grm.py -v -o main.cpp test*.cpp</Command>
+        <Command Enabled="yes">python ../../../Tools/events_mk.py</Command>
+        <Command Enabled="yes">python grm.py -v -o main.cpp test*.cpp</Command>
       </PreBuild>
       <PostBuild/>
       <CustomBuild Enabled="no">

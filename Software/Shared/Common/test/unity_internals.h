@@ -491,6 +491,7 @@ typedef enum
 
 struct UNITY_STORAGE_T
 {
+	unsigned Verbosity;
     const char* TestFile;
     const char* CurrentTestName;
 #ifndef UNITY_EXCLUDE_DETAILS
@@ -514,11 +515,15 @@ struct UNITY_STORAGE_T
 
 extern struct UNITY_STORAGE_T Unity;
 
+/* Output control predicate. There will be more of these. */
+#define OUTPUT_CONTROL_PRINT_RESULT_PASS() (0 == Unity.Verbosity)
+
 /*-------------------------------------------------------
  * Test Suite Management
  *-------------------------------------------------------*/
 
 void UnityBegin(const char* filename);
+void UnityVerbosity(int no_pass);
 int  UnityEnd(void);
 void UnitySetTestFile(const char* filename);
 void UnityConcludeTest(void);
