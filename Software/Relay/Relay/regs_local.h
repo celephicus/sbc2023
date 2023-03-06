@@ -1,6 +1,10 @@
 #ifndef REGS_LOCAL_H__
 #define REGS_LOCAL_H__
 
+// Define version of NV data. If you change the schema or the implementation, increment the number to force any existing
+// EEPROM to flag as corrupt. Also increment to force the default values to be set for testing.
+const uint16_t REGS_DEF_VERSION = 3;
+
 /* [[[ Definition start...
 FLAGS [hex] "Various flags."
 	MODBUS_MASTER_NO_COMMS [0] "No comms from MODBUS master."

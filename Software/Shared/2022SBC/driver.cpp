@@ -86,7 +86,7 @@ static uint8_t read_holding_register(uint16_t address, uint16_t* value) {
 		clear_fault_timer(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS);
 		return 0;
 	}
-	if (SBC2022_MODBUS_STATUS_SLAVE == address) {
+	if (SBC2022_MODBUS_REGISTER_SENSOR_STATUS == address) {
 		*value = REGS[REGS_IDX_ACCEL_TILT_STATUS];
 		return 0;
 	}
@@ -312,7 +312,7 @@ void modbus_cb(uint8_t evt) {
 	const bool resp_ok = modbusGetResponse(&frame_len, frame);
 
 	// Dump MODBUS...
-	//gpioD1Write(true);
+	gpioSp0Write(true);
 	if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS) {
 		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("R:"));
 		consolePrint(CFMT_U, evt);
@@ -327,15 +327,15 @@ void modbus_cb(uint8_t evt) {
 	}
 
 	do_handle_modbus_cb(evt, frame, frame_len);
-	//gpioD1Write(0);
+	gpioSp0Write(0);
 }
 
 // Stuff for debugging MODBUS timing.
 void modbus_timing_debug(uint8_t id, uint8_t s) {
 	switch (id) {
-		case MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT: gpioD1Write(s); break;
-		case MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT: 	gpioD2Write(s); break;
-		case MODBUS_TIMING_DEBUG_EVENT_RX_FRAME: 	gpioD3Write(s); break;
+		case MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT: gpioSp1Write(s); break;
+		case MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT: 	gpioSp2Write(s); break;
+		case MODBUS_TIMING_DEBUG_EVENT_RX_FRAME: 	gpioSp3Write(s); break;
 	}
 }
 
@@ -354,9 +354,11 @@ static void modbus_init() {
 	REGS[REGS_IDX_RELAY_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_NOT_PRESENT;
 #endif
 	modbusSetTimingDebugCb(modbus_timing_debug);
-	gpioD1SetModeOutput();		// These are used by the RS485 debug cb.
-	gpioD2SetModeOutput();
-	gpioD3SetModeOutput();
+	gpioSp0SetModeOutput();		// These are used by the RS485 debug cb.
+	gpioSp1SetModeOutput();
+	gpioSp2SetModeOutput();
+	gpioSp3SetModeOutput();
+	gpioSp4SetModeOutput();
 }
 static void modbus_service() {
 	modbusService();
@@ -501,7 +503,7 @@ void service_devices() {
 			}
 
 			if (++f_accel_data.counts >= REGS[REGS_IDX_ACCEL_AVG]) {	// Check for time to average accumulated readings.
-				gpioD1Set();
+				gpioSp4Set();
 				REGS[REGS_IDX_ACCEL_SAMPLE_COUNT] += 1;
 				fori (3)
 					REGS[REGS_IDX_ACCEL_X + i] = (regs_t)f_accel_data.r[i];
@@ -516,7 +518,7 @@ void service_devices() {
 				REGS[REGS_IDX_ACCEL_TILT_ANGLE_LP] = (regs_t)utilsFilter(&f_accel_data.tilt_motion_disc_filter_accum, tilt_i16, (uint8_t)REGS[REGS_IDX_ACCEL_TILT_MOTION_DISC_FILTER_K], f_accel_data.reset_filter);
 				f_accel_data.reset_filter = false;
 
-				gpioD1Clear();
+				gpioSp4Clear();
 			}
 		}
 	}
@@ -530,7 +532,7 @@ void service_devices() {
 		switch (utilsWindow((int16_t)REGS[REGS_IDX_TILT_DELTA], -(int16_t)REGS[REGS_IDX_ACCEL_TILT_MOTION_DISC_THRESHOLD], +(int16_t)REGS[REGS_IDX_ACCEL_TILT_MOTION_DISC_THRESHOLD])) {
 		case -1: REGS[REGS_IDX_ACCEL_TILT_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_MOTION_NEG; break;
 		case +1: REGS[REGS_IDX_ACCEL_TILT_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_MOTION_POS; break;
-		default: REGS[REGS_IDX_ACCEL_TILT_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_IDLE; break;
+		default: REGS[REGS_IDX_ACCEL_TILT_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_OK; break;
 		}
 
 		if (0 != REGS[REGS_IDX_ACCEL_SAMPLE_RATE_TEST])		// Fake sample count for testing.
@@ -670,7 +672,9 @@ typedef struct {
 
 static NvData l_nv_data;
 
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 uint8_t* eventGetTraceMask() { return l_nv_data.trace_mask; }
+#endif
 
 // The NV only managed the latter part of regs and whatever else is in the NvData struct.
 #define NV_DATA_NV_SIZE (sizeof(NvData) - offsetof(NvData, regs[REGS_START_NV_IDX]))

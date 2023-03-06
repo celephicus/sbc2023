@@ -7,8 +7,7 @@
 #define CFG_DRIVER_BUILD_RELAY 1
 #define CFG_DRIVER_BUILD_SENSOR 2
 #define CFG_DRIVER_BUILD_SARGOOD 3
-
-#define CFG_DRIVER_BUILD CFG_DRIVER_BUILD_SENSOR
+#define CFG_DRIVER_BUILD CFG_DRIVER_BUILD_RELAY
 
 // Watchdog. 
 #define CFG_WATCHDOG_TIMEOUT WDTO_2S   
@@ -26,17 +25,17 @@ enum {
 };
 
 // Product name
-#define CFG_PRODUCT_NAME_STR "TSA SBC2022 Sensor Module"
+#define CFG_PRODUCT_NAME_STR "TSA SBC2022 Relay Module"
 
 // Version info, set by manual editing. 
 #define CFG_VER_MAJOR 1     
 #define CFG_VER_MINOR 0
 
 // Build number incremented with each build by cfg-set-build.py script. 
-#define CFG_BUILD_NUMBER 648
+#define CFG_BUILD_NUMBER 541
 
 // Timestamp in ISO8601 format set by cfg-set-build.py script.
-#define CFG_BUILD_TIMESTAMP "20230217T164308"
+#define CFG_BUILD_TIMESTAMP "20230307T091848"
 
 // Do not edit below this line......
 

@@ -65,7 +65,7 @@ enum {
 #define REGS_START_NV_IDX REGS_IDX_ENABLES
 
 // Define default values for the NV segment.
-#define REGS_NV_DEFAULT_VALS 0, 10, 0, 1, 4, 5
+#define REGS_NV_DEFAULT_VALS 0, 10, 0, 3, 4, 5
 
 // Define how to format the reg when printing.
 #define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_D, CFMT_D, CFMT_D, CFMT_X, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U
