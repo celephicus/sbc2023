@@ -10,6 +10,29 @@ void utilsStartTimer(T &then) { then = (T)millis(); }
 template <typename T>
 bool utilsIsTimerDone(T &then, T timeout) { return ((T)millis() - then) > timeout; }
 
+// Endianness conversion functions.
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define utilsU16_native_to_le(x_) (x_)
+#define utilsU16_le_to_native(x_) (x_)
+#define utilsU32_native_to_le(x_) (x_)
+#define utilsU32_le_to_native(x_) (x_)
+#define utilsU16_native_to_be(x_) (__builtin_bswap16(x_))
+#define utilsU16_be_to_native(x_) (__builtin_bswap16(x_))
+#define utilsU32_native_to_be(x_) (__builtin_bswap32(x_))
+#define utilsU32_be_to_native(x_) (__builtin_bswap32(x_))
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define utilsU16_native_to_le(x_) (__builtin_bswap16(x_))
+#define utilsU16_le_to_native(x_) (__builtin_bswap16(x_))
+#define utilsU32_native_to_le(x_) (__builtin_bswap16(x_))
+#define utilsU32_le_to_native(x_) (__builtin_bswap16(x_))
+#define utilsU16_native_to_be(x_) (x_)
+#define utilsU16_be_to_native(x_) (x_)
+#define utilsU32_native_to_be(x_) (x_)
+#define utilsU32_be_to_native(x_) (x_)
+#else
+#error "What machine is this, a PDP8?"
+#endif
+
 /* I'm not sure this belongs here, but there is a need in event for critical sections, so here it is. I'd like to put it in dev,
 	which was where the more device specific stuff was intended to go.
 	Anyway here is simple code to make an uninterruptable section of code. Not as elegant as the ATOMIC_BLOCK in avr-libc,
@@ -113,7 +136,7 @@ static inline bool buffer##name_##Overflow(Buffer##name_* q) { return q->ovf; }	
 static inline uint_least8_t buffer##name_##Len(const Buffer##name_* q) { return (uint_least8_t)(q->p - q->buf); }			\
 static inline uint_least8_t buffer##name_##Free(const Buffer##name_* q) { return (uint_least8_t)(&q->buf[size_] - q->p); }	\
 static inline void buffer##name_##Add(Buffer##name_* q, uint8_t x) { 														\
-	if (buffer##name_##Free(q) > 0)	*q->p++ = x;																			\
+	if (buffer##name_##Free(q) >= 1) *q->p++ = x;																			\
 	else q->ovf = true;																										\
 }																															\
 static inline void buffer##name_##AddMem(Buffer##name_* q, const void* m, uint8_t len) { 									\
@@ -121,7 +144,7 @@ static inline void buffer##name_##AddMem(Buffer##name_* q, const void* m, uint8_
 	memcpy(q->p, m, len); q->p += len;																						\
 }																															\
 static inline void buffer##name_##AddU16(Buffer##name_* q, uint16_t x) { 													\
-	buffer##name_##Add(q, x>>8); buffer##name_##Add(q, x);																	\
+	buffer##name_##AddMem(q, (void*)&x, sizeof(uint16_t)); 																	\
 }
 
 // How many elements in an array?

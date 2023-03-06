@@ -9,6 +9,20 @@ TT_BEGIN_INCLUDE()
 #include "utils.h"
 TT_END_INCLUDE()
 
+// Endianness conversion.
+void test_utils_endianness() {
+	const uint16_t u16 = 0x1234, u16_r = 0x3412;
+	const uint32_t u32 = 0x12345678, u32_r = 0x78563412;
+	TEST_ASSERT_EQUAL_UINT16(u16, utilsU16_native_to_le(u16));
+	TEST_ASSERT_EQUAL_UINT16(u16, utilsU16_le_to_native(u16));
+	TEST_ASSERT_EQUAL_UINT32(u32, utilsU32_native_to_le(u32));
+	TEST_ASSERT_EQUAL_UINT32(u32, utilsU32_le_to_native(u32));
+	TEST_ASSERT_EQUAL_UINT16(u16, utilsU16_native_to_be(u16_r));
+	TEST_ASSERT_EQUAL_UINT16(u16, utilsU16_be_to_native(u16_r));
+	TEST_ASSERT_EQUAL_UINT32(u32, utilsU32_native_to_be(u32_r));
+	TEST_ASSERT_EQUAL_UINT32(u32, utilsU32_be_to_native(u32_r));
+}
+
 // Test little helpers...
 void testUtilsIsTypeSigned() {
 	TEST_ASSERT(utilsIsTypeSigned(int8_t));
@@ -231,8 +245,9 @@ void testBufferAddCharOverflow() {
 void testBufferAddU16(int n) {
 	fori (n) {
 		bufferBufAddU16(&b, 0xfedc+i);
-		TEST_ASSERT_EQUAL_UINT8(TEST_UTILS_BUF_SIZE-(i+1)*2, bufferBufFree(&b));
-		TEST_ASSERT_EQUAL_UINT8((i+1)*2, bufferBufLen(&b));
+		const int size_exp = (i+1)*2;
+		TEST_ASSERT_EQUAL_UINT8(TEST_UTILS_BUF_SIZE-size_exp, bufferBufFree(&b));
+		TEST_ASSERT_EQUAL_UINT8(size_exp, bufferBufLen(&b));
 		TEST_ASSERT_FALSE(bufferBufOverflow(&b));
 	}
 	fori (n)
