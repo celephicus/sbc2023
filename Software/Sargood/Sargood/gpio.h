@@ -50,14 +50,14 @@ enum {
     GPIO_PIN_VOLTS_MON_BUS = A0,                   // Monitors 12V bus.
 
     // Spare
-    GPIO_PIN_D0 = A8,                              // Spare IO
-    GPIO_PIN_D1 = A9,                              // Spare IO
-    GPIO_PIN_D2 = A10,                             // Spare IO
-    GPIO_PIN_D3 = A11,                             // Spare IO
-    GPIO_PIN_D4 = A12,                             // Spare IO
-    GPIO_PIN_D5 = A13,                             // Spare IO
-    GPIO_PIN_D6 = A14,                             // Spare IO
-    GPIO_PIN_D7 = A15,                             // Spare IO
+    GPIO_PIN_SP_0 = A8,                            // Spare IO
+    GPIO_PIN_SP_1 = A9,                            // Spare IO
+    GPIO_PIN_SP_2 = A10,                           // Spare IO
+    GPIO_PIN_SP_3 = A11,                           // Spare IO
+    GPIO_PIN_SP_4 = A12,                           // Spare IO
+    GPIO_PIN_SP_5 = A13,                           // Spare IO
+    GPIO_PIN_SP_6 = A14,                           // Spare IO
+    GPIO_PIN_SP_7 = A15,                           // Spare IO
 };
 // Extra symbols from symbol directive.
 #define GPIO_SERIAL_CONSOLE Serial // Serial port for console.
@@ -88,85 +88,85 @@ static inline void gpioLedSet() { PORTC |= _BV(7); }
 static inline void gpioLedClear() { PORTC &= ~_BV(7); }
 static inline void gpioLedWrite(bool b) { if (b) PORTC |= _BV(7); else PORTC &= ~_BV(7); }
 
-// D0: Spare IO
-static inline void gpioD0SetModeOutput() { DDRK |= _BV(0); }
-static inline void gpioD0SetModeInput() { DDRK &= ~_BV(0); }
-static inline void gpioD0SetMode(bool fout) { if (fout) DDRK |= _BV(0); else DDRK &= ~_BV(0); }
-static inline bool gpioD0Read() { return PINK | _BV(0); }
-static inline void gpioD0Toggle() { PORTK ^= _BV(0); }
-static inline void gpioD0Set() { PORTK |= _BV(0); }
-static inline void gpioD0Clear() { PORTK &= ~_BV(0); }
-static inline void gpioD0Write(bool b) { if (b) PORTK |= _BV(0); else PORTK &= ~_BV(0); }
+// SP_0: Spare IO
+static inline void gpioSp0SetModeOutput() { DDRK |= _BV(0); }
+static inline void gpioSp0SetModeInput() { DDRK &= ~_BV(0); }
+static inline void gpioSp0SetMode(bool fout) { if (fout) DDRK |= _BV(0); else DDRK &= ~_BV(0); }
+static inline bool gpioSp0Read() { return PINK | _BV(0); }
+static inline void gpioSp0Toggle() { PORTK ^= _BV(0); }
+static inline void gpioSp0Set() { PORTK |= _BV(0); }
+static inline void gpioSp0Clear() { PORTK &= ~_BV(0); }
+static inline void gpioSp0Write(bool b) { if (b) PORTK |= _BV(0); else PORTK &= ~_BV(0); }
 
-// D1: Spare IO
-static inline void gpioD1SetModeOutput() { DDRK |= _BV(1); }
-static inline void gpioD1SetModeInput() { DDRK &= ~_BV(1); }
-static inline void gpioD1SetMode(bool fout) { if (fout) DDRK |= _BV(1); else DDRK &= ~_BV(1); }
-static inline bool gpioD1Read() { return PINK | _BV(1); }
-static inline void gpioD1Toggle() { PORTK ^= _BV(1); }
-static inline void gpioD1Set() { PORTK |= _BV(1); }
-static inline void gpioD1Clear() { PORTK &= ~_BV(1); }
-static inline void gpioD1Write(bool b) { if (b) PORTK |= _BV(1); else PORTK &= ~_BV(1); }
+// SP_1: Spare IO
+static inline void gpioSp1SetModeOutput() { DDRK |= _BV(1); }
+static inline void gpioSp1SetModeInput() { DDRK &= ~_BV(1); }
+static inline void gpioSp1SetMode(bool fout) { if (fout) DDRK |= _BV(1); else DDRK &= ~_BV(1); }
+static inline bool gpioSp1Read() { return PINK | _BV(1); }
+static inline void gpioSp1Toggle() { PORTK ^= _BV(1); }
+static inline void gpioSp1Set() { PORTK |= _BV(1); }
+static inline void gpioSp1Clear() { PORTK &= ~_BV(1); }
+static inline void gpioSp1Write(bool b) { if (b) PORTK |= _BV(1); else PORTK &= ~_BV(1); }
 
-// D2: Spare IO
-static inline void gpioD2SetModeOutput() { DDRK |= _BV(2); }
-static inline void gpioD2SetModeInput() { DDRK &= ~_BV(2); }
-static inline void gpioD2SetMode(bool fout) { if (fout) DDRK |= _BV(2); else DDRK &= ~_BV(2); }
-static inline bool gpioD2Read() { return PINK | _BV(2); }
-static inline void gpioD2Toggle() { PORTK ^= _BV(2); }
-static inline void gpioD2Set() { PORTK |= _BV(2); }
-static inline void gpioD2Clear() { PORTK &= ~_BV(2); }
-static inline void gpioD2Write(bool b) { if (b) PORTK |= _BV(2); else PORTK &= ~_BV(2); }
+// SP_2: Spare IO
+static inline void gpioSp2SetModeOutput() { DDRK |= _BV(2); }
+static inline void gpioSp2SetModeInput() { DDRK &= ~_BV(2); }
+static inline void gpioSp2SetMode(bool fout) { if (fout) DDRK |= _BV(2); else DDRK &= ~_BV(2); }
+static inline bool gpioSp2Read() { return PINK | _BV(2); }
+static inline void gpioSp2Toggle() { PORTK ^= _BV(2); }
+static inline void gpioSp2Set() { PORTK |= _BV(2); }
+static inline void gpioSp2Clear() { PORTK &= ~_BV(2); }
+static inline void gpioSp2Write(bool b) { if (b) PORTK |= _BV(2); else PORTK &= ~_BV(2); }
 
-// D3: Spare IO
-static inline void gpioD3SetModeOutput() { DDRK |= _BV(3); }
-static inline void gpioD3SetModeInput() { DDRK &= ~_BV(3); }
-static inline void gpioD3SetMode(bool fout) { if (fout) DDRK |= _BV(3); else DDRK &= ~_BV(3); }
-static inline bool gpioD3Read() { return PINK | _BV(3); }
-static inline void gpioD3Toggle() { PORTK ^= _BV(3); }
-static inline void gpioD3Set() { PORTK |= _BV(3); }
-static inline void gpioD3Clear() { PORTK &= ~_BV(3); }
-static inline void gpioD3Write(bool b) { if (b) PORTK |= _BV(3); else PORTK &= ~_BV(3); }
+// SP_3: Spare IO
+static inline void gpioSp3SetModeOutput() { DDRK |= _BV(3); }
+static inline void gpioSp3SetModeInput() { DDRK &= ~_BV(3); }
+static inline void gpioSp3SetMode(bool fout) { if (fout) DDRK |= _BV(3); else DDRK &= ~_BV(3); }
+static inline bool gpioSp3Read() { return PINK | _BV(3); }
+static inline void gpioSp3Toggle() { PORTK ^= _BV(3); }
+static inline void gpioSp3Set() { PORTK |= _BV(3); }
+static inline void gpioSp3Clear() { PORTK &= ~_BV(3); }
+static inline void gpioSp3Write(bool b) { if (b) PORTK |= _BV(3); else PORTK &= ~_BV(3); }
 
-// D4: Spare IO
-static inline void gpioD4SetModeOutput() { DDRK |= _BV(4); }
-static inline void gpioD4SetModeInput() { DDRK &= ~_BV(4); }
-static inline void gpioD4SetMode(bool fout) { if (fout) DDRK |= _BV(4); else DDRK &= ~_BV(4); }
-static inline bool gpioD4Read() { return PINK | _BV(4); }
-static inline void gpioD4Toggle() { PORTK ^= _BV(4); }
-static inline void gpioD4Set() { PORTK |= _BV(4); }
-static inline void gpioD4Clear() { PORTK &= ~_BV(4); }
-static inline void gpioD4Write(bool b) { if (b) PORTK |= _BV(4); else PORTK &= ~_BV(4); }
+// SP_4: Spare IO
+static inline void gpioSp4SetModeOutput() { DDRK |= _BV(4); }
+static inline void gpioSp4SetModeInput() { DDRK &= ~_BV(4); }
+static inline void gpioSp4SetMode(bool fout) { if (fout) DDRK |= _BV(4); else DDRK &= ~_BV(4); }
+static inline bool gpioSp4Read() { return PINK | _BV(4); }
+static inline void gpioSp4Toggle() { PORTK ^= _BV(4); }
+static inline void gpioSp4Set() { PORTK |= _BV(4); }
+static inline void gpioSp4Clear() { PORTK &= ~_BV(4); }
+static inline void gpioSp4Write(bool b) { if (b) PORTK |= _BV(4); else PORTK &= ~_BV(4); }
 
-// D5: Spare IO
-static inline void gpioD5SetModeOutput() { DDRK |= _BV(5); }
-static inline void gpioD5SetModeInput() { DDRK &= ~_BV(5); }
-static inline void gpioD5SetMode(bool fout) { if (fout) DDRK |= _BV(5); else DDRK &= ~_BV(5); }
-static inline bool gpioD5Read() { return PINK | _BV(5); }
-static inline void gpioD5Toggle() { PORTK ^= _BV(5); }
-static inline void gpioD5Set() { PORTK |= _BV(5); }
-static inline void gpioD5Clear() { PORTK &= ~_BV(5); }
-static inline void gpioD5Write(bool b) { if (b) PORTK |= _BV(5); else PORTK &= ~_BV(5); }
+// SP_5: Spare IO
+static inline void gpioSp5SetModeOutput() { DDRK |= _BV(5); }
+static inline void gpioSp5SetModeInput() { DDRK &= ~_BV(5); }
+static inline void gpioSp5SetMode(bool fout) { if (fout) DDRK |= _BV(5); else DDRK &= ~_BV(5); }
+static inline bool gpioSp5Read() { return PINK | _BV(5); }
+static inline void gpioSp5Toggle() { PORTK ^= _BV(5); }
+static inline void gpioSp5Set() { PORTK |= _BV(5); }
+static inline void gpioSp5Clear() { PORTK &= ~_BV(5); }
+static inline void gpioSp5Write(bool b) { if (b) PORTK |= _BV(5); else PORTK &= ~_BV(5); }
 
-// D6: Spare IO
-static inline void gpioD6SetModeOutput() { DDRK |= _BV(6); }
-static inline void gpioD6SetModeInput() { DDRK &= ~_BV(6); }
-static inline void gpioD6SetMode(bool fout) { if (fout) DDRK |= _BV(6); else DDRK &= ~_BV(6); }
-static inline bool gpioD6Read() { return PINK | _BV(6); }
-static inline void gpioD6Toggle() { PORTK ^= _BV(6); }
-static inline void gpioD6Set() { PORTK |= _BV(6); }
-static inline void gpioD6Clear() { PORTK &= ~_BV(6); }
-static inline void gpioD6Write(bool b) { if (b) PORTK |= _BV(6); else PORTK &= ~_BV(6); }
+// SP_6: Spare IO
+static inline void gpioSp6SetModeOutput() { DDRK |= _BV(6); }
+static inline void gpioSp6SetModeInput() { DDRK &= ~_BV(6); }
+static inline void gpioSp6SetMode(bool fout) { if (fout) DDRK |= _BV(6); else DDRK &= ~_BV(6); }
+static inline bool gpioSp6Read() { return PINK | _BV(6); }
+static inline void gpioSp6Toggle() { PORTK ^= _BV(6); }
+static inline void gpioSp6Set() { PORTK |= _BV(6); }
+static inline void gpioSp6Clear() { PORTK &= ~_BV(6); }
+static inline void gpioSp6Write(bool b) { if (b) PORTK |= _BV(6); else PORTK &= ~_BV(6); }
 
-// D7: Spare IO
-static inline void gpioD7SetModeOutput() { DDRK |= _BV(7); }
-static inline void gpioD7SetModeInput() { DDRK &= ~_BV(7); }
-static inline void gpioD7SetMode(bool fout) { if (fout) DDRK |= _BV(7); else DDRK &= ~_BV(7); }
-static inline bool gpioD7Read() { return PINK | _BV(7); }
-static inline void gpioD7Toggle() { PORTK ^= _BV(7); }
-static inline void gpioD7Set() { PORTK |= _BV(7); }
-static inline void gpioD7Clear() { PORTK &= ~_BV(7); }
-static inline void gpioD7Write(bool b) { if (b) PORTK |= _BV(7); else PORTK &= ~_BV(7); }
+// SP_7: Spare IO
+static inline void gpioSp7SetModeOutput() { DDRK |= _BV(7); }
+static inline void gpioSp7SetModeInput() { DDRK &= ~_BV(7); }
+static inline void gpioSp7SetMode(bool fout) { if (fout) DDRK |= _BV(7); else DDRK &= ~_BV(7); }
+static inline bool gpioSp7Read() { return PINK | _BV(7); }
+static inline void gpioSp7Toggle() { PORTK ^= _BV(7); }
+static inline void gpioSp7Set() { PORTK |= _BV(7); }
+static inline void gpioSp7Clear() { PORTK &= ~_BV(7); }
+static inline void gpioSp7Write(bool b) { if (b) PORTK |= _BV(7); else PORTK &= ~_BV(7); }
 
 // List unused pins
 #define GPIO_UNUSED_PINS 4, 5, 6, 7, 8, 9, 10, 11, 12, 20, 21, 28, 29, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 53, A1, A2, A3, A4, A5, A6, A7

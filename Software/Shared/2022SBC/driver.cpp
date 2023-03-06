@@ -194,7 +194,7 @@ bool driverSensorUpdateAvailable() { const bool f = f_slave_status.schedule_done
 static void do_set_slave_status(uint8_t status_reg_idx, regs_t status) {
 	const uint8_t slave_idx = do_get_slave_idx(status_reg_idx);
 
-	gpioD6Write(true);							// Debug response received.
+	gpioSp6Write(true);							// Debug response received.
 
 	if (!slave_is_status_set(slave_idx)) {				// Only process status once per slave per update cycle.
 		slave_status_set(slave_idx);
@@ -251,7 +251,7 @@ static void do_handle_modbus_cb(uint8_t evt, const uint8_t* frame, uint8_t frame
 
 		// Handle response from Sensors.
 		if (is_sensor_response) {	// Check if Sensor slave ID...
-			gpioD4Write(false);
+			gpioSp4Write(false);
 
 			if (MODBUS_FC_READ_HOLDING_REGISTERS == frame[MODBUS_FRAME_IDX_FUNCTION]) { // REQ: [ID FC=3 addr:16 count:16(max 125)] RESP: [ID FC=3 byte-count value-0:16, ...]
 				uint16_t address = modbusGetU16(&modbusPeekRequestData()[MODBUS_FRAME_IDX_DATA]); // Get register address from request frame.
@@ -267,7 +267,7 @@ static void do_handle_modbus_cb(uint8_t evt, const uint8_t* frame, uint8_t frame
 		}
 
 		else if (is_relay_response) {
-			gpioD4Write(false);
+			gpioSp4Write(false);
 			if ((8 == frame_len) && (MODBUS_FC_WRITE_SINGLE_REGISTER == frame[MODBUS_FRAME_IDX_FUNCTION])) { // REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
 				uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
 				if (SBC2022_MODBUS_REGISTER_RELAY == address)
@@ -281,22 +281,22 @@ static void do_handle_modbus_cb(uint8_t evt, const uint8_t* frame, uint8_t frame
 		case MODBUS_CB_EVT_INVALID_CRC: case MODBUS_CB_EVT_INVALID_LEN: case MODBUS_CB_EVT_INVALID_ID: 	// Mangled response.
 		case MODBUS_CB_EVT_RESP_BAD_SLAVE_ID: case MODBUS_CB_EVT_RESP_BAD_FUNC_CODE:	// Unusual...
 		if (is_sensor_response) {
-			gpioD4Write(false);
+			gpioSp4Write(false);
 			do_set_slave_status(REGS_IDX_SENSOR_STATUS_0+sensor_idx, SBC2022_MODBUS_STATUS_SLAVE_BAD_RESPONSE);
 		}
 		else if (is_relay_response) {
-			gpioD4Write(false);
+			gpioSp4Write(false);
 			do_set_slave_status(REGS_IDX_RELAY_STATUS, SBC2022_MODBUS_STATUS_SLAVE_BAD_RESPONSE);
 		}
 		break;
 
 		case MODBUS_CB_EVT_RESP_TIMEOUT:	// Most likely...
 		if (is_sensor_response) {
-			gpioD4Write(false);
+			gpioSp4Write(false);
 			do_set_slave_status(REGS_IDX_SENSOR_STATUS_0 + sensor_idx, SBC2022_MODBUS_STATUS_SLAVE_NOT_PRESENT);
 		}
 		else if (is_relay_response) {
-			gpioD4Write(false);
+			gpioSp4Write(false);
 			do_set_slave_status(REGS_IDX_RELAY_STATUS, SBC2022_MODBUS_STATUS_SLAVE_NOT_PRESENT);
 		}
 		break;
@@ -586,8 +586,8 @@ void service_devices() {
 static const uint16_t SLAVE_QUERY_PERIOD = 50U;
 
 static void modbus_query_slave_flag_start() {
-	gpioD4Write(true);		// Set at start of query, clear in response handler.
-	gpioD6Write(false);		// Clear error indicator, might get set in response handler.
+	gpioSp4Write(true);		// Set at start of query, clear in response handler.
+	gpioSp6Write(false);		// Clear error indicator, might get set in response handler.
 }
 static int8_t thread_query_slaves(void* arg) {
 	(void)arg;
@@ -597,7 +597,7 @@ static int8_t thread_query_slaves(void* arg) {
 	while (1) {
 		static uint8_t sidx;
 
-		gpioD5Write(true);		// Trigger on rising edge for start of query schedule.
+		gpioSp5Write(true);		// Trigger on rising edge for start of query schedule.
 
 		slave_update_start();
 
@@ -613,7 +613,7 @@ static int8_t thread_query_slaves(void* arg) {
 		modbusMasterSend(req.buf, bufferFrameLen(&req));
 		THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(SLAVE_QUERY_PERIOD));
 
-		gpioD5Write(false);			// Width is length of 1 part of schedule.
+		gpioSp5Write(false);			// Width is length of 1 part of schedule.
 
 		// Read from all slaves...
 		for (sidx = 0; sidx < CFG_TILT_SENSOR_COUNT; sidx += 1) {
@@ -642,10 +642,10 @@ static int8_t thread_query_slaves(void* arg) {
 
 static thread_control_t tcb_query_slaves;
 static void setup_devices() {
-	gpioD4SetModeOutput();
-	gpioD5SetModeOutput();
-	gpioD6SetModeOutput();
-	gpioD7SetModeOutput();
+	gpioSp4SetModeOutput();
+	gpioSp5SetModeOutput();
+	gpioSp6SetModeOutput();
+	gpioSp7SetModeOutput();
 	threadInit(&tcb_query_slaves);
 	regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_FAULT|REGS_FLAGS_MASK_RELAY_FAULT, true);
 }
