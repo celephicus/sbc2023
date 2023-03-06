@@ -106,7 +106,7 @@ void modbusSlaveSend(const uint8_t* frame, uint8_t sz) {
 	// TODO: keep master busy for interframe time after tx done.
 	bufferFrameReset(&f_ctx.buf_tx);
 	bufferFrameAddMem(&f_ctx.buf_tx, frame, sz);
-	bufferFrameAddU16(&f_ctx.buf_tx, get_crc(f_ctx.buf_tx.buf, bufferFrameLen(&f_ctx.buf_tx)));
+	bufferFrameAddU16(&f_ctx.buf_tx, utilsU16_native_to_be(get_crc(f_ctx.buf_tx.buf, bufferFrameLen(&f_ctx.buf_tx))));
 	while (modbusIsBusy())	// If we are still transmitting or waiting a response then keep doing it.
 		modbusService();
 	modbusSendRaw(f_ctx.buf_tx.buf, bufferFrameLen(&f_ctx.buf_tx));
@@ -259,6 +259,6 @@ static uint16_t get_crc(const uint8_t* buf, uint8_t sz) {
 		crc ^= pgm_read_word(&table[exor]);
 	}
 
-	return ((crc & 0x00ff) << 8) | (crc >> 8);		// These seem reversed, not sure how.
+	return crc;
 }
 

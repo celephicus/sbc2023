@@ -103,8 +103,8 @@ bool modbusIsBusy();
 void modbusService();
 
 // Setters/getters for modbus 16 bit format.
-static inline uint16_t modbusGetU16(const uint8_t* v)  { return ((uint16_t)v[0] << 8) | (uint16_t)(v[1]); }
-static inline void modbusSetU16(uint8_t* v, uint16_t x)  { v[0] = (uint8_t)(x >> 8); v[1] = (uint8_t)x; }
+static inline uint16_t modbusGetU16(const uint8_t* v)  { return utilsU16_be_to_native(*(uint16_t*)v); }
+static inline void modbusSetU16(uint8_t* v, uint16_t x)  { *(uint16_t*)v = utilsU16_native_to_be(x); }
 
 #endif	// MODBUS_H__
 
