@@ -329,9 +329,10 @@ T utilsFilter(U* accum, T input, uint8_t k, bool reset) {
 }
 
 /* Simple implementation of strtoul for unsigned ints. String may have leading whitespace and an optional leading '+'. Then digits up to one
-	less than the base are converted, until the first illegal character or a nul is read. Then, if the result has not rolled over, the
-	result is written to n. The function only returns true if at least one number character is seen and there is no overflow.
-	If endptr is non-NULL, it is set to the first illegal character. */
+	less than the base are converted and written to n, until the first non-digit character (including space or nul) is read. 
+	The function only returns true if at least one number character is seen and there is no overflow. Note that the function will return true
+	if the non-converted character was illegal, e.g. `+99a' will return true with a base of 10.
+	If endptr is non-NULL, it is set to the first character that was not converted. */
 bool utilsStrtoui(unsigned* n, const char *str, char **endptr, unsigned base);
 
 /* Utils Sequencer -- generic driver to run an arbitrary sequence by calling a user function every so often with a canned argument.
@@ -429,6 +430,7 @@ void tholdScanInit(const thold_scanner_def_t* defs, thold_scanner_context_t* ctx
 void tholdScanSample(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count);
 void tholdScanRescan(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count, uint16_t mask);
 #endif
+
 // Runtime assertions
 //
 

@@ -65,7 +65,7 @@ void testBufferAddU16(int n);
 void testBufferAddU16Overflow();
 void testBufferAddMem();
 void testUtilsBufferReset();
-void testUtilsStrtoui(const char *fmtstr, unsigned long nn, unsigned base, bool rc_exp, unsigned n_exp, char end);
+void testUtilsStrtoui(const char *fmtstr, unsigned long long nn, unsigned base, bool rc_exp, unsigned n_exp, char end);
 
 /*** Fixture & dump functions from test files. ***/
 void testEventSetup(void);
@@ -307,15 +307,20 @@ static void testUtilsStrtoui_stub_230(void) { testUtilsStrtoui("f", 0,  16, true
 static void testUtilsStrtoui_stub_231(void) { testUtilsStrtoui("F", 0,  16, true, 15, '\0'); }
 static void testUtilsStrtoui_stub_232(void) { testUtilsStrtoui("z", 0,  36, true, 35, '\0'); }
 static void testUtilsStrtoui_stub_233(void) { testUtilsStrtoui("Z", 0,  36, true, 35, '\0'); }
-static void testUtilsStrtoui_stub_234(void) { testUtilsStrtoui("+9", 0,  10, true, 9, '\0'); }
-static void testUtilsStrtoui_stub_235(void) { testUtilsStrtoui(" 9", 0,  10, true, 9, '\0'); }
-static void testUtilsStrtoui_stub_236(void) { testUtilsStrtoui("09", 0,  10, true, 9, '\0'); }
-static void testUtilsStrtoui_stub_237(void) { testUtilsStrtoui("%lu", UINT_MAX,  10, true, UINT_MAX, '\0'); }
-static void testUtilsStrtoui_stub_238(void) { testUtilsStrtoui("%lx", UINT_MAX,  16, true, UINT_MAX, '\0'); }
-static void testUtilsStrtoui_stub_239(void) { testUtilsStrtoui("%lu", (unsigned long)UINT_MAX+1,  10, false, 0, '\0'); }
-static void testUtilsStrtoui_stub_240(void) { testUtilsStrtoui("%lx", (unsigned long)UINT_MAX+1,  16, false, 0, '\0'); }
-static void testUtilsStrtoui_stub_241(void) { testUtilsStrtoui("9a", 0,  10, true, 9, 'a'); }
-static void testUtilsStrtoui_stub_242(void) { testUtilsStrtoui("a", 0,  10, false, 0, 'a'); }
+static void testUtilsStrtoui_stub_234(void) { testUtilsStrtoui("991", 0,  10, true, 991, '\0'); }
+static void testUtilsStrtoui_stub_235(void) { testUtilsStrtoui("1110", 0,  2, true, 14, '\0'); }
+static void testUtilsStrtoui_stub_236(void) { testUtilsStrtoui("fffe", 0,  16, true, 0xfffe, '\0'); }
+static void testUtilsStrtoui_stub_237(void) { testUtilsStrtoui("FFFE", 0,  16, true, 0xfffe, '\0'); }
+static void testUtilsStrtoui_stub_238(void) { testUtilsStrtoui("zz", 0,  36, true, 35*36+35, '\0'); }
+static void testUtilsStrtoui_stub_239(void) { testUtilsStrtoui("Zz", 0,  36, true, 35*36+35, '\0'); }
+static void testUtilsStrtoui_stub_240(void) { testUtilsStrtoui("+9", 0,  10, true, 9, '\0'); }
+static void testUtilsStrtoui_stub_241(void) { testUtilsStrtoui(" 9", 0,  10, true, 9, '\0'); }
+static void testUtilsStrtoui_stub_242(void) { testUtilsStrtoui("09", 0,  10, true, 9, '\0'); }
+static void testUtilsStrtoui_stub_243(void) { testUtilsStrtoui("9 ", 0,  10, true, 9, ' '); }
+static void testUtilsStrtoui_stub_244(void) { testUtilsStrtoui("%llu", UINT_MAX,  10, true, UINT_MAX, '\0'); }
+static void testUtilsStrtoui_stub_245(void) { testUtilsStrtoui("%llx", UINT_MAX,  16, true, UINT_MAX, '\0'); }
+static void testUtilsStrtoui_stub_246(void) { testUtilsStrtoui("%llu", (unsigned long long)UINT_MAX+1,  10, false, 0, '\0'); }
+static void testUtilsStrtoui_stub_247(void) { testUtilsStrtoui("%llx", (unsigned long long)UINT_MAX+1,  16, false, 0, '\0'); }
 
 /*** Extra Unity support. ***/
 
@@ -644,23 +649,28 @@ int main(int argc, char** argv) {
   do_run_test(testBufferAddU16Overflow, "testBufferAddU16Overflow", 259);
   do_run_test(testBufferAddMem, "testBufferAddMem", 272);
   do_run_test(testUtilsBufferReset, "testUtilsBufferReset", 289);
-  do_run_test(testUtilsStrtoui_stub_226, "testUtilsStrtoui(\"\", 0, 10, false, 0, '\\0')", 317);
-  do_run_test(testUtilsStrtoui_stub_227, "testUtilsStrtoui(\"*\", 0,  10, false, 0, '*')", 318);
-  do_run_test(testUtilsStrtoui_stub_228, "testUtilsStrtoui(\"9\", 0,  10, true, 9, '\\0')", 320);
-  do_run_test(testUtilsStrtoui_stub_229, "testUtilsStrtoui(\"1\", 0,  2, true, 1, '\\0')", 321);
-  do_run_test(testUtilsStrtoui_stub_230, "testUtilsStrtoui(\"f\", 0,  16, true, 15, '\\0')", 322);
-  do_run_test(testUtilsStrtoui_stub_231, "testUtilsStrtoui(\"F\", 0,  16, true, 15, '\\0')", 323);
-  do_run_test(testUtilsStrtoui_stub_232, "testUtilsStrtoui(\"z\", 0,  36, true, 35, '\\0')", 324);
-  do_run_test(testUtilsStrtoui_stub_233, "testUtilsStrtoui(\"Z\", 0,  36, true, 35, '\\0')", 325);
-  do_run_test(testUtilsStrtoui_stub_234, "testUtilsStrtoui(\"+9\", 0,  10, true, 9, '\\0')", 327);
-  do_run_test(testUtilsStrtoui_stub_235, "testUtilsStrtoui(\" 9\", 0,  10, true, 9, '\\0')", 328);
-  do_run_test(testUtilsStrtoui_stub_236, "testUtilsStrtoui(\"09\", 0,  10, true, 9, '\\0')", 329);
-  do_run_test(testUtilsStrtoui_stub_237, "testUtilsStrtoui(\"%lu\", UINT_MAX,  10, true, UINT_MAX, '\\0')", 331);
-  do_run_test(testUtilsStrtoui_stub_238, "testUtilsStrtoui(\"%lx\", UINT_MAX,  16, true, UINT_MAX, '\\0')", 332);
-  do_run_test(testUtilsStrtoui_stub_239, "testUtilsStrtoui(\"%lu\", (unsigned long)UINT_MAX+1,  10, false, 0, '\\0')", 334);
-  do_run_test(testUtilsStrtoui_stub_240, "testUtilsStrtoui(\"%lx\", (unsigned long)UINT_MAX+1,  16, false, 0, '\\0')", 335);
-  do_run_test(testUtilsStrtoui_stub_241, "testUtilsStrtoui(\"9a\", 0,  10, true, 9, 'a')", 337);
-  do_run_test(testUtilsStrtoui_stub_242, "testUtilsStrtoui(\"a\", 0,  10, false, 0, 'a')", 338);
+  do_run_test(testUtilsStrtoui_stub_226, "testUtilsStrtoui(\"\", 0, 10, false, 0, '\\0')", 334);
+  do_run_test(testUtilsStrtoui_stub_227, "testUtilsStrtoui(\"*\", 0,  10, false, 0, '*')", 335);
+  do_run_test(testUtilsStrtoui_stub_228, "testUtilsStrtoui(\"9\", 0,  10, true, 9, '\\0')", 337);
+  do_run_test(testUtilsStrtoui_stub_229, "testUtilsStrtoui(\"1\", 0,  2, true, 1, '\\0')", 338);
+  do_run_test(testUtilsStrtoui_stub_230, "testUtilsStrtoui(\"f\", 0,  16, true, 15, '\\0')", 339);
+  do_run_test(testUtilsStrtoui_stub_231, "testUtilsStrtoui(\"F\", 0,  16, true, 15, '\\0')", 340);
+  do_run_test(testUtilsStrtoui_stub_232, "testUtilsStrtoui(\"z\", 0,  36, true, 35, '\\0')", 341);
+  do_run_test(testUtilsStrtoui_stub_233, "testUtilsStrtoui(\"Z\", 0,  36, true, 35, '\\0')", 342);
+  do_run_test(testUtilsStrtoui_stub_234, "testUtilsStrtoui(\"991\", 0,  10, true, 991, '\\0')", 344);
+  do_run_test(testUtilsStrtoui_stub_235, "testUtilsStrtoui(\"1110\", 0,  2, true, 14, '\\0')", 345);
+  do_run_test(testUtilsStrtoui_stub_236, "testUtilsStrtoui(\"fffe\", 0,  16, true, 0xfffe, '\\0')", 346);
+  do_run_test(testUtilsStrtoui_stub_237, "testUtilsStrtoui(\"FFFE\", 0,  16, true, 0xfffe, '\\0')", 347);
+  do_run_test(testUtilsStrtoui_stub_238, "testUtilsStrtoui(\"zz\", 0,  36, true, 35*36+35, '\\0')", 348);
+  do_run_test(testUtilsStrtoui_stub_239, "testUtilsStrtoui(\"Zz\", 0,  36, true, 35*36+35, '\\0')", 349);
+  do_run_test(testUtilsStrtoui_stub_240, "testUtilsStrtoui(\"+9\", 0,  10, true, 9, '\\0')", 351);
+  do_run_test(testUtilsStrtoui_stub_241, "testUtilsStrtoui(\" 9\", 0,  10, true, 9, '\\0')", 352);
+  do_run_test(testUtilsStrtoui_stub_242, "testUtilsStrtoui(\"09\", 0,  10, true, 9, '\\0')", 353);
+  do_run_test(testUtilsStrtoui_stub_243, "testUtilsStrtoui(\"9 \", 0,  10, true, 9, ' ')", 355);
+  do_run_test(testUtilsStrtoui_stub_244, "testUtilsStrtoui(\"%llu\", UINT_MAX,  10, true, UINT_MAX, '\\0')", 359);
+  do_run_test(testUtilsStrtoui_stub_245, "testUtilsStrtoui(\"%llx\", UINT_MAX,  16, true, UINT_MAX, '\\0')", 360);
+  do_run_test(testUtilsStrtoui_stub_246, "testUtilsStrtoui(\"%llu\", (unsigned long long)UINT_MAX+1,  10, false, 0, '\\0')", 362);
+  do_run_test(testUtilsStrtoui_stub_247, "testUtilsStrtoui(\"%llx\", (unsigned long long)UINT_MAX+1,  16, false, 0, '\\0')", 363);
   registerFixture(NULL, NULL, NULL);
 
   return UnityEnd();
