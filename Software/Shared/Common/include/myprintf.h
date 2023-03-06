@@ -38,7 +38,7 @@
 			x	unsigned (possibly long) int in hex with lower case a-f
 			X	unsigned (possibly long) int in hex with upper case A-F
 */			
-			
+
 /* Function used vy myprintf to write a character to whatever output device is required, arg can be used to keep track of state. */
 typedef void (*myprintf_putchar)(char c, void* arg);
 

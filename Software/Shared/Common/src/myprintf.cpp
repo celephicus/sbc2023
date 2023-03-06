@@ -23,22 +23,6 @@
 
 #include "myprintf.h"
 
-/* Customisation for AVR target. */
-#if defined(__AVR__)
-
-/* If MYPRINTF_WANT_PGM_STR defined then this macro used to access characters in PROGMEM. */
-#include <avr/pgmspace.h>
-#define MYPRINTF_DEREF_PGM_STR_CHAR(ptr_) ((char)pgm_read_byte(ptr_))		// For AVR.
-
-/* Define if strings can be in Flash as well as RAM. This enables the `%S' format. */
-#define MYPRINTF_WANT_PGM_STR 
-
-#else
-	
-#define MYPRINTF_DEREF_PGM_STR_CHAR(ptr_) (*(ptr_))		
-
-#endif
-
 /* If we have a project config file include it. */
 #ifdef USE_PROJECT_CONFIG_H
 #include "project_config.h"
@@ -58,6 +42,23 @@
 #ifndef CFG_MYPRINTF_WANT_BINARY
 #define CFG_MYPRINTF_WANT_BINARY 0
 #endif
+			
+/* Customisation for AVR target. */
+#if defined(__AVR__)
+
+/* If MYPRINTF_WANT_PGM_STR defined then this macro used to access characters in PROGMEM. */
+#include <avr/pgmspace.h>
+#define MYPRINTF_DEREF_PGM_STR_CHAR(ptr_) ((char)pgm_read_byte(ptr_))		// For AVR.
+
+/* Define if strings can be in Flash as well as RAM. This enables the `%S' format. */
+#define MYPRINTF_WANT_PGM_STR 
+
+#else
+	
+#define MYPRINTF_DEREF_PGM_STR_CHAR(ptr_) (*(ptr_))		
+#define PROGMEM /*empty */
+
+#endif
 
 /* Check that we have size of myprintf's int type correct. */
 #define MYPRINTF_STATIC_ASSERT(expr_) extern char error_static_assert_fail__[(expr_) ? 1 : -1] __attribute__((unused))
@@ -67,8 +68,10 @@ MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_LONG_QUALIFIER) == CFG_MYPRINTF_SIZEO
 #if CFG_MYPRINTF_WANT_BINARY
  #define MYPRINTF_MAX_DIGIT_CHARS (CFG_MYPRINTF_SIZEOF_LONG_INT * 8)
 #else
- #if CFG_MYPRINTF_SIZEOF_LONG_INT == 4
-  #define MYPRINTF_MAX_DIGIT_CHARS 10					// For 32 bit decimal.
+ #if CFG_MYPRINTF_SIZEOF_LONG_INT == 2
+  #define MYPRINTF_MAX_DIGIT_CHARS 5				// For 16 bit decimal.
+ #elif CFG_MYPRINTF_SIZEOF_LONG_INT == 4
+  #define MYPRINTF_MAX_DIGIT_CHARS 10				// For 32 bit decimal.
  #elif CFG_MYPRINTF_SIZEOF_LONG_INT == 8
   #define MYPRINTF_MAX_DIGIT_CHARS 20				// For 64 bit decimal
  #else
@@ -76,7 +79,7 @@ MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_LONG_QUALIFIER) == CFG_MYPRINTF_SIZEO
  #endif
 #endif
 
-// If the preprocessor exceludes code snippets these warnings can go off, so disable them. 
+// If the preprocessor excludes code snippets these warnings can go off, so disable them. 
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #pragma GCC diagnostic ignored "-Wunused-label"
 
@@ -91,14 +94,18 @@ static void myprintf_snprintf_of(char c, void* arg) {
 		*s->p++ = c;
 }
 char myprintf_vsnprintf(char* buf, unsigned len, const char* fmt, va_list ap) {
-	struct snprintf_state s = { buf, buf + len }; 
-	char rc = 1;
-	myprintf(myprintf_snprintf_of, (void*)(&s), fmt, ap);
-	if (s.p >= s.end) { /* Overflow! */
-		rc = 0;
-		s.p -= 1;
+	char rc = 0;			// Default is fail.
+	if (len > 0) {			// Require room for at least a nul.
+		struct snprintf_state s = { buf, buf + len }; 
+		myprintf(myprintf_snprintf_of, (void*)(&s), fmt, ap);
+		if (s.p >= s.end) { /* Overflow! */
+			s.p[-1] = '\0';
+		}
+		else {				/* No overflow. */
+			s.p[0] = '\0';
+			rc = 1;
+		}
 	}
-	*s.p = '\0';
 	return rc;
 }
 
@@ -136,15 +143,11 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 
 	for (; '\0' != (c = MYPRINTF_DEREF_PGM_STR_CHAR(fmt)); fmt += 1) {	// Iterate over all chars in format.
 		if (flags & FLAG_FORMAT) {
-			if ('%' == c) {		/* Literal '%', just print it. */
-				flags = 0;				/* Clear format flag. */
-				goto out;
-			}
 			if ('-' == c) {			// A '-' for right justification.
 				c = MYPRINTF_DEREF_PGM_STR_CHAR(++fmt);
 				flags |= FLAG_PAD_RIGHT;
 			}
-			if ('0' == c) {			// A leading zero for zero pad. 
+			else if ('0' == c) {			// A leading zero for zero pad. 
 				c = MYPRINTF_DEREF_PGM_STR_CHAR(++fmt);
 				padchar = '0';
 			}
@@ -167,24 +170,17 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 			case 's':
 				str.c = va_arg(ap, const char*);
 				if (NULL == str.c) {					/* Catch null ptr. */
-					buf[0] = '\0';
+					static const char NULL_STR[] PROGMEM = "(null)";
+					str.c = NULL_STR;
 #ifdef MYPRINTF_WANT_PGM_STR
-					flags &= ~FLAG_STR_PGM;;			/* Might have been set by `%S' so clear. */
+					flags |= FLAG_STR_PGM;				/* Set PROGMEM, this is a no-op for non-AVRs. */
 #endif // MYPRINTF_WANT_PGM_STR
-					goto p_char;						/* Will be treated as zero length string. */
 				}
-#if 0
-				flags &= ~FLAG_PAD_RIGHT;				/* Only pad strings with a space. */
-#endif
 				goto p_str;
 			case 'c':
 				buf[0] = (char)va_arg(ap, int);			/* Gcc can give a warning about char promotion when using va_arg(). */
 p_char:			buf[1] = '\0';
 				str.c = &buf[0];
-				/* TODO: remove this? */
-#if 0
-				flags &= ~FLAG_PAD_RIGHT;				/* Only pad strings with a space. */
-#endif
 				goto p_str;
 			case 'd':
 				num.i = ((flags & FLAG_LONG) ? va_arg(ap, CFG_MYPRINTF_LONG_QUALIFIER int) : (CFG_MYPRINTF_LONG_QUALIFIER int)va_arg(ap, int));
@@ -193,7 +189,7 @@ p_char:			buf[1] = '\0';
 					flags |= FLAG_NEG;
 				}
 				break;
-#if defined(MYPRINTF_WANT_BINARY)
+#if CFG_MYPRINTF_WANT_BINARY
 			case 'b':
 				base = 2;
 				goto do_unsigned;
@@ -207,6 +203,9 @@ p_char:			buf[1] = '\0';
 			case 'u':
 do_unsigned:	num.u = ((flags & FLAG_LONG) ? va_arg(ap, unsigned CFG_MYPRINTF_LONG_QUALIFIER int) : (unsigned CFG_MYPRINTF_LONG_QUALIFIER int)va_arg(ap, unsigned));
 				break;
+			case '%': 						/* Literal '%', just print it. */
+				flags = 0;					/* Clear format flag. */
+				goto out;
 			default:										/* Unknown format! */
 				flags = 0;				/* Clear format flag. */
 				continue;
@@ -235,14 +234,15 @@ do_unsigned:	num.u = ((flags & FLAG_LONG) ? va_arg(ap, unsigned CFG_MYPRINTF_LON
 
 p_str:		// Print string `str' justified in `width' with padding char `pad'. 
 
-			// Get length of string. Could replace with strlen()
+			// Get length of string.
 			if (width > 0) {
 				int len;
-				const char* p;
-				for (p = str.c, len = 0; '\0' != (flags & FLAG_STR_PGM) ? MYPRINTF_DEREF_PGM_STR_CHAR(p) : *p; p += 1)
-					len += 1;
+				const char* p = str.c; 
+				while ('\0' != (flags & FLAG_STR_PGM) ? MYPRINTF_DEREF_PGM_STR_CHAR(p) : *p)
+					p += 1;
+				len = p - str.c;
 
-					// Get length of padding required.
+				// Get length of padding required.
 				if (len >= width)
 					width = 0;
 				else

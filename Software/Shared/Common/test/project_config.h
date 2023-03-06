@@ -1,8 +1,13 @@
 #ifndef PROJECT_CONFIG_H__
 #define PROJECT_CONFIG_H__
 
+// For event.
 #define CFG_EVENT_QUEUE_SIZE 8
 #define CFG_EVENT_TRACE_BUFFER_SIZE 4
 #define CFG_EVENT_TIMER_COUNT 2
+
+// For myprintf.
+#define CFG_MYPRINTF_WANT_BINARY 1
+#define CFG_MYPRINTF_LONG_QUALIFIER long
 
 #endif // PROJECT_CONFIG_H__

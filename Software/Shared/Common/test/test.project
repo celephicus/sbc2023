@@ -41,6 +41,7 @@
         <Preprocessor Value="UNITY_INCLUDE_CONFIG_H"/>
         <Preprocessor Value="TEST"/>
         <Preprocessor Value="NO_CRITICAL_SECTIONS"/>
+        <Preprocessor Value="USE_PROJECT_CONFIG_H"/>
       </Compiler>
       <Linker Options="" Required="yes"/>
       <ResourceCompiler Options="" Required="no"/>

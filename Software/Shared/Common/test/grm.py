@@ -181,6 +181,7 @@ for fn in input_files:
 	test_run.append('')
 	test_run.append(f'UnitySetTestFile("{fn}");')
 
+	# TODO: Add TT_BEGIN_IGNORE ... TT_END_IGNORE for ignoring a block.
 	for lineno, ln in enumerate(src.splitlines()): # Iterate over all lines.
 		p, q = parse_source_line(ln)
 
