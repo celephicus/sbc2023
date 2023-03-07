@@ -65,7 +65,9 @@ void testBufferAddU16(int n);
 void testBufferAddU16Overflow();
 void testBufferAddMem();
 void testUtilsBufferReset();
-void testUtilsStrtoui(const char *fmtstr, unsigned long long nn, unsigned base, bool rc_exp, unsigned n_exp, char end);
+void test_utils_str_is_wsp();
+void test_utils_scan_past_wsp(const char* str, char c);
+void testUtilsStrtoui(const char *fmtstr, unsigned long long nn, unsigned base, int rc_exp, unsigned n_exp, char end);
 
 /*** Fixture & dump functions from test files. ***/
 void testEventSetup(void);
@@ -299,28 +301,31 @@ static void testBufferAddChar_stub_222(void) { testBufferAddChar(TEST_UTILS_BUF_
 static void testBufferAddU16_stub_223(void) { testBufferAddU16(1); }
 static void testBufferAddU16_stub_224(void) { testBufferAddU16(TEST_UTILS_BUF_SIZE/2-1); }
 static void testBufferAddU16_stub_225(void) { testBufferAddU16(TEST_UTILS_BUF_SIZE/2); }
-static void testUtilsStrtoui_stub_226(void) { testUtilsStrtoui("", 0, 10, false, 0, '\0'); }
-static void testUtilsStrtoui_stub_227(void) { testUtilsStrtoui("*", 0,  10, false, 0, '*'); }
-static void testUtilsStrtoui_stub_228(void) { testUtilsStrtoui("9", 0,  10, true, 9, '\0'); }
-static void testUtilsStrtoui_stub_229(void) { testUtilsStrtoui("1", 0,  2, true, 1, '\0'); }
-static void testUtilsStrtoui_stub_230(void) { testUtilsStrtoui("f", 0,  16, true, 15, '\0'); }
-static void testUtilsStrtoui_stub_231(void) { testUtilsStrtoui("F", 0,  16, true, 15, '\0'); }
-static void testUtilsStrtoui_stub_232(void) { testUtilsStrtoui("z", 0,  36, true, 35, '\0'); }
-static void testUtilsStrtoui_stub_233(void) { testUtilsStrtoui("Z", 0,  36, true, 35, '\0'); }
-static void testUtilsStrtoui_stub_234(void) { testUtilsStrtoui("991", 0,  10, true, 991, '\0'); }
-static void testUtilsStrtoui_stub_235(void) { testUtilsStrtoui("1110", 0,  2, true, 14, '\0'); }
-static void testUtilsStrtoui_stub_236(void) { testUtilsStrtoui("fffe", 0,  16, true, 0xfffe, '\0'); }
-static void testUtilsStrtoui_stub_237(void) { testUtilsStrtoui("FFFE", 0,  16, true, 0xfffe, '\0'); }
-static void testUtilsStrtoui_stub_238(void) { testUtilsStrtoui("zz", 0,  36, true, 35*36+35, '\0'); }
-static void testUtilsStrtoui_stub_239(void) { testUtilsStrtoui("Zz", 0,  36, true, 35*36+35, '\0'); }
-static void testUtilsStrtoui_stub_240(void) { testUtilsStrtoui("+9", 0,  10, true, 9, '\0'); }
-static void testUtilsStrtoui_stub_241(void) { testUtilsStrtoui(" 9", 0,  10, true, 9, '\0'); }
-static void testUtilsStrtoui_stub_242(void) { testUtilsStrtoui("09", 0,  10, true, 9, '\0'); }
-static void testUtilsStrtoui_stub_243(void) { testUtilsStrtoui("9 ", 0,  10, true, 9, ' '); }
-static void testUtilsStrtoui_stub_244(void) { testUtilsStrtoui("%llu", UINT_MAX,  10, true, UINT_MAX, '\0'); }
-static void testUtilsStrtoui_stub_245(void) { testUtilsStrtoui("%llx", UINT_MAX,  16, true, UINT_MAX, '\0'); }
-static void testUtilsStrtoui_stub_246(void) { testUtilsStrtoui("%llu", (unsigned long long)UINT_MAX+1,  10, false, 0, '\0'); }
-static void testUtilsStrtoui_stub_247(void) { testUtilsStrtoui("%llx", (unsigned long long)UINT_MAX+1,  16, false, 0, '\0'); }
+static void test_utils_scan_past_wsp_stub_226(void) { test_utils_scan_past_wsp("", '\0'); }
+static void test_utils_scan_past_wsp_stub_227(void) { test_utils_scan_past_wsp("\t ", '\0'); }
+static void test_utils_scan_past_wsp_stub_228(void) { test_utils_scan_past_wsp("\t a", 'a'); }
+static void testUtilsStrtoui_stub_229(void) { testUtilsStrtoui("", 0, 10, UTILS_STRTOUI_RC_NO_CHARS, 0, '\0'); }
+static void testUtilsStrtoui_stub_230(void) { testUtilsStrtoui("*", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, '*'); }
+static void testUtilsStrtoui_stub_231(void) { testUtilsStrtoui("9", 0,  10, UTILS_STRTOUI_RC_OK, 9, '\0'); }
+static void testUtilsStrtoui_stub_232(void) { testUtilsStrtoui("1", 0,  2, UTILS_STRTOUI_RC_OK, 1, '\0'); }
+static void testUtilsStrtoui_stub_233(void) { testUtilsStrtoui("f", 0,  16, UTILS_STRTOUI_RC_OK, 15, '\0'); }
+static void testUtilsStrtoui_stub_234(void) { testUtilsStrtoui("F", 0,  16, UTILS_STRTOUI_RC_OK, 15, '\0'); }
+static void testUtilsStrtoui_stub_235(void) { testUtilsStrtoui("z", 0,  36, UTILS_STRTOUI_RC_OK, 35, '\0'); }
+static void testUtilsStrtoui_stub_236(void) { testUtilsStrtoui("Z", 0,  36, UTILS_STRTOUI_RC_OK, 35, '\0'); }
+static void testUtilsStrtoui_stub_237(void) { testUtilsStrtoui("991", 0,  10, UTILS_STRTOUI_RC_OK, 991, '\0'); }
+static void testUtilsStrtoui_stub_238(void) { testUtilsStrtoui("1110", 0,  2, UTILS_STRTOUI_RC_OK, 14, '\0'); }
+static void testUtilsStrtoui_stub_239(void) { testUtilsStrtoui("fffe", 0,  16, UTILS_STRTOUI_RC_OK, 0xfffe, '\0'); }
+static void testUtilsStrtoui_stub_240(void) { testUtilsStrtoui("FFFE", 0,  16, UTILS_STRTOUI_RC_OK, 0xfffe, '\0'); }
+static void testUtilsStrtoui_stub_241(void) { testUtilsStrtoui("zz", 0,  36, UTILS_STRTOUI_RC_OK, 35*36+35, '\0'); }
+static void testUtilsStrtoui_stub_242(void) { testUtilsStrtoui("Zz", 0,  36, UTILS_STRTOUI_RC_OK, 35*36+35, '\0'); }
+static void testUtilsStrtoui_stub_243(void) { testUtilsStrtoui("+9", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, '+'); }
+static void testUtilsStrtoui_stub_244(void) { testUtilsStrtoui(" 9", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, ' '); }
+static void testUtilsStrtoui_stub_245(void) { testUtilsStrtoui("09", 0,  10, UTILS_STRTOUI_RC_OK, 9, '\0'); }
+static void testUtilsStrtoui_stub_246(void) { testUtilsStrtoui("9 ", 0,  10, UTILS_STRTOUI_RC_OK, 9, ' '); }
+static void testUtilsStrtoui_stub_247(void) { testUtilsStrtoui("%llu", UINT_MAX,  10, UTILS_STRTOUI_RC_OK, UINT_MAX, '\0'); }
+static void testUtilsStrtoui_stub_248(void) { testUtilsStrtoui("%llx", UINT_MAX,  16, UTILS_STRTOUI_RC_OK, UINT_MAX, '\0'); }
+static void testUtilsStrtoui_stub_249(void) { testUtilsStrtoui("%llu", (unsigned long long)UINT_MAX+1,  10, UTILS_STRTOUI_RC_OVERFLOW, 0, '\0'); }
+static void testUtilsStrtoui_stub_250(void) { testUtilsStrtoui("%llx", (unsigned long long)UINT_MAX+1,  16, UTILS_STRTOUI_RC_OVERFLOW, 0, '\0'); }
 
 /*** Extra Unity support. ***/
 
@@ -649,28 +654,32 @@ int main(int argc, char** argv) {
   do_run_test(testBufferAddU16Overflow, "testBufferAddU16Overflow", 259);
   do_run_test(testBufferAddMem, "testBufferAddMem", 272);
   do_run_test(testUtilsBufferReset, "testUtilsBufferReset", 289);
-  do_run_test(testUtilsStrtoui_stub_226, "testUtilsStrtoui(\"\", 0, 10, false, 0, '\\0')", 334);
-  do_run_test(testUtilsStrtoui_stub_227, "testUtilsStrtoui(\"*\", 0,  10, false, 0, '*')", 335);
-  do_run_test(testUtilsStrtoui_stub_228, "testUtilsStrtoui(\"9\", 0,  10, true, 9, '\\0')", 337);
-  do_run_test(testUtilsStrtoui_stub_229, "testUtilsStrtoui(\"1\", 0,  2, true, 1, '\\0')", 338);
-  do_run_test(testUtilsStrtoui_stub_230, "testUtilsStrtoui(\"f\", 0,  16, true, 15, '\\0')", 339);
-  do_run_test(testUtilsStrtoui_stub_231, "testUtilsStrtoui(\"F\", 0,  16, true, 15, '\\0')", 340);
-  do_run_test(testUtilsStrtoui_stub_232, "testUtilsStrtoui(\"z\", 0,  36, true, 35, '\\0')", 341);
-  do_run_test(testUtilsStrtoui_stub_233, "testUtilsStrtoui(\"Z\", 0,  36, true, 35, '\\0')", 342);
-  do_run_test(testUtilsStrtoui_stub_234, "testUtilsStrtoui(\"991\", 0,  10, true, 991, '\\0')", 344);
-  do_run_test(testUtilsStrtoui_stub_235, "testUtilsStrtoui(\"1110\", 0,  2, true, 14, '\\0')", 345);
-  do_run_test(testUtilsStrtoui_stub_236, "testUtilsStrtoui(\"fffe\", 0,  16, true, 0xfffe, '\\0')", 346);
-  do_run_test(testUtilsStrtoui_stub_237, "testUtilsStrtoui(\"FFFE\", 0,  16, true, 0xfffe, '\\0')", 347);
-  do_run_test(testUtilsStrtoui_stub_238, "testUtilsStrtoui(\"zz\", 0,  36, true, 35*36+35, '\\0')", 348);
-  do_run_test(testUtilsStrtoui_stub_239, "testUtilsStrtoui(\"Zz\", 0,  36, true, 35*36+35, '\\0')", 349);
-  do_run_test(testUtilsStrtoui_stub_240, "testUtilsStrtoui(\"+9\", 0,  10, true, 9, '\\0')", 351);
-  do_run_test(testUtilsStrtoui_stub_241, "testUtilsStrtoui(\" 9\", 0,  10, true, 9, '\\0')", 352);
-  do_run_test(testUtilsStrtoui_stub_242, "testUtilsStrtoui(\"09\", 0,  10, true, 9, '\\0')", 353);
-  do_run_test(testUtilsStrtoui_stub_243, "testUtilsStrtoui(\"9 \", 0,  10, true, 9, ' ')", 355);
-  do_run_test(testUtilsStrtoui_stub_244, "testUtilsStrtoui(\"%llu\", UINT_MAX,  10, true, UINT_MAX, '\\0')", 359);
-  do_run_test(testUtilsStrtoui_stub_245, "testUtilsStrtoui(\"%llx\", UINT_MAX,  16, true, UINT_MAX, '\\0')", 360);
-  do_run_test(testUtilsStrtoui_stub_246, "testUtilsStrtoui(\"%llu\", (unsigned long long)UINT_MAX+1,  10, false, 0, '\\0')", 362);
-  do_run_test(testUtilsStrtoui_stub_247, "testUtilsStrtoui(\"%llx\", (unsigned long long)UINT_MAX+1,  16, false, 0, '\\0')", 363);
+  do_run_test(test_utils_str_is_wsp, "test_utils_str_is_wsp", 300);
+  do_run_test(test_utils_scan_past_wsp_stub_226, "test_utils_scan_past_wsp(\"\", '\\0')", 315);
+  do_run_test(test_utils_scan_past_wsp_stub_227, "test_utils_scan_past_wsp(\"\\t \", '\\0')", 316);
+  do_run_test(test_utils_scan_past_wsp_stub_228, "test_utils_scan_past_wsp(\"\\t a\", 'a')", 317);
+  do_run_test(testUtilsStrtoui_stub_229, "testUtilsStrtoui(\"\", 0, 10, UTILS_STRTOUI_RC_NO_CHARS, 0, '\\0')", 354);
+  do_run_test(testUtilsStrtoui_stub_230, "testUtilsStrtoui(\"*\", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, '*')", 355);
+  do_run_test(testUtilsStrtoui_stub_231, "testUtilsStrtoui(\"9\", 0,  10, UTILS_STRTOUI_RC_OK, 9, '\\0')", 357);
+  do_run_test(testUtilsStrtoui_stub_232, "testUtilsStrtoui(\"1\", 0,  2, UTILS_STRTOUI_RC_OK, 1, '\\0')", 358);
+  do_run_test(testUtilsStrtoui_stub_233, "testUtilsStrtoui(\"f\", 0,  16, UTILS_STRTOUI_RC_OK, 15, '\\0')", 359);
+  do_run_test(testUtilsStrtoui_stub_234, "testUtilsStrtoui(\"F\", 0,  16, UTILS_STRTOUI_RC_OK, 15, '\\0')", 360);
+  do_run_test(testUtilsStrtoui_stub_235, "testUtilsStrtoui(\"z\", 0,  36, UTILS_STRTOUI_RC_OK, 35, '\\0')", 361);
+  do_run_test(testUtilsStrtoui_stub_236, "testUtilsStrtoui(\"Z\", 0,  36, UTILS_STRTOUI_RC_OK, 35, '\\0')", 362);
+  do_run_test(testUtilsStrtoui_stub_237, "testUtilsStrtoui(\"991\", 0,  10, UTILS_STRTOUI_RC_OK, 991, '\\0')", 364);
+  do_run_test(testUtilsStrtoui_stub_238, "testUtilsStrtoui(\"1110\", 0,  2, UTILS_STRTOUI_RC_OK, 14, '\\0')", 365);
+  do_run_test(testUtilsStrtoui_stub_239, "testUtilsStrtoui(\"fffe\", 0,  16, UTILS_STRTOUI_RC_OK, 0xfffe, '\\0')", 366);
+  do_run_test(testUtilsStrtoui_stub_240, "testUtilsStrtoui(\"FFFE\", 0,  16, UTILS_STRTOUI_RC_OK, 0xfffe, '\\0')", 367);
+  do_run_test(testUtilsStrtoui_stub_241, "testUtilsStrtoui(\"zz\", 0,  36, UTILS_STRTOUI_RC_OK, 35*36+35, '\\0')", 368);
+  do_run_test(testUtilsStrtoui_stub_242, "testUtilsStrtoui(\"Zz\", 0,  36, UTILS_STRTOUI_RC_OK, 35*36+35, '\\0')", 369);
+  do_run_test(testUtilsStrtoui_stub_243, "testUtilsStrtoui(\"+9\", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, '+')", 371);
+  do_run_test(testUtilsStrtoui_stub_244, "testUtilsStrtoui(\" 9\", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, ' ')", 372);
+  do_run_test(testUtilsStrtoui_stub_245, "testUtilsStrtoui(\"09\", 0,  10, UTILS_STRTOUI_RC_OK, 9, '\\0')", 373);
+  do_run_test(testUtilsStrtoui_stub_246, "testUtilsStrtoui(\"9 \", 0,  10, UTILS_STRTOUI_RC_OK, 9, ' ')", 375);
+  do_run_test(testUtilsStrtoui_stub_247, "testUtilsStrtoui(\"%llu\", UINT_MAX,  10, UTILS_STRTOUI_RC_OK, UINT_MAX, '\\0')", 379);
+  do_run_test(testUtilsStrtoui_stub_248, "testUtilsStrtoui(\"%llx\", UINT_MAX,  16, UTILS_STRTOUI_RC_OK, UINT_MAX, '\\0')", 380);
+  do_run_test(testUtilsStrtoui_stub_249, "testUtilsStrtoui(\"%llu\", (unsigned long long)UINT_MAX+1,  10, UTILS_STRTOUI_RC_OVERFLOW, 0, '\\0')", 382);
+  do_run_test(testUtilsStrtoui_stub_250, "testUtilsStrtoui(\"%llx\", (unsigned long long)UINT_MAX+1,  16, UTILS_STRTOUI_RC_OVERFLOW, 0, '\\0')", 383);
   registerFixture(NULL, NULL, NULL);
 
   return UnityEnd();

@@ -328,12 +328,19 @@ T utilsFilter(U* accum, T input, uint8_t k, bool reset) {
 	return (T)(*accum >> k);
 }
 
-/* Simple implementation of strtoul for unsigned ints. String may have leading whitespace and an optional leading '+'. Then digits up to one
-	less than the base are converted and written to n, until the first non-digit character (including space or nul) is read. 
-	The function only returns true if at least one number character is seen and there is no overflow. Note that the function will return true
-	if the non-converted character was illegal, e.g. `+99a' will return true with a base of 10.
-	If endptr is non-NULL, it is set to the first character that was not converted. */
-bool utilsStrtoui(unsigned* n, const char *str, char **endptr, unsigned base);
+// Building block functions for string scanning.
+bool utilsStrIsWhitespace(char c);
+void utilsStrScanPastWhitespace(const char** strp);
+
+/* Convert a string into an unsigned int. Digits up to one less than the base are converted and written to n, until the first non-digit character 
+	(including space or nul) is read. 
+	
+	If no characters are converted then the value UTILS_STRTOUI_RC_NO_CHARS is returned. On overflow the value UTILS_STRTOUI_RC_OVERFLOW, }; is returned.
+	The function only returns the value UTILS_STRTOUI_RC_OK (zero) if at least one number character is seen and there is no overflow. 
+	Note that the function will return true	if the non-converted character was illegal, e.g. `99a' will return true with a base of 10.
+	Endptr must be valid and is set to the first character that was not converted. */
+enum { UTILS_STRTOUI_RC_OK, UTILS_STRTOUI_RC_NO_CHARS, UTILS_STRTOUI_RC_OVERFLOW, };
+int utilsStrtoui(unsigned* n, const char *str, char **endptr, unsigned base);
 
 /* Utils Sequencer -- generic driver to run an arbitrary sequence by calling a user function every so often with a canned argument.
 	Example - play a tune with the play() function.

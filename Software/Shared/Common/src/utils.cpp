@@ -12,6 +12,7 @@
  #define PSTR(str_) (str_)
  #define pgm_read_word(_a) (*(uint16_t*)(_a))
  #define pgm_read_ptr(x_) (*(x_))					// Generic target.
+ #define strchr_P strchr
 #endif
 
 // Mock millis() for testing.
@@ -277,29 +278,30 @@ void tholdScanRescan(const thold_scanner_def_t* defs, thold_scanner_context_t* c
 }
 #endif
 
-// Minimal implementation of strtoul for an unsigned. Heavily adapted from AVR libc.
-bool utilsStrtoui(unsigned* n, const char* str, char** endptr, unsigned base) {
-	unsigned char c;
-	char conv, ovf;
+	// Building block functions for string scanning.
+	bool utilsStrIsWhitespace(char c) { 
+		return ('\0' != c ) && (NULL != strchr_P(PSTR(" \t\r\n\f"), c));
+	}
+	void utilsStrScanPastWhitespace(const char** strp) {
+	const char* str = *strp;
+	while (('\0' != *str) && utilsStrIsWhitespace(*str))
+		str += 1;
+	*strp = str;
+}
+#if 0
+char utilsStrGetPrefix(const char** strp) {
+	if strchr_P(PSTR("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"), **strp))
+#endif
 
-	if (NULL != endptr)		// Record start position, if error we restore it.
-		* endptr = (char*)str;
-
-	// Skip leading whitespace.
-	do {
-		c = *str++;
-	} while ((' ' == c) || ('\t' == c));
-
-	// Take care of leading sign. A '-' is not allowed.
-	if (c == '+')
-		c = *str++;
+int utilsStrtoui(unsigned* n, const char* str, char** endptr, unsigned base) {
+	int rc = UTILS_STRTOUI_RC_NO_CHARS;	 
 
 	// Iterate over string.
 	*n = 0;
-	conv = ovf = 0;
 	while (1) {
 		unsigned old_n;
 
+		unsigned char c = *str++;
 		if (c >= '0' && c <= '9')
 			c -= '0';
 		else if (c >= 'A' && c <= 'Z')
@@ -307,26 +309,20 @@ bool utilsStrtoui(unsigned* n, const char* str, char** endptr, unsigned base) {
 		else if (c >= 'a' && c <= 'z')
 			c -= 'a' - 10;
 		else
-			break;				// Not a valid character, so exit loop.
+			break;										// Not a valid character, so exit loop.
 
-		if (c >= base)					// Digit too big.
+		if (c >= base)									// Digit too big.
 			break;
 
-		conv = 1;						// Signal one valid digit read.
+		if (UTILS_STRTOUI_RC_NO_CHARS == rc)
+			rc = UTILS_STRTOUI_RC_OK;					// Signal one valid digit read.
 		old_n = *n;
 		*n = *n * base + c;
-		if (*n < old_n)  				// Rollover!
-			ovf = 1;					// Signal overflow.
-
-		c = *str++;
+		if (*n < old_n)  								// Rollover!
+			rc = UTILS_STRTOUI_RC_OVERFLOW;				// Signal overflow.
 	}
 
-
-	// Always update pointer to first non-converted character.
-	if (NULL != endptr)
-		*endptr = (char*)str - 1;
-
-	// Success only if we converted at least one character _and_ no overflow.
-	return (conv && !ovf);
+	*endptr = (char*)str - 1;							// Update pointer to first non-converted character.
+	return rc;
 }
 

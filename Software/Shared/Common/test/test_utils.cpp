@@ -296,6 +296,27 @@ void testUtilsBufferReset() {
 	verify_buffer_reset();
 }
 
+// Test string processing...
+
+void test_utils_str_is_wsp() {
+	TEST_ASSERT(utilsStrIsWhitespace(' '));
+	TEST_ASSERT(utilsStrIsWhitespace('\t'));
+	TEST_ASSERT(utilsStrIsWhitespace('\n'));
+	TEST_ASSERT(utilsStrIsWhitespace('\r'));
+	TEST_ASSERT(utilsStrIsWhitespace('\f'));
+	TEST_ASSERT_FALSE(utilsStrIsWhitespace('\0'));
+	TEST_ASSERT_FALSE(utilsStrIsWhitespace('x'));
+}
+
+void test_utils_scan_past_wsp(const char* str, char c) {
+	const char** strp = &str;
+	utilsStrScanPastWhitespace(strp);
+	TEST_ASSERT_EQUAL_CHAR(c, **strp);
+}
+TT_TEST_CASE(test_utils_scan_past_wsp("", '\0'));
+TT_TEST_CASE(test_utils_scan_past_wsp("\t ", '\0'));
+TT_TEST_CASE(test_utils_scan_past_wsp("\t a", 'a'));
+
 // Test strtoui()...
 //
 #if 0
@@ -318,47 +339,46 @@ const char* get_int_as_str(long long int x, unsigned base) {
 	return s;
 }
 #endif
-void testUtilsStrtoui(const char *fmtstr, unsigned long long nn, unsigned base, bool rc_exp, unsigned n_exp, char end) {
+
+void testUtilsStrtoui(const char *fmtstr, unsigned long long nn, unsigned base, int rc_exp, unsigned n_exp, char end) {
 	unsigned n;
 	char *endp = NULL;
 	char str[40];
+	TEST_ASSERT(sizeof(unsigned long long) > sizeof(unsigned));		// Else we can't test for unsigned max. 
 	sprintf(str, fmtstr, nn);
-	TEST_ASSERT(sizeof(unsigned long long) > sizeof(unsigned));
-	TEST_ASSERT_EQUAL(rc_exp, utilsStrtoui(&n, str, NULL, base));
-	TEST_ASSERT_EQUAL_UINT(n_exp, n);
 
 	TEST_ASSERT_EQUAL(rc_exp, utilsStrtoui(&n, str, &endp, base));
 	TEST_ASSERT_EQUAL_UINT(n_exp, n);
 	TEST_ASSERT_EQUAL_CHAR(end, *endp);
 }
 // No numbers...
-TT_TEST_CASE(testUtilsStrtoui("", 0, 10, false, 0, '\0'));
-TT_TEST_CASE(testUtilsStrtoui("*", 0,  10, false, 0, '*'));
+TT_TEST_CASE(testUtilsStrtoui("", 0, 10, UTILS_STRTOUI_RC_NO_CHARS, 0, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("*", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, '*'));
 // Single digits...
-TT_TEST_CASE(testUtilsStrtoui("9", 0,  10, true, 9, '\0'));
-TT_TEST_CASE(testUtilsStrtoui("1", 0,  2, true, 1, '\0'));
-TT_TEST_CASE(testUtilsStrtoui("f", 0,  16, true, 15, '\0'));
-TT_TEST_CASE(testUtilsStrtoui("F", 0,  16, true, 15, '\0'));
-TT_TEST_CASE(testUtilsStrtoui("z", 0,  36, true, 35, '\0'));
-TT_TEST_CASE(testUtilsStrtoui("Z", 0,  36, true, 35, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("9", 0,  10, UTILS_STRTOUI_RC_OK, 9, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("1", 0,  2, UTILS_STRTOUI_RC_OK, 1, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("f", 0,  16, UTILS_STRTOUI_RC_OK, 15, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("F", 0,  16, UTILS_STRTOUI_RC_OK, 15, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("z", 0,  36, UTILS_STRTOUI_RC_OK, 35, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("Z", 0,  36, UTILS_STRTOUI_RC_OK, 35, '\0'));
 // Multiple digits...
-TT_TEST_CASE(testUtilsStrtoui("991", 0,  10, true, 991, '\0'));
-TT_TEST_CASE(testUtilsStrtoui("1110", 0,  2, true, 14, '\0'));
-TT_TEST_CASE(testUtilsStrtoui("fffe", 0,  16, true, 0xfffe, '\0'));
-TT_TEST_CASE(testUtilsStrtoui("FFFE", 0,  16, true, 0xfffe, '\0'));
-TT_TEST_CASE(testUtilsStrtoui("zz", 0,  36, true, 35*36+35, '\0'));
-TT_TEST_CASE(testUtilsStrtoui("Zz", 0,  36, true, 35*36+35, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("991", 0,  10, UTILS_STRTOUI_RC_OK, 991, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("1110", 0,  2, UTILS_STRTOUI_RC_OK, 14, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("fffe", 0,  16, UTILS_STRTOUI_RC_OK, 0xfffe, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("FFFE", 0,  16, UTILS_STRTOUI_RC_OK, 0xfffe, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("zz", 0,  36, UTILS_STRTOUI_RC_OK, 35*36+35, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("Zz", 0,  36, UTILS_STRTOUI_RC_OK, 35*36+35, '\0'));
 // Leading stuff...
-TT_TEST_CASE(testUtilsStrtoui("+9", 0,  10, true, 9, '\0'));
-TT_TEST_CASE(testUtilsStrtoui(" 9", 0,  10, true, 9, '\0'));
-TT_TEST_CASE(testUtilsStrtoui("09", 0,  10, true, 9, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("+9", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, '+'));
+TT_TEST_CASE(testUtilsStrtoui(" 9", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, ' '));
+TT_TEST_CASE(testUtilsStrtoui("09", 0,  10, UTILS_STRTOUI_RC_OK, 9, '\0'));
 // Trailing Stuff...
-TT_TEST_CASE(testUtilsStrtoui("9 ", 0,  10, true, 9, ' '));
-TT_TEST_CASE(testUtilsStrtoui("99a", 0,  10, true, 99, 'a'));  // Bad digit
-TT_TEST_CASE(testUtilsStrtoui("999@", 0,  10, true, 999, 'a'));  // Bad digit
+TT_TEST_CASE(testUtilsStrtoui("9 ", 0,  10, UTILS_STRTOUI_RC_OK, 9, ' '));
+TT_TEST_CASE(testUtilsStrtoui("99a", 0,  10, UTILS_STRTOUI_RC_OK, 99, 'a'));  // Bad digit
+TT_TEST_CASE(testUtilsStrtoui("999@", 0,  10, UTILS_STRTOUI_RC_OK, 999, 'a'));  // Bad digit
 // At max...
-TT_TEST_CASE(testUtilsStrtoui("%llu", UINT_MAX,  10, true, UINT_MAX, '\0'));
-TT_TEST_CASE(testUtilsStrtoui("%llx", UINT_MAX,  16, true, UINT_MAX, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("%llu", UINT_MAX,  10, UTILS_STRTOUI_RC_OK, UINT_MAX, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("%llx", UINT_MAX,  16, UTILS_STRTOUI_RC_OK, UINT_MAX, '\0'));
 // Overflow...
-TT_TEST_CASE(testUtilsStrtoui("%llu", (unsigned long long)UINT_MAX+1,  10, false, 0, '\0'));
-TT_TEST_CASE(testUtilsStrtoui("%llx", (unsigned long long)UINT_MAX+1,  16, false, 0, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("%llu", (unsigned long long)UINT_MAX+1,  10, UTILS_STRTOUI_RC_OVERFLOW, 0, '\0'));
+TT_TEST_CASE(testUtilsStrtoui("%llx", (unsigned long long)UINT_MAX+1,  16, UTILS_STRTOUI_RC_OVERFLOW, 0, '\0'));
