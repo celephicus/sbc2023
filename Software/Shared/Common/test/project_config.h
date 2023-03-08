@@ -8,6 +8,5 @@
 
 // For myprintf.
 #define CFG_MYPRINTF_WANT_BINARY 1
-#define CFG_MYPRINTF_LONG_QUALIFIER long
 
 #endif // PROJECT_CONFIG_H__

@@ -56,8 +56,8 @@
         <StartupCommands/>
       </Debugger>
       <PreBuild>
-        <Command Enabled="yes">python ../../../Tools/events_mk.py</Command>
-        <Command Enabled="yes">python grm.py -v -o main.cpp test*.cpp</Command>
+        <Command Enabled="yes">../../../Tools/events_mk.py</Command>
+        <Command Enabled="yes">./grm.py -v -o main.cpp test*.cpp</Command>
       </PreBuild>
       <PostBuild/>
       <CustomBuild Enabled="no">
