@@ -259,6 +259,7 @@ static uint16_t get_crc(const uint8_t* buf, uint8_t sz) {
 		crc ^= pgm_read_word(&table[exor]);
 	}
 
-	return crc;
+// Somehow the endianness is getting mixed up. Refer https://www.scadacore.com/tools/programming-calculators/online-checksum-calculator/. The CRC for `010364000200' is given as `5B9A', but this function gives `9a5b'.
+	return utilsU16_bswap(crc);
 }
 
