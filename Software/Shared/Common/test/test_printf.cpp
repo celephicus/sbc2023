@@ -7,10 +7,19 @@
 
 TT_BEGIN_INCLUDE()
 #include <stdarg.h>
+#include "project_config.h"
 #include "myprintf.h"
 TT_END_INCLUDE()
 
-// Test sprintf does not overwrite buffer. 
+// We expect these sizes used in myprintf.
+void test_utils_myprintf_int_sizes() {
+	TEST_ASSERT_EQUAL(2, sizeof(CFG_MYPRINTF_TYPE_SIGNED_INT));
+	TEST_ASSERT_EQUAL(2, sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_INT));
+	TEST_ASSERT_EQUAL(4, sizeof(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT));
+	TEST_ASSERT_EQUAL(4, sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT));
+}
+
+// Test sprintf does not overwrite buffer.
 void test_myprintf_snsprintf(const char* exp, char rc_exp, int len, const char* fmt) {
 	char buf[5];	// Room for 4 characters.
 	memset(buf, 'x', 5);
@@ -23,12 +32,12 @@ void test_myprintf_snsprintf(const char* exp, char rc_exp, int len, const char* 
 	TEST_ASSERT_EQUAL(rc_exp, rc);
 }
 TT_TEST_CASE(test_myprintf_snsprintf(NULL, 0, 0, ""));	// Zero length buffer does not write anything.
-TT_TEST_CASE(test_myprintf_snsprintf(NULL, 0, 0, "Z"));	// Ditto for non-empty string. 
+TT_TEST_CASE(test_myprintf_snsprintf(NULL, 0, 0, "Z"));	// Ditto for non-empty string.
 TT_TEST_CASE(test_myprintf_snsprintf("", 1, 1, ""));	// Can write zero length string to buffer length 1.
 TT_TEST_CASE(test_myprintf_snsprintf("", 0, 1, "Z"));	// But not non-empty string.
 TT_TEST_CASE(test_myprintf_snsprintf("", 1, 2, ""));	// Can write zero length string to buffer length 2.
 TT_TEST_CASE(test_myprintf_snsprintf("X", 1, 2, "X"));	// Can write 1 length string to buffer length 2.
-TT_TEST_CASE(test_myprintf_snsprintf("X", 0, 2, "XZ"));	// But not string length 2. 
+TT_TEST_CASE(test_myprintf_snsprintf("X", 0, 2, "XZ"));	// But not string length 2.
 
 void test_printf_format_v(const char* expected, const char* fmt, va_list ap) {
 	char outp[100];
@@ -74,42 +83,30 @@ TT_TEST_CASE(test_printf_format("x 1x", "x%2dx", 1));
 TT_TEST_CASE(test_printf_format("x01x", "x%02dx", 1));
 TT_TEST_CASE(test_printf_format("x1 x", "x%-2dx", 1));
 
-TT_BEGIN_INCLUDE()
-#include "project_config.h"
-#include <limits.h>
-TT_END_INCLUDE()
-
-// A helper function to format an int to a string.
-void myprintf_test_int_to_string_i(char* buf, const char* fmt, int val) {
-	sprintf(buf, fmt, val);
-}
-void myprintf_test_int_to_string_li(char* buf, const char* fmt, CFG_MYPRINTF_LONG_QUALIFIER int val) {
-	sprintf(buf, fmt, val);
-}
-void test_myprintf_format_integer(const char* fmt_expected, const char* fmt, int val) {
-	char expected[81];
-	myprintf_test_int_to_string_i(expected, fmt_expected, val);
-	test_printf_format(expected, fmt, val);
-}
-TT_TEST_CASE(test_myprintf_format_integer("x%dx", "x%dx", INT_MAX));
-TT_TEST_CASE(test_myprintf_format_integer("x%dx", "x%dx", INT_MIN));
-TT_TEST_CASE(test_myprintf_format_integer("x%30dx", "x%30dx", INT_MIN));
-TT_TEST_CASE(test_myprintf_format_integer("x%030dx", "x%030dx", INT_MIN));
-TT_TEST_CASE(test_myprintf_format_integer("x%-30dx", "x%-30dx", INT_MIN));
+// Min/max values.
+TT_TEST_CASE(test_printf_format("x65535x", "x%ux", 0xffff));
+TT_TEST_CASE(test_printf_format("x4294967295x", "x%ux", 0xffffffff));
+TT_TEST_CASE(test_printf_format("x65535x", "x%ux", 65535));
+TT_TEST_CASE(test_printf_format("xffffffffx", "x%lxx", 0xffffffff));
+TT_TEST_CASE(test_printf_format("x32767x", "x%dx", 32767));
+TT_TEST_CASE(test_printf_format("x-32768x", "x%dx", -32768));
+TT_TEST_CASE(test_printf_format("x2147483647x", "x%ldx", 2147483647));
+TT_TEST_CASE(test_printf_format("x-2147483648x", "x%ldx", -2147483648));
 
 // Hex integer.
 TT_TEST_CASE(test_printf_format("x0x", "x%xx", 0));
 TT_TEST_CASE(test_printf_format("xabcx", "x%xx", 0xABC));
 TT_TEST_CASE(test_printf_format("xABCx", "x%Xx", 0xABC));
-TT_TEST_CASE(test_myprintf_format_integer("x%xx", "x%xx", UINT_MAX));
 
 // Binary integer.
 TT_TEST_CASE(test_printf_format("x0x", "x%bx", 0));
 TT_TEST_CASE(test_printf_format("x101x", "x%bx", 5));
 void test_myprintf_format_binary_max() {
-	char expected[sizeof(CFG_MYPRINTF_LONG_QUALIFIER int)*8+1];
-	memset(expected, '1', sizeof(expected)-1);
-	expected[sizeof(expected)-1] = '\0';
-	test_printf_format(expected, "%b", UINT_MAX);
+	char expected[129];
+	memset(expected, '1', sizeof(expected));
+	expected[sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)*8] = '\0';
+	test_printf_format(expected, "%lb", 0xffffffff);
+	expected[sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_INT)*8] = '\0';
+	test_printf_format(expected, "%b", 0xffff);
 }
 

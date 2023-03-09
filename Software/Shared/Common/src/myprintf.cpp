@@ -22,27 +22,16 @@
 #include <stdint.h>
 
 #include "myprintf.h"
-
 /* If we have a project config file include it. */
 #ifdef USE_PROJECT_CONFIG_H
 #include "project_config.h"
-#endif
-
-/* What does `L' format mean? `Long' or `long long'? */
-#ifndef CFG_MYPRINTF_LONG_QUALIFIER
-#define CFG_MYPRINTF_LONG_QUALIFIER long 		
-#endif
-
-/* Set size of the long int type that myprintf uses. */
-#ifndef CFG_MYPRINTF_SIZEOF_LONG_INT
-#define CFG_MYPRINTF_SIZEOF_LONG_INT 4
 #endif
 
 /* Do you want binary format? Watch out it needs a big buffer. */
 #ifndef CFG_MYPRINTF_WANT_BINARY
 #define CFG_MYPRINTF_WANT_BINARY 0
 #endif
-			
+
 /* Customisation for AVR target. */
 #if defined(__AVR__)
 
@@ -51,35 +40,43 @@
 #define MYPRINTF_DEREF_PGM_STR_CHAR(ptr_) ((char)pgm_read_byte(ptr_))		// For AVR.
 
 /* Define if strings can be in Flash as well as RAM. This enables the `%S' format. */
-#define MYPRINTF_WANT_PGM_STR 
+#define MYPRINTF_WANT_PGM_STR
 
 #else
-	
-#define MYPRINTF_DEREF_PGM_STR_CHAR(ptr_) (*(ptr_))		
+
+#define MYPRINTF_DEREF_PGM_STR_CHAR(ptr_) (*(ptr_))
 #define PROGMEM /*empty */
+#undef MYPRINTF_WANT_PGM_STR
 
 #endif
 
 /* Check that we have size of myprintf's int type correct. */
 #define MYPRINTF_STATIC_ASSERT(expr_) extern char error_static_assert_fail__[(expr_) ? 1 : -1] __attribute__((unused))
-MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_LONG_QUALIFIER) == CFG_MYPRINTF_SIZEOF_LONG_INT);
+#define IS_TYPE_SIGNED(T_) (((T_)(-1)) < (T_)0)
+MYPRINTF_STATIC_ASSERT(IS_TYPE_SIGNED(CFG_MYPRINTF_TYPE_SIGNED_INT));
+MYPRINTF_STATIC_ASSERT(!IS_TYPE_SIGNED(CFG_MYPRINTF_TYPE_UNSIGNED_INT));
+MYPRINTF_STATIC_ASSERT(IS_TYPE_SIGNED(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT));
+MYPRINTF_STATIC_ASSERT(!IS_TYPE_SIGNED(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT));
+MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_TYPE_SIGNED_INT) == sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_INT));
+MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT) == sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT));
+
+MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_TYPE_SIGNED_INT) < sizeof(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT));
+
+// Maximum value
+#define MYPRINTF_MAX_UNSIGNED_LONG_INT ((CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)(-1))
 
 /* How many digits required for the maximum value of an unsigned long in your smallest base?  */
+MYPRINTF_STATIC_ASSERT(
+ (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) == 2) ||
+ (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) == 4) ||
+ (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) == 8));
 #if CFG_MYPRINTF_WANT_BINARY
- #define MYPRINTF_MAX_DIGIT_CHARS (CFG_MYPRINTF_SIZEOF_LONG_INT * 8)
+ #define MYPRINTF_MAX_DIGIT_CHARS (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) * 8)
 #else
- #if CFG_MYPRINTF_SIZEOF_LONG_INT == 2
-  #define MYPRINTF_MAX_DIGIT_CHARS 5				// For 16 bit decimal.
- #elif CFG_MYPRINTF_SIZEOF_LONG_INT == 4
-  #define MYPRINTF_MAX_DIGIT_CHARS 10				// For 32 bit decimal.
- #elif CFG_MYPRINTF_SIZEOF_LONG_INT == 8
-  #define MYPRINTF_MAX_DIGIT_CHARS 20				// For 64 bit decimal
- #else
-  #error "can't set MYPRINTF_MAX_DIGIT_CHARS"
- #endif
+  #define MYPRINTF_MAX_DIGIT_CHARS (5 * sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) / 2)
 #endif
 
-// If the preprocessor excludes code snippets these warnings can go off, so disable them. 
+// If the preprocessor excludes code snippets these warnings can go off, so disable them.
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #pragma GCC diagnostic ignored "-Wunused-label"
 
@@ -96,7 +93,7 @@ static void myprintf_snprintf_of(char c, void* arg) {
 char myprintf_vsnprintf(char* buf, unsigned len, const char* fmt, va_list ap) {
 	char rc = 0;			// Default is fail.
 	if (len > 0) {			// Require room for at least a nul.
-		struct snprintf_state s = { buf, buf + len }; 
+		struct snprintf_state s = { buf, buf + len };
 		myprintf(myprintf_snprintf_of, (void*)(&s), fmt, ap);
 		if (s.p >= s.end) { /* Overflow! */
 			s.p[-1] = '\0';
@@ -116,11 +113,16 @@ char myprintf_snprintf(char* buf, unsigned len, const char* fmt, ...) {
 	va_end(ap);
 	return rc;
 }
-
+#if 1
+static CFG_MYPRINTF_TYPE_SIGNED_LONG_INT grab_integer(char is_long, va_list ap) {
+	return ((is_long && (sizeof(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT) > sizeof(int))) ?
+	  va_arg(ap, long int) : va_arg(ap, int));
+}
+#endif
 void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) {
 	uint_least8_t width;			// Holds field width.
-	uint_least8_t base;				// Holds number base. 
-	char padchar;					// Holds padding char, either space or '0'. 
+	uint_least8_t base;				// Holds number base.
+	char padchar;					// Holds padding char, either space or '0'.
 
 	enum {
 		FLAG_FORMAT = 1, FLAG_LONG = 2, FLAG_PAD_RIGHT = 4, FLAG_UPPER = 8, FLAG_NEG = 16, FLAG_STR_PGM = 32,
@@ -128,8 +130,8 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 	uint_least8_t flags = 0;		// Various flags.
 
 	union {
-		unsigned CFG_MYPRINTF_LONG_QUALIFIER u;
-		CFG_MYPRINTF_LONG_QUALIFIER i;
+		CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT u;
+		CFG_MYPRINTF_TYPE_SIGNED_LONG_INT i;
 	} num;							// Number to print. Always positive.
 
 	/* the following should be enough for 32 bit int */
@@ -147,11 +149,11 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 				c = MYPRINTF_DEREF_PGM_STR_CHAR(++fmt);
 				flags |= FLAG_PAD_RIGHT;
 			}
-			else if ('0' == c) {			// A leading zero for zero pad. 
+			else if ('0' == c) {			// A leading zero for zero pad.
 				c = MYPRINTF_DEREF_PGM_STR_CHAR(++fmt);
 				padchar = '0';
 			}
-			while ((c >= '0') && (c <= '9')) {	// Read width value. 
+			while ((c >= '0') && (c <= '9')) {	// Read width value.
 				width *= 10;
 				width += c - '0';
 				c = MYPRINTF_DEREF_PGM_STR_CHAR(++fmt);
@@ -160,7 +162,7 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 				c = MYPRINTF_DEREF_PGM_STR_CHAR(++fmt);
 				flags |= FLAG_LONG;
 			}
-			
+
 			switch (c) {								// Now we have format spec.
 #ifdef MYPRINTF_WANT_PGM_STR
 			case 'S':									// String in program space.
@@ -183,7 +185,7 @@ p_char:			buf[1] = '\0';
 				str.c = &buf[0];
 				goto p_str;
 			case 'd':
-				num.i = ((flags & FLAG_LONG) ? va_arg(ap, CFG_MYPRINTF_LONG_QUALIFIER int) : (CFG_MYPRINTF_LONG_QUALIFIER int)va_arg(ap, int));
+				num.i = grab_integer(flags & FLAG_LONG, ap);
 				if (num.i < 0) {
 					num.i = -num.i;
 					flags |= FLAG_NEG;
@@ -193,7 +195,7 @@ p_char:			buf[1] = '\0';
 			case 'b':
 				base = 2;
 				goto do_unsigned;
-#endif				
+#endif
 			case 'X':
 				flags |= FLAG_UPPER;
 				// Fall through...
@@ -201,7 +203,7 @@ p_char:			buf[1] = '\0';
 				base = 16;
 				// Fall through...
 			case 'u':
-do_unsigned:	num.u = ((flags & FLAG_LONG) ? va_arg(ap, unsigned CFG_MYPRINTF_LONG_QUALIFIER int) : (unsigned CFG_MYPRINTF_LONG_QUALIFIER int)va_arg(ap, unsigned));
+do_unsigned:	num.i = (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)grab_integer(flags & FLAG_LONG, ap);
 				break;
 			case '%': 						/* Literal '%', just print it. */
 				flags = 0;					/* Clear format flag. */
@@ -211,18 +213,18 @@ do_unsigned:	num.u = ((flags & FLAG_LONG) ? va_arg(ap, unsigned CFG_MYPRINTF_LON
 				continue;
 			}  // Closes ' switch (c) { ... '
 
-			// Print number `num' justified in `width' with padding char. 
+			// Print number `num' justified in `width' with padding char.
 			str.m = buf + BUF_LEN - 1;			// Start building number from far end.
 			*str.m = '\0';
 
-			// Print digits LSD first. 
+			// Print digits LSD first.
 			do {
 				const uint_least8_t digit = num.u % base;
 				*--str.m = digit + ((digit < 10) ? '0' : (((flags & FLAG_UPPER) ? 'A' : 'a') - 10));
 				num.u /= base;
 			} while (num.u > 0);
 
-			// Take care of leading '-'. 
+			// Take care of leading '-'.
 			if (flags & FLAG_NEG) {
 				if ((width > 0) && ('0' == padchar)) {
 					putfunc('-', arg);
@@ -232,12 +234,10 @@ do_unsigned:	num.u = ((flags & FLAG_LONG) ? va_arg(ap, unsigned CFG_MYPRINTF_LON
 					*--str.m = '-';
 			}
 
-p_str:		// Print string `str' justified in `width' with padding char `pad'. 
-
-			// Get length of string.
-			if (width > 0) {
+p_str:		// Print string `str' justified in `width' with padding char `pad'.
+			if (width > 0) { 	// Get length of stringonly if required.
 				int len;
-				const char* p = str.c; 
+				const char* p = str.c;
 				while ('\0' != (flags & FLAG_STR_PGM) ? MYPRINTF_DEREF_PGM_STR_CHAR(p) : *p)
 					p += 1;
 				len = p - str.c;
@@ -253,12 +253,12 @@ p_str:		// Print string `str' justified in `width' with padding char `pad'.
 			if (!(flags & FLAG_PAD_RIGHT)) {
 				while (width > 0) {
 					putfunc(padchar, arg);
-					width -= 1;				// Can't use width-- in loop test as need width untouched later. 
+					width -= 1;				// Can't use width-- in loop test as need width untouched later.
 				}
 			}
 
 			// Print string.
-			
+
 			while ('\0' != (c = (flags & FLAG_STR_PGM) ? MYPRINTF_DEREF_PGM_STR_CHAR(str.c) : *str.c)) {
 				putfunc(c, arg);
 				str.c += 1;
@@ -268,7 +268,7 @@ p_str:		// Print string `str' justified in `width' with padding char `pad'.
 			while (width-- > 0)
 				putfunc(padchar, arg);
 
-			flags = 0;				// Clear in format flag. 
+			flags = 0;				// Clear in format flag.
 		}	// Closes `if (flags & FLAG_FORMAT) { ... '
 		else {
 			if ('%' == c) {				// We will be expecting format stuff now.
@@ -278,7 +278,7 @@ p_str:		// Print string `str' justified in `width' with padding char `pad'.
 				padchar = ' ';
 			}
 			else {
-out:		
+out:
 				putfunc(c, arg);
 			} // Closes 'if (*fmt == '%') { ... '
 		}
