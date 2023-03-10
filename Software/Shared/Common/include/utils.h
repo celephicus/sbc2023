@@ -11,20 +11,23 @@ template <typename T>
 bool utilsIsTimerDone(T &then, T timeout) { return ((T)millis() - then) > timeout; }
 
 // Endianness conversion functions.
+#define utilsU16_bswap(x_) (__builtin_bswap16(x_))
+#define utilsU32_bswap(x_) (__builtin_bswap32(x_))
+
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define utilsU16_native_to_le(x_) (x_)
 #define utilsU16_le_to_native(x_) (x_)
 #define utilsU32_native_to_le(x_) (x_)
 #define utilsU32_le_to_native(x_) (x_)
-#define utilsU16_native_to_be(x_) (__builtin_bswap16(x_))
-#define utilsU16_be_to_native(x_) (__builtin_bswap16(x_))
-#define utilsU32_native_to_be(x_) (__builtin_bswap32(x_))
-#define utilsU32_be_to_native(x_) (__builtin_bswap32(x_))
+#define utilsU16_native_to_be(x_) (utilsU16_bswap(x_))
+#define utilsU16_be_to_native(x_) (utilsU16_bswap(x_))
+#define utilsU32_native_to_be(x_) (utilsU32_bswap(x_))
+#define utilsU32_be_to_native(x_) (utilsU32_bswap(x_))
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-#define utilsU16_native_to_le(x_) (__builtin_bswap16(x_))
-#define utilsU16_le_to_native(x_) (__builtin_bswap16(x_))
-#define utilsU32_native_to_le(x_) (__builtin_bswap16(x_))
-#define utilsU32_le_to_native(x_) (__builtin_bswap16(x_))
+#define utilsU16_native_to_le(x_) (utilsU16_bswap(x_))
+#define utilsU16_le_to_native(x_) (utilsU16_bswap(x_))
+#define utilsU32_native_to_le(x_) (utilsU32_bswap(x_))
+#define utilsU32_le_to_native(x_) (utilsU32_bswap(x_))
 #define utilsU16_native_to_be(x_) (x_)
 #define utilsU16_be_to_native(x_) (x_)
 #define utilsU32_native_to_be(x_) (x_)
@@ -131,8 +134,8 @@ typedef struct {																											\
 	bool ovf;																												\
 } Buffer##name_;																											\
 static inline void buffer##name_##Reset(Buffer##name_* q) { q->p = q->buf; q->ovf = false; }								\
-static inline uint_least8_t buffer##name_##Size(Buffer##name_* q) { (void)q; return (uint_least8_t)(size_);	}				\
-static inline bool buffer##name_##Overflow(Buffer##name_* q) { return q->ovf; }												\
+static inline uint_least8_t buffer##name_##Size(const Buffer##name_* q) { (void)q; return (uint_least8_t)(size_);	}		\
+static inline bool buffer##name_##Overflow(const Buffer##name_* q) { return q->ovf; }										\
 static inline uint_least8_t buffer##name_##Len(const Buffer##name_* q) { return (uint_least8_t)(q->p - q->buf); }			\
 static inline uint_least8_t buffer##name_##Free(const Buffer##name_* q) { return (uint_least8_t)(&q->buf[size_] - q->p); }	\
 static inline void buffer##name_##Add(Buffer##name_* q, uint8_t x) { 														\

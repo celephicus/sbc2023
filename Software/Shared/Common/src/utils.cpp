@@ -15,11 +15,6 @@
  #define strchr_P strchr
 #endif
 
-// Mock millis() for testing.
-#ifdef TEST
-uint32_t l_test_millis;
-#endif
-
 #include "utils.h"
 FILENUM(100);
 

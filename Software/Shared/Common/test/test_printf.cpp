@@ -11,6 +11,8 @@ TT_BEGIN_INCLUDE()
 #include "myprintf.h"
 TT_END_INCLUDE()
 
+// TODO: Test multiple mofifiers e.g %0ld.
+
 // We expect these sizes used in myprintf.
 void test_utils_myprintf_int_sizes() {
 	TEST_ASSERT_EQUAL(2, sizeof(CFG_MYPRINTF_TYPE_SIGNED_INT));

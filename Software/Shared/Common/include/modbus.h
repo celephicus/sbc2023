@@ -3,15 +3,21 @@
 
 #include "utils.h"
 
-#define RESP_SIZE 20
-DECLARE_BUFFER_TYPE(Frame, RESP_SIZE);		// New type BufferFrame.
+#define MODBUS_MAX_RESP_SIZE 20
+DECLARE_BUFFER_TYPE(Frame, MODBUS_MAX_RESP_SIZE);		// New type BufferFrame.
 
 /* Callback function supplied to modbusInit(). This is how slaves get requests & send responses back, and how the master receives the responses. */
 typedef void (*modbus_response_cb)(uint8_t evt);
 
+/* Function that writes a buffer to the wire, handling enabling the trnsmitter for the duration of the trsnsmission. */
+typedef void (*modbusSendBufFunc)(const uint8_t* buf, uint8_t sz);
+
+/* Function that receives a character from the wire, returning a negative value on none. */
+typedef int16_t (*modbusReceiveCharFunc)();
+
 /* Initialise the driver. Initially the slave address is set to zero, which is not a valid slave address, so it will not respond to any requests
 	as this is outside the legal address range of 1-247 inclusive. */
-void modbusInit(Stream& rs485, uint8_t tx_en, uint32_t baud, uint16_t response_timeout, modbus_response_cb cb);
+void modbusInit(modbusSendBufFunc send, modbusReceiveCharFunc recv, uint16_t response_timeout, uint32_t baud, modbus_response_cb cb);
 
 // Callback function used for hardware debugging of timing. The `id' argument is event-type, `s' is state.
 enum {
@@ -105,6 +111,10 @@ void modbusService();
 // Setters/getters for modbus 16 bit format.
 static inline uint16_t modbusGetU16(const void* v)  { return utilsU16_be_to_native(*(uint16_t*)v); }
 static inline void modbusSetU16(void* v, uint16_t x)  { *(uint16_t*)v = utilsU16_native_to_be(x); }
+
+// Functions exposed for testing.
+uint16_t modbusCrc(const uint8_t* buf, uint8_t sz);
+uint8_t modbusVerifyFrameValid(const BufferFrame* f);
 
 #endif	// MODBUS_H__
 

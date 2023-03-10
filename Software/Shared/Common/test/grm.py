@@ -140,6 +140,7 @@ def parse_source_line(ln):
 	  (.*)		# Args.
 	  \)		# Closing bracket.
 	  ;?		# Trailing `;' ignored.
+	  (?:\s*//.*)? 	# Optional comment.
 	  \s*$		# Whitespace only.
 	''', ln, re.X | re.S):
 		macro, raw_args = m.groups()

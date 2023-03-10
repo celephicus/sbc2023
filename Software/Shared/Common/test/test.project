@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CodeLite_Project Name="test" Version="11000" InternalType="Console">
   <VirtualDirectory Name="Common">
+    <File Name="../include/modbus.h"/>
+    <File Name="../src/modbus.cpp"/>
     <File Name="../src/myprintf.cpp"/>
     <File Name="../include/myprintf.h"/>
     <File Name="../src/event.cpp"/>
@@ -17,6 +19,7 @@
   <Description/>
   <Dependencies/>
   <VirtualDirectory Name="test">
+    <File Name="test_modbus.cpp"/>
     <File Name="project_config.h"/>
     <File Name="test_printf.cpp"/>
     <File Name="support_test.cpp"/>
@@ -57,7 +60,7 @@
       </Debugger>
       <PreBuild>
         <Command Enabled="yes">python ../../../Tools/events_mk.py</Command>
-        <Command Enabled="yes">python grm.py -v -o main.cpp test*.cpp</Command>
+        <Command Enabled="yes">python ./grm.py -v -o main.cpp test*.cpp</Command>
       </PreBuild>
       <PostBuild/>
       <CustomBuild Enabled="no">

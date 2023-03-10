@@ -375,7 +375,7 @@ TT_TEST_CASE(testUtilsStrtoui("09", 0,  10, UTILS_STRTOUI_RC_OK, 9, '\0'));
 // Trailing Stuff...
 TT_TEST_CASE(testUtilsStrtoui("9 ", 0,  10, UTILS_STRTOUI_RC_OK, 9, ' '));
 TT_TEST_CASE(testUtilsStrtoui("99a", 0,  10, UTILS_STRTOUI_RC_OK, 99, 'a'));  // Bad digit
-TT_TEST_CASE(testUtilsStrtoui("999@", 0,  10, UTILS_STRTOUI_RC_OK, 999, 'a'));  // Bad digit
+TT_TEST_CASE(testUtilsStrtoui("999@", 0,  10, UTILS_STRTOUI_RC_OK, 999, '@'));  // Bad digit
 // At max...
 TT_TEST_CASE(testUtilsStrtoui("%llu", UINT_MAX,  10, UTILS_STRTOUI_RC_OK, UINT_MAX, '\0'));
 TT_TEST_CASE(testUtilsStrtoui("%llx", UINT_MAX,  16, UTILS_STRTOUI_RC_OK, UINT_MAX, '\0'));

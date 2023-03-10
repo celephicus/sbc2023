@@ -1,5 +1,19 @@
-#include <Arduino.h>
+#ifdef TEST
+ #include <string.h>
+ #include "support_test.h"
+#else
+ #include <Arduino.h>
+#endif
+
 #include "modbus.h"
+
+/* Customisation for AVR target. */
+#if defined(__AVR__)
+ #include <avr/pgmspace.h>
+#else
+ #define pgm_read_word(ptr_) (*(ptr_))
+ #define PROGMEM /*empty */
+#endif
 
 // Implement a little non-blocking microsecond timer, good for 65535 microseconds, note that resolution of micros() is 4 or 8us.
 static bool timer_is_active(uint16_t* then) {	// Check if timer is running, might be useful to check if a timer is still running.
@@ -27,8 +41,8 @@ static bool timer_is_timeout(uint16_t now, uint16_t* then, uint16_t duration) { 
 // Keep all our state in one place for easier viewing in debugger.
 typedef struct {
 	// Hardware setup...
-	uint8_t tx_en_pin;						// Arduino pin for enabling TX, also disables RX.
-	Stream* sRs485;							// Arduino stream for line.
+	modbusSendBufFunc send;					// Function to send a buffer.
+	modbusReceiveCharFunc recv;				// Function to receive a char. 
 	uint8_t slave_id;						// Slave ID/address.
 
 	// Host callbacks...
@@ -71,19 +85,13 @@ static bool TIMER_IS_TIMEOUT_WITH_CB(uint16_t now, uint16_t* then, uint16_t dura
 	return timeout;
 }
 
-static uint16_t get_crc(const uint8_t* buf, uint8_t len);
-
-void modbusInit(Stream& rs485, uint8_t tx_en_pin, uint32_t baud, uint16_t response_timeout, modbus_response_cb cb) {
+void modbusInit(modbusSendBufFunc send, modbusReceiveCharFunc recv, uint16_t response_timeout, uint32_t baud, modbus_response_cb cb) {
 	memset(&f_ctx, 0, sizeof(f_ctx));
 	bufferFrameReset(&f_ctx.buf_rx);
 	bufferFrameReset(&f_ctx.buf_tx);
-	f_ctx.tx_en_pin = tx_en_pin;
-	f_ctx.sRs485 = &rs485;
+	f_ctx.send = send;
+	f_ctx.recv = recv;
 	f_ctx.cb_resp = cb;
-	digitalWrite(f_ctx.tx_en_pin, LOW);
-	pinMode(f_ctx.tx_en_pin, OUTPUT);
-	while(f_ctx.sRs485->available() > 0) // Flush any received chars from buffer.
-		(void)f_ctx.sRs485->read();
 	TIMER_STOP_WITH_CB(&f_ctx.start_time, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT);
 	TIMER_STOP_WITH_CB(&f_ctx.rx_timestamp_micros, MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT);
 	f_ctx.rx_timeout_micros = utilsLimitMin((uint16_t)(15UL * 1000UL*1000UL / baud), (uint16_t)750U);	// Timeout 1.5 character times minimum 750us.
@@ -96,17 +104,21 @@ static bool is_id_legal(uint8_t id) {		// Check ID in request frame.
 	return (id >= 1) && (id <= 247);
 }
 
-void modbusSendRaw(const uint8_t* buf, uint8_t sz) {
+void modbusSendRaw(const uint8_t* buf, uint8_t sz) { f_ctx.send(buf, sz); }
+/*
 	digitalWrite(f_ctx.tx_en_pin, HIGH);
 	f_ctx.sRs485->write(buf, sz);
 	f_ctx.sRs485->flush();
 	digitalWrite(f_ctx.tx_en_pin, LOW);
 }
+ */ 
 void modbusSlaveSend(const uint8_t* frame, uint8_t sz) {
 	// TODO: keep master busy for interframe time after tx done.
 	bufferFrameReset(&f_ctx.buf_tx);
 	bufferFrameAddMem(&f_ctx.buf_tx, frame, sz);
-	bufferFrameAddU16(&f_ctx.buf_tx, utilsU16_native_to_be(get_crc(f_ctx.buf_tx.buf, bufferFrameLen(&f_ctx.buf_tx))));
+	
+	// CRC is added in LITTLE ENDIAN!! 
+	bufferFrameAddU16(&f_ctx.buf_tx, utilsU16_native_to_le(modbusCrc(f_ctx.buf_tx.buf, bufferFrameLen(&f_ctx.buf_tx))));
 	while (modbusIsBusy())	// If we are still transmitting or waiting a response then keep doing it.
 		modbusService();
 	modbusSendRaw(f_ctx.buf_tx.buf, bufferFrameLen(&f_ctx.buf_tx));
@@ -141,17 +153,19 @@ bool modbusIsBusy() {
 }
 
 // Generic frame checker, checks a few things in the frame.
-static uint8_t verify_rx_frame_valid() {
-	if (bufferFrameOverflow(&f_ctx.buf_rx))			// If buffer overflow then just exit...
+uint8_t modbusVerifyFrameValid(const BufferFrame* f) {
+	if (bufferFrameOverflow(f))			// If buffer overflow then just exit...
 		return MODBUS_CB_EVT_INVALID_LEN;
 
-	const uint8_t frame_len = bufferFrameLen(&f_ctx.buf_rx);
+	const uint8_t frame_len = bufferFrameLen(f);
 	if (frame_len < 5)							// Frame too small.
 		return MODBUS_CB_EVT_INVALID_LEN;
-	if (!is_id_legal(f_ctx.buf_rx.buf[MODBUS_FRAME_IDX_SLAVE_ID]))
+	if (!is_id_legal(f->buf[MODBUS_FRAME_IDX_SLAVE_ID]))
 		return MODBUS_CB_EVT_INVALID_ID;
-	if (modbusGetU16(&f_ctx.buf_rx.buf[frame_len - 2]) != get_crc(f_ctx.buf_rx.buf, frame_len - 2)) // Bad CRC...
-		return MODBUS_CB_EVT_INVALID_CRC;
+	
+	// Bad CRC. Note CRC is LITTLE ENDIAN on the wire!
+	if (utilsU16_le_to_native(*(const uint16_t*)(&f->buf[frame_len - 2])) != modbusCrc(f->buf, frame_len - 2)) 
+		return MODBUS_CB_EVT_INVALID_CRC;		
 	return 0;
 }
 
@@ -182,7 +196,7 @@ void modbusService() {
 	if (TIMER_IS_TIMEOUT_WITH_CB((uint16_t)micros(), &f_ctx.rx_timestamp_micros, f_ctx.rx_timeout_micros, MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT)) {
 		timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_FRAME, true);
 		if (bufferFrameLen(&f_ctx.buf_rx) > 0) {			// Do we have data, might well get spurious timeouts.
-			const uint8_t rx_frame_valid = verify_rx_frame_valid();		// Basic validity checks.
+			const uint8_t rx_frame_valid = modbusVerifyFrameValid(&f_ctx.buf_rx);		// Basic validity checks.
 			if (timer_is_active(&f_ctx.start_time)) {				// Master is waiting for response...
 				TIMER_STOP_WITH_CB(&f_ctx.start_time, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT);
 				if (0U != rx_frame_valid)		// Some basic error in the frame...
@@ -209,14 +223,16 @@ void modbusService() {
 	}
 
 	// Receive packet.
-	if (f_ctx.sRs485->available() > 0) {
+	int16_t c;
+	if ((c = f_ctx.recv()) > 0) {
 		TIMER_START_WITH_CB((uint16_t)micros(), &f_ctx.rx_timestamp_micros, MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT);
-		bufferFrameAdd(&f_ctx.buf_rx, f_ctx.sRs485->read());
+		bufferFrameAdd(&f_ctx.buf_rx, c);
 	}
 }
 
 // See https://github.com/LacobusVentura/MODBUS-CRC16 for alternative implementations with timing.
-static uint16_t get_crc(const uint8_t* buf, uint8_t sz) {
+// Checked with https://www.lddgo.net/en/encrypt/crc & https://www.lammertbies.nl/comm/info/crc-calculation
+uint16_t modbusCrc(const uint8_t* buf, uint8_t sz) {
 	static const uint16_t table[256] PROGMEM = {
 		0x0000, 0xC0C1, 0xC181, 0x0140, 0xC301, 0x03C0, 0x0280, 0xC241,
 		0xC601, 0x06C0, 0x0780, 0xC741, 0x0500, 0xC5C1, 0xC481, 0x0440,
@@ -259,7 +275,6 @@ static uint16_t get_crc(const uint8_t* buf, uint8_t sz) {
 		crc ^= pgm_read_word(&table[exor]);
 	}
 
-// Somehow the endianness is getting mixed up. Refer https://www.scadacore.com/tools/programming-calculators/online-checksum-calculator/. The CRC for `010364000200' is given as `5B9A', but this function gives `9a5b'.
-	return utilsU16_bswap(crc);
+	return crc;
 }
 

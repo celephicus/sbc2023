@@ -17,6 +17,8 @@
 #include "project_config.h"
 #include "utils.h"
 #include "event.h"
+#include "support_test.h"
+#include "modbus.h"
 #include <stdarg.h>
 #include "project_config.h"
 #include "myprintf.h"
@@ -42,6 +44,12 @@ void testEventQueueOverflow();
 void testEventQueuePublishFront_1();
 void testEventQueuePublishFront_N();
 void testEventTraceMaskInit();
+void test_modbus_setup();
+void test_modbus_crc(const char* f, uint16_t crc);
+void test_modbus_send_raw();
+void test_modbus_send();
+void test_modbus_frame_valid_ovf();
+void test_modbus_frame_valid(const char* f, uint8_t rc);
 void test_utils_myprintf_int_sizes();
 void test_myprintf_snsprintf(const char* exp, char rc_exp, int len, const char* fmt);
 void test_printf_format_v(const char* expected, const char* fmt, va_list ap);
@@ -70,6 +78,7 @@ void testUtilsStrtoui(const char *fmtstr, unsigned long long nn, unsigned base, 
 
 /*** Fixture & dump functions from test files. ***/
 void testEventSetup(void);
+void test_modbus_setup(void);
 void testUtilsQueueSetup(void);
 void testUtilsBufferSetup(void);
 
@@ -77,256 +86,277 @@ void testUtilsBufferSetup(void);
 static void testMakeEvent_stub_0(void) { testMakeEvent(event_mk(0xef), 0xef); }
 static void testMakeEvent_stub_1(void) { testMakeEvent(event_mk(0xef, 0xcd), 0xef, 0xcd); }
 static void testMakeEvent_stub_2(void) { testMakeEvent(event_mk(0xef, 0xcd, 0xf00f), 0xef, 0xcd, 0xf00f); }
-static void test_printf_format_stub_3(void) { test_printf_format("", ""); }
-static void test_printf_format_stub_4(void) { test_printf_format("x", "x"); }
-static void test_printf_format_stub_5(void) { test_printf_format("x%x", "x%%x"); }
-static void test_printf_format_stub_6(void) { test_printf_format("x%x", "x%3%x"); }
-static void test_printf_format_stub_7(void) { test_printf_format("x%x", "x%0%x"); }
-static void test_printf_format_stub_8(void) { test_printf_format("x%x", "x%03%x"); }
-static void test_printf_format_stub_9(void) { test_printf_format("x%x", "x%-3%x"); }
-static void test_printf_format_stub_10(void) { test_printf_format("xzx", "x%cx", 'z'); }
-static void test_printf_format_stub_11(void) { test_printf_format("xzx", "x%1cx", 'z'); }
-static void test_printf_format_stub_12(void) { test_printf_format("x zx", "x%2cx", 'z'); }
-static void test_printf_format_stub_13(void) { test_printf_format("xz x", "x%-2cx", 'z'); }
-static void test_printf_format_stub_14(void) { test_printf_format("xzx", "x%sx", "z"); }
-static void test_printf_format_stub_15(void) { test_printf_format("x(null)x", "x%sx", NULL); }
-static void test_printf_format_stub_16(void) { test_printf_format("x  zx", "x%3sx", "z"); }
-static void test_printf_format_stub_17(void) { test_printf_format("xz  x", "x%-3sx", "z"); }
-static void test_printf_format_stub_18(void) { test_printf_format("x0x", "x%dx", 0); }
-static void test_printf_format_stub_19(void) { test_printf_format("x123x", "x%dx", 123); }
-static void test_printf_format_stub_20(void) { test_printf_format("x1x", "x%0dx", 1); }
-static void test_printf_format_stub_21(void) { test_printf_format("x1x", "x%1dx", 1); }
-static void test_printf_format_stub_22(void) { test_printf_format("x 1x", "x%2dx", 1); }
-static void test_printf_format_stub_23(void) { test_printf_format("x01x", "x%02dx", 1); }
-static void test_printf_format_stub_24(void) { test_printf_format("x1 x", "x%-2dx", 1); }
-static void test_printf_format_stub_25(void) { test_printf_format("x65535x", "x%ux", 0xffff); }
-static void test_printf_format_stub_26(void) { test_printf_format("x4294967295x", "x%ux", 0xffffffff); }
-static void test_printf_format_stub_27(void) { test_printf_format("x65535x", "x%ux", 65535); }
-static void test_printf_format_stub_28(void) { test_printf_format("xffffffffx", "x%lxx", 0xffffffff); }
-static void test_printf_format_stub_29(void) { test_printf_format("x32767x", "x%dx", 32767); }
-static void test_printf_format_stub_30(void) { test_printf_format("x-32768x", "x%dx", -32768); }
-static void test_printf_format_stub_31(void) { test_printf_format("x2147483647x", "x%ldx", 2147483647); }
-static void test_printf_format_stub_32(void) { test_printf_format("x-2147483648x", "x%ldx", -2147483648); }
-static void test_printf_format_stub_33(void) { test_printf_format("x0x", "x%xx", 0); }
-static void test_printf_format_stub_34(void) { test_printf_format("xabcx", "x%xx", 0xABC); }
-static void test_printf_format_stub_35(void) { test_printf_format("xABCx", "x%Xx", 0xABC); }
-static void test_printf_format_stub_36(void) { test_printf_format("x0x", "x%bx", 0); }
-static void test_printf_format_stub_37(void) { test_printf_format("x101x", "x%bx", 5); }
-static void testUtilsQueuePut_stub_38(void) { testUtilsQueuePut(queueQPut, 0, 0, 10, 1); }
-static void testUtilsQueuePut_stub_39(void) { testUtilsQueuePut(queueQPut, 0, 1, 10, 1); }
-static void testUtilsQueuePut_stub_40(void) { testUtilsQueuePut(queueQPut, 0, 2, 10, 1); }
-static void testUtilsQueuePut_stub_41(void) { testUtilsQueuePut(queueQPut, 0, 3, 10, 1); }
-static void testUtilsQueuePut_stub_42(void) { testUtilsQueuePut(queueQPut, 0, 4, 10, 1); }
-static void testUtilsQueuePut_stub_43(void) { testUtilsQueuePut(queueQPut, 1, 0, 10, 1); }
-static void testUtilsQueuePut_stub_44(void) { testUtilsQueuePut(queueQPut, 1, 1, 10, 1); }
-static void testUtilsQueuePut_stub_45(void) { testUtilsQueuePut(queueQPut, 1, 2, 10, 1); }
-static void testUtilsQueuePut_stub_46(void) { testUtilsQueuePut(queueQPut, 1, 3, 10, 1); }
-static void testUtilsQueuePut_stub_47(void) { testUtilsQueuePut(queueQPut, 1, 4, 10, 1); }
-static void testUtilsQueuePut_stub_48(void) { testUtilsQueuePut(queueQPut, 2, 0, 10, 1); }
-static void testUtilsQueuePut_stub_49(void) { testUtilsQueuePut(queueQPut, 2, 1, 10, 1); }
-static void testUtilsQueuePut_stub_50(void) { testUtilsQueuePut(queueQPut, 2, 2, 10, 1); }
-static void testUtilsQueuePut_stub_51(void) { testUtilsQueuePut(queueQPut, 2, 3, 10, 1); }
-static void testUtilsQueuePut_stub_52(void) { testUtilsQueuePut(queueQPut, 2, 4, 10, 1); }
-static void testUtilsQueuePut_stub_53(void) { testUtilsQueuePut(queueQPut, 3, 0, 10, 1); }
-static void testUtilsQueuePut_stub_54(void) { testUtilsQueuePut(queueQPut, 3, 1, 10, 1); }
-static void testUtilsQueuePut_stub_55(void) { testUtilsQueuePut(queueQPut, 3, 2, 10, 1); }
-static void testUtilsQueuePut_stub_56(void) { testUtilsQueuePut(queueQPut, 3, 3, 10, 1); }
-static void testUtilsQueuePut_stub_57(void) { testUtilsQueuePut(queueQPut, 3, 4, 10, 1); }
-static void testUtilsQueuePut_stub_58(void) { testUtilsQueuePut(queueQPut, 4, 0, 10, 1); }
-static void testUtilsQueuePut_stub_59(void) { testUtilsQueuePut(queueQPut, 4, 1, 10, 1); }
-static void testUtilsQueuePut_stub_60(void) { testUtilsQueuePut(queueQPut, 4, 2, 10, 1); }
-static void testUtilsQueuePut_stub_61(void) { testUtilsQueuePut(queueQPut, 4, 3, 10, 1); }
-static void testUtilsQueuePut_stub_62(void) { testUtilsQueuePut(queueQPut, 4, 4, 10, 1); }
-static void testUtilsQueuePut_stub_63(void) { testUtilsQueuePut(queueQPut, 5, 0, 10, 1); }
-static void testUtilsQueuePut_stub_64(void) { testUtilsQueuePut(queueQPut, 5, 1, 10, 1); }
-static void testUtilsQueuePut_stub_65(void) { testUtilsQueuePut(queueQPut, 5, 2, 10, 1); }
-static void testUtilsQueuePut_stub_66(void) { testUtilsQueuePut(queueQPut, 5, 3, 10, 1); }
-static void testUtilsQueuePut_stub_67(void) { testUtilsQueuePut(queueQPut, 5, 4, 10, 1); }
-static void testUtilsQueuePut_stub_68(void) { testUtilsQueuePut(queueQPut, 254, 0, 10, 1); }
-static void testUtilsQueuePut_stub_69(void) { testUtilsQueuePut(queueQPut, 254, 1, 10, 1); }
-static void testUtilsQueuePut_stub_70(void) { testUtilsQueuePut(queueQPut, 254, 2, 10, 1); }
-static void testUtilsQueuePut_stub_71(void) { testUtilsQueuePut(queueQPut, 254, 3, 10, 1); }
-static void testUtilsQueuePut_stub_72(void) { testUtilsQueuePut(queueQPut, 254, 4, 10, 1); }
-static void testUtilsQueuePut_stub_73(void) { testUtilsQueuePut(queueQPut, 255, 0, 10, 1); }
-static void testUtilsQueuePut_stub_74(void) { testUtilsQueuePut(queueQPut, 255, 1, 10, 1); }
-static void testUtilsQueuePut_stub_75(void) { testUtilsQueuePut(queueQPut, 255, 2, 10, 1); }
-static void testUtilsQueuePut_stub_76(void) { testUtilsQueuePut(queueQPut, 255, 3, 10, 1); }
-static void testUtilsQueuePut_stub_77(void) { testUtilsQueuePut(queueQPut, 255, 4, 10, 1); }
-static void testUtilsQueuePutOvf_stub_78(void) { testUtilsQueuePutOvf(queueQPut, 0, 10, 1); }
-static void testUtilsQueuePutOvf_stub_79(void) { testUtilsQueuePutOvf(queueQPut, 1, 10, 1); }
-static void testUtilsQueuePutOvf_stub_80(void) { testUtilsQueuePutOvf(queueQPut, 2, 10, 1); }
-static void testUtilsQueuePutOvf_stub_81(void) { testUtilsQueuePutOvf(queueQPut, 3, 10, 1); }
-static void testUtilsQueuePutOvf_stub_82(void) { testUtilsQueuePutOvf(queueQPut, 4, 10, 1); }
-static void testUtilsQueuePutOvf_stub_83(void) { testUtilsQueuePutOvf(queueQPut, 5, 10, 1); }
-static void testUtilsQueuePutOvf_stub_84(void) { testUtilsQueuePutOvf(queueQPut, 254, 10, 1); }
-static void testUtilsQueuePutOvf_stub_85(void) { testUtilsQueuePutOvf(queueQPut, 255, 10, 1); }
-static void testUtilsQueuePut_stub_86(void) { testUtilsQueuePut(queueQPush, 0, 0, 9, -1); }
-static void testUtilsQueuePut_stub_87(void) { testUtilsQueuePut(queueQPush, 0, 1, 10, -1); }
-static void testUtilsQueuePut_stub_88(void) { testUtilsQueuePut(queueQPush, 0, 2, 11, -1); }
-static void testUtilsQueuePut_stub_89(void) { testUtilsQueuePut(queueQPush, 0, 3, 12, -1); }
-static void testUtilsQueuePut_stub_90(void) { testUtilsQueuePut(queueQPush, 0, 4, 13, -1); }
-static void testUtilsQueuePut_stub_91(void) { testUtilsQueuePut(queueQPush, 1, 0, 9, -1); }
-static void testUtilsQueuePut_stub_92(void) { testUtilsQueuePut(queueQPush, 1, 1, 10, -1); }
-static void testUtilsQueuePut_stub_93(void) { testUtilsQueuePut(queueQPush, 1, 2, 11, -1); }
-static void testUtilsQueuePut_stub_94(void) { testUtilsQueuePut(queueQPush, 1, 3, 12, -1); }
-static void testUtilsQueuePut_stub_95(void) { testUtilsQueuePut(queueQPush, 1, 4, 13, -1); }
-static void testUtilsQueuePut_stub_96(void) { testUtilsQueuePut(queueQPush, 2, 0, 9, -1); }
-static void testUtilsQueuePut_stub_97(void) { testUtilsQueuePut(queueQPush, 2, 1, 10, -1); }
-static void testUtilsQueuePut_stub_98(void) { testUtilsQueuePut(queueQPush, 2, 2, 11, -1); }
-static void testUtilsQueuePut_stub_99(void) { testUtilsQueuePut(queueQPush, 2, 3, 12, -1); }
-static void testUtilsQueuePut_stub_100(void) { testUtilsQueuePut(queueQPush, 2, 4, 13, -1); }
-static void testUtilsQueuePut_stub_101(void) { testUtilsQueuePut(queueQPush, 3, 0, 9, -1); }
-static void testUtilsQueuePut_stub_102(void) { testUtilsQueuePut(queueQPush, 3, 1, 10, -1); }
-static void testUtilsQueuePut_stub_103(void) { testUtilsQueuePut(queueQPush, 3, 2, 11, -1); }
-static void testUtilsQueuePut_stub_104(void) { testUtilsQueuePut(queueQPush, 3, 3, 12, -1); }
-static void testUtilsQueuePut_stub_105(void) { testUtilsQueuePut(queueQPush, 3, 4, 13, -1); }
-static void testUtilsQueuePut_stub_106(void) { testUtilsQueuePut(queueQPush, 4, 0, 9, -1); }
-static void testUtilsQueuePut_stub_107(void) { testUtilsQueuePut(queueQPush, 4, 1, 10, -1); }
-static void testUtilsQueuePut_stub_108(void) { testUtilsQueuePut(queueQPush, 4, 2, 11, -1); }
-static void testUtilsQueuePut_stub_109(void) { testUtilsQueuePut(queueQPush, 4, 3, 12, -1); }
-static void testUtilsQueuePut_stub_110(void) { testUtilsQueuePut(queueQPush, 4, 4, 13, -1); }
-static void testUtilsQueuePut_stub_111(void) { testUtilsQueuePut(queueQPush, 5, 0, 9, -1); }
-static void testUtilsQueuePut_stub_112(void) { testUtilsQueuePut(queueQPush, 5, 1, 10, -1); }
-static void testUtilsQueuePut_stub_113(void) { testUtilsQueuePut(queueQPush, 5, 2, 11, -1); }
-static void testUtilsQueuePut_stub_114(void) { testUtilsQueuePut(queueQPush, 5, 3, 12, -1); }
-static void testUtilsQueuePut_stub_115(void) { testUtilsQueuePut(queueQPush, 5, 4, 13, -1); }
-static void testUtilsQueuePut_stub_116(void) { testUtilsQueuePut(queueQPush, 254, 0, 9, -1); }
-static void testUtilsQueuePut_stub_117(void) { testUtilsQueuePut(queueQPush, 254, 1, 10, -1); }
-static void testUtilsQueuePut_stub_118(void) { testUtilsQueuePut(queueQPush, 254, 2, 11, -1); }
-static void testUtilsQueuePut_stub_119(void) { testUtilsQueuePut(queueQPush, 254, 3, 12, -1); }
-static void testUtilsQueuePut_stub_120(void) { testUtilsQueuePut(queueQPush, 254, 4, 13, -1); }
-static void testUtilsQueuePut_stub_121(void) { testUtilsQueuePut(queueQPush, 255, 0, 9, -1); }
-static void testUtilsQueuePut_stub_122(void) { testUtilsQueuePut(queueQPush, 255, 1, 10, -1); }
-static void testUtilsQueuePut_stub_123(void) { testUtilsQueuePut(queueQPush, 255, 2, 11, -1); }
-static void testUtilsQueuePut_stub_124(void) { testUtilsQueuePut(queueQPush, 255, 3, 12, -1); }
-static void testUtilsQueuePut_stub_125(void) { testUtilsQueuePut(queueQPush, 255, 4, 13, -1); }
-static void testUtilsQueuePutOvf_stub_126(void) { testUtilsQueuePutOvf(queueQPush, 0, 13, -1); }
-static void testUtilsQueuePutOvf_stub_127(void) { testUtilsQueuePutOvf(queueQPush, 1, 13, -1); }
-static void testUtilsQueuePutOvf_stub_128(void) { testUtilsQueuePutOvf(queueQPush, 2, 13, -1); }
-static void testUtilsQueuePutOvf_stub_129(void) { testUtilsQueuePutOvf(queueQPush, 3, 13, -1); }
-static void testUtilsQueuePutOvf_stub_130(void) { testUtilsQueuePutOvf(queueQPush, 4, 13, -1); }
-static void testUtilsQueuePutOvf_stub_131(void) { testUtilsQueuePutOvf(queueQPush, 5, 13, -1); }
-static void testUtilsQueuePutOvf_stub_132(void) { testUtilsQueuePutOvf(queueQPush, 254, 13, -1); }
-static void testUtilsQueuePutOvf_stub_133(void) { testUtilsQueuePutOvf(queueQPush, 255, 13, -1); }
-static void testUtilsQueuePutLifo_stub_134(void) { testUtilsQueuePutLifo(0, 0); }
-static void testUtilsQueuePutLifo_stub_135(void) { testUtilsQueuePutLifo(0, 1); }
-static void testUtilsQueuePutLifo_stub_136(void) { testUtilsQueuePutLifo(0, 2); }
-static void testUtilsQueuePutLifo_stub_137(void) { testUtilsQueuePutLifo(0, 3); }
-static void testUtilsQueuePutLifo_stub_138(void) { testUtilsQueuePutLifo(1, 0); }
-static void testUtilsQueuePutLifo_stub_139(void) { testUtilsQueuePutLifo(1, 1); }
-static void testUtilsQueuePutLifo_stub_140(void) { testUtilsQueuePutLifo(1, 2); }
-static void testUtilsQueuePutLifo_stub_141(void) { testUtilsQueuePutLifo(1, 3); }
-static void testUtilsQueuePutLifo_stub_142(void) { testUtilsQueuePutLifo(2, 0); }
-static void testUtilsQueuePutLifo_stub_143(void) { testUtilsQueuePutLifo(2, 1); }
-static void testUtilsQueuePutLifo_stub_144(void) { testUtilsQueuePutLifo(2, 2); }
-static void testUtilsQueuePutLifo_stub_145(void) { testUtilsQueuePutLifo(2, 3); }
-static void testUtilsQueuePutLifo_stub_146(void) { testUtilsQueuePutLifo(3, 0); }
-static void testUtilsQueuePutLifo_stub_147(void) { testUtilsQueuePutLifo(3, 1); }
-static void testUtilsQueuePutLifo_stub_148(void) { testUtilsQueuePutLifo(3, 2); }
-static void testUtilsQueuePutLifo_stub_149(void) { testUtilsQueuePutLifo(3, 3); }
-static void testUtilsQueuePutLifo_stub_150(void) { testUtilsQueuePutLifo(4, 0); }
-static void testUtilsQueuePutLifo_stub_151(void) { testUtilsQueuePutLifo(4, 1); }
-static void testUtilsQueuePutLifo_stub_152(void) { testUtilsQueuePutLifo(4, 2); }
-static void testUtilsQueuePutLifo_stub_153(void) { testUtilsQueuePutLifo(4, 3); }
-static void testUtilsQueuePutLifo_stub_154(void) { testUtilsQueuePutLifo(5, 0); }
-static void testUtilsQueuePutLifo_stub_155(void) { testUtilsQueuePutLifo(5, 1); }
-static void testUtilsQueuePutLifo_stub_156(void) { testUtilsQueuePutLifo(5, 2); }
-static void testUtilsQueuePutLifo_stub_157(void) { testUtilsQueuePutLifo(5, 3); }
-static void testUtilsQueuePutLifo_stub_158(void) { testUtilsQueuePutLifo(254, 0); }
-static void testUtilsQueuePutLifo_stub_159(void) { testUtilsQueuePutLifo(254, 1); }
-static void testUtilsQueuePutLifo_stub_160(void) { testUtilsQueuePutLifo(254, 2); }
-static void testUtilsQueuePutLifo_stub_161(void) { testUtilsQueuePutLifo(254, 3); }
-static void testUtilsQueuePutLifo_stub_162(void) { testUtilsQueuePutLifo(255, 0); }
-static void testUtilsQueuePutLifo_stub_163(void) { testUtilsQueuePutLifo(255, 1); }
-static void testUtilsQueuePutLifo_stub_164(void) { testUtilsQueuePutLifo(255, 2); }
-static void testUtilsQueuePutLifo_stub_165(void) { testUtilsQueuePutLifo(255, 3); }
-static void testUtilsQueuePutOverwrite_stub_166(void) { testUtilsQueuePutOverwrite(0, 0); }
-static void testUtilsQueuePutOverwrite_stub_167(void) { testUtilsQueuePutOverwrite(0, 1); }
-static void testUtilsQueuePutOverwrite_stub_168(void) { testUtilsQueuePutOverwrite(0, 2); }
-static void testUtilsQueuePutOverwrite_stub_169(void) { testUtilsQueuePutOverwrite(0, 3); }
-static void testUtilsQueuePutOverwrite_stub_170(void) { testUtilsQueuePutOverwrite(0, 4); }
-static void testUtilsQueuePutOverwrite_stub_171(void) { testUtilsQueuePutOverwrite(0, 5); }
-static void testUtilsQueuePutOverwrite_stub_172(void) { testUtilsQueuePutOverwrite(0, 6); }
-static void testUtilsQueuePutOverwrite_stub_173(void) { testUtilsQueuePutOverwrite(1, 0); }
-static void testUtilsQueuePutOverwrite_stub_174(void) { testUtilsQueuePutOverwrite(1, 1); }
-static void testUtilsQueuePutOverwrite_stub_175(void) { testUtilsQueuePutOverwrite(1, 2); }
-static void testUtilsQueuePutOverwrite_stub_176(void) { testUtilsQueuePutOverwrite(1, 3); }
-static void testUtilsQueuePutOverwrite_stub_177(void) { testUtilsQueuePutOverwrite(1, 4); }
-static void testUtilsQueuePutOverwrite_stub_178(void) { testUtilsQueuePutOverwrite(1, 5); }
-static void testUtilsQueuePutOverwrite_stub_179(void) { testUtilsQueuePutOverwrite(1, 6); }
-static void testUtilsQueuePutOverwrite_stub_180(void) { testUtilsQueuePutOverwrite(2, 0); }
-static void testUtilsQueuePutOverwrite_stub_181(void) { testUtilsQueuePutOverwrite(2, 1); }
-static void testUtilsQueuePutOverwrite_stub_182(void) { testUtilsQueuePutOverwrite(2, 2); }
-static void testUtilsQueuePutOverwrite_stub_183(void) { testUtilsQueuePutOverwrite(2, 3); }
-static void testUtilsQueuePutOverwrite_stub_184(void) { testUtilsQueuePutOverwrite(2, 4); }
-static void testUtilsQueuePutOverwrite_stub_185(void) { testUtilsQueuePutOverwrite(2, 5); }
-static void testUtilsQueuePutOverwrite_stub_186(void) { testUtilsQueuePutOverwrite(2, 6); }
-static void testUtilsQueuePutOverwrite_stub_187(void) { testUtilsQueuePutOverwrite(3, 0); }
-static void testUtilsQueuePutOverwrite_stub_188(void) { testUtilsQueuePutOverwrite(3, 1); }
-static void testUtilsQueuePutOverwrite_stub_189(void) { testUtilsQueuePutOverwrite(3, 2); }
-static void testUtilsQueuePutOverwrite_stub_190(void) { testUtilsQueuePutOverwrite(3, 3); }
-static void testUtilsQueuePutOverwrite_stub_191(void) { testUtilsQueuePutOverwrite(3, 4); }
-static void testUtilsQueuePutOverwrite_stub_192(void) { testUtilsQueuePutOverwrite(3, 5); }
-static void testUtilsQueuePutOverwrite_stub_193(void) { testUtilsQueuePutOverwrite(3, 6); }
-static void testUtilsQueuePutOverwrite_stub_194(void) { testUtilsQueuePutOverwrite(4, 0); }
-static void testUtilsQueuePutOverwrite_stub_195(void) { testUtilsQueuePutOverwrite(4, 1); }
-static void testUtilsQueuePutOverwrite_stub_196(void) { testUtilsQueuePutOverwrite(4, 2); }
-static void testUtilsQueuePutOverwrite_stub_197(void) { testUtilsQueuePutOverwrite(4, 3); }
-static void testUtilsQueuePutOverwrite_stub_198(void) { testUtilsQueuePutOverwrite(4, 4); }
-static void testUtilsQueuePutOverwrite_stub_199(void) { testUtilsQueuePutOverwrite(4, 5); }
-static void testUtilsQueuePutOverwrite_stub_200(void) { testUtilsQueuePutOverwrite(4, 6); }
-static void testUtilsQueuePutOverwrite_stub_201(void) { testUtilsQueuePutOverwrite(5, 0); }
-static void testUtilsQueuePutOverwrite_stub_202(void) { testUtilsQueuePutOverwrite(5, 1); }
-static void testUtilsQueuePutOverwrite_stub_203(void) { testUtilsQueuePutOverwrite(5, 2); }
-static void testUtilsQueuePutOverwrite_stub_204(void) { testUtilsQueuePutOverwrite(5, 3); }
-static void testUtilsQueuePutOverwrite_stub_205(void) { testUtilsQueuePutOverwrite(5, 4); }
-static void testUtilsQueuePutOverwrite_stub_206(void) { testUtilsQueuePutOverwrite(5, 5); }
-static void testUtilsQueuePutOverwrite_stub_207(void) { testUtilsQueuePutOverwrite(5, 6); }
-static void testUtilsQueuePutOverwrite_stub_208(void) { testUtilsQueuePutOverwrite(254, 0); }
-static void testUtilsQueuePutOverwrite_stub_209(void) { testUtilsQueuePutOverwrite(254, 1); }
-static void testUtilsQueuePutOverwrite_stub_210(void) { testUtilsQueuePutOverwrite(254, 2); }
-static void testUtilsQueuePutOverwrite_stub_211(void) { testUtilsQueuePutOverwrite(254, 3); }
-static void testUtilsQueuePutOverwrite_stub_212(void) { testUtilsQueuePutOverwrite(254, 4); }
-static void testUtilsQueuePutOverwrite_stub_213(void) { testUtilsQueuePutOverwrite(254, 5); }
-static void testUtilsQueuePutOverwrite_stub_214(void) { testUtilsQueuePutOverwrite(254, 6); }
-static void testUtilsQueuePutOverwrite_stub_215(void) { testUtilsQueuePutOverwrite(255, 0); }
-static void testUtilsQueuePutOverwrite_stub_216(void) { testUtilsQueuePutOverwrite(255, 1); }
-static void testUtilsQueuePutOverwrite_stub_217(void) { testUtilsQueuePutOverwrite(255, 2); }
-static void testUtilsQueuePutOverwrite_stub_218(void) { testUtilsQueuePutOverwrite(255, 3); }
-static void testUtilsQueuePutOverwrite_stub_219(void) { testUtilsQueuePutOverwrite(255, 4); }
-static void testUtilsQueuePutOverwrite_stub_220(void) { testUtilsQueuePutOverwrite(255, 5); }
-static void testUtilsQueuePutOverwrite_stub_221(void) { testUtilsQueuePutOverwrite(255, 6); }
-static void testBufferAddChar_stub_222(void) { testBufferAddChar(1); }
-static void testBufferAddChar_stub_223(void) { testBufferAddChar(TEST_UTILS_BUF_SIZE-1); }
-static void testBufferAddChar_stub_224(void) { testBufferAddChar(TEST_UTILS_BUF_SIZE); }
-static void testBufferAddU16_stub_225(void) { testBufferAddU16(1); }
-static void testBufferAddU16_stub_226(void) { testBufferAddU16(TEST_UTILS_BUF_SIZE/2-1); }
-static void testBufferAddU16_stub_227(void) { testBufferAddU16(TEST_UTILS_BUF_SIZE/2); }
-static void test_utils_scan_past_wsp_stub_228(void) { test_utils_scan_past_wsp("", '\0'); }
-static void test_utils_scan_past_wsp_stub_229(void) { test_utils_scan_past_wsp("\t ", '\0'); }
-static void test_utils_scan_past_wsp_stub_230(void) { test_utils_scan_past_wsp("\t a", 'a'); }
-static void testUtilsStrtoui_stub_231(void) { testUtilsStrtoui("", 0, 10, UTILS_STRTOUI_RC_NO_CHARS, 0, '\0'); }
-static void testUtilsStrtoui_stub_232(void) { testUtilsStrtoui("*", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, '*'); }
-static void testUtilsStrtoui_stub_233(void) { testUtilsStrtoui("9", 0,  10, UTILS_STRTOUI_RC_OK, 9, '\0'); }
-static void testUtilsStrtoui_stub_234(void) { testUtilsStrtoui("1", 0,  2, UTILS_STRTOUI_RC_OK, 1, '\0'); }
-static void testUtilsStrtoui_stub_235(void) { testUtilsStrtoui("f", 0,  16, UTILS_STRTOUI_RC_OK, 15, '\0'); }
-static void testUtilsStrtoui_stub_236(void) { testUtilsStrtoui("F", 0,  16, UTILS_STRTOUI_RC_OK, 15, '\0'); }
-static void testUtilsStrtoui_stub_237(void) { testUtilsStrtoui("z", 0,  36, UTILS_STRTOUI_RC_OK, 35, '\0'); }
-static void testUtilsStrtoui_stub_238(void) { testUtilsStrtoui("Z", 0,  36, UTILS_STRTOUI_RC_OK, 35, '\0'); }
-static void testUtilsStrtoui_stub_239(void) { testUtilsStrtoui("991", 0,  10, UTILS_STRTOUI_RC_OK, 991, '\0'); }
-static void testUtilsStrtoui_stub_240(void) { testUtilsStrtoui("1110", 0,  2, UTILS_STRTOUI_RC_OK, 14, '\0'); }
-static void testUtilsStrtoui_stub_241(void) { testUtilsStrtoui("fffe", 0,  16, UTILS_STRTOUI_RC_OK, 0xfffe, '\0'); }
-static void testUtilsStrtoui_stub_242(void) { testUtilsStrtoui("FFFE", 0,  16, UTILS_STRTOUI_RC_OK, 0xfffe, '\0'); }
-static void testUtilsStrtoui_stub_243(void) { testUtilsStrtoui("zz", 0,  36, UTILS_STRTOUI_RC_OK, 35*36+35, '\0'); }
-static void testUtilsStrtoui_stub_244(void) { testUtilsStrtoui("Zz", 0,  36, UTILS_STRTOUI_RC_OK, 35*36+35, '\0'); }
-static void testUtilsStrtoui_stub_245(void) { testUtilsStrtoui("+9", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, '+'); }
-static void testUtilsStrtoui_stub_246(void) { testUtilsStrtoui(" 9", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, ' '); }
-static void testUtilsStrtoui_stub_247(void) { testUtilsStrtoui("09", 0,  10, UTILS_STRTOUI_RC_OK, 9, '\0'); }
-static void testUtilsStrtoui_stub_248(void) { testUtilsStrtoui("9 ", 0,  10, UTILS_STRTOUI_RC_OK, 9, ' '); }
-static void testUtilsStrtoui_stub_249(void) { testUtilsStrtoui("%llu", UINT_MAX,  10, UTILS_STRTOUI_RC_OK, UINT_MAX, '\0'); }
-static void testUtilsStrtoui_stub_250(void) { testUtilsStrtoui("%llx", UINT_MAX,  16, UTILS_STRTOUI_RC_OK, UINT_MAX, '\0'); }
-static void testUtilsStrtoui_stub_251(void) { testUtilsStrtoui("%llu", (unsigned long long)UINT_MAX+1,  10, UTILS_STRTOUI_RC_OVERFLOW, 0, '\0'); }
-static void testUtilsStrtoui_stub_252(void) { testUtilsStrtoui("%llx", (unsigned long long)UINT_MAX+1,  16, UTILS_STRTOUI_RC_OVERFLOW, 0, '\0'); }
+static void test_modbus_crc_stub_3(void) { test_modbus_crc("414243", 0x8550); }
+static void test_modbus_crc_stub_4(void) { test_modbus_crc("1103006B0003", 0x8776); }
+static void test_modbus_frame_valid_stub_5(void) { test_modbus_frame_valid("1103006B00037687", 0); }
+static void test_modbus_frame_valid_stub_6(void) { test_modbus_frame_valid("1103006B00038776", MODBUS_CB_EVT_INVALID_CRC); }
+static void test_modbus_frame_valid_stub_7(void) { test_modbus_frame_valid("1103006B00037688", MODBUS_CB_EVT_INVALID_CRC); }
+static void test_modbus_frame_valid_stub_8(void) { test_modbus_frame_valid("4142435085", 0); }
+static void test_modbus_frame_valid_stub_9(void) { test_modbus_frame_valid("", MODBUS_CB_EVT_INVALID_LEN); }
+static void test_modbus_frame_valid_stub_10(void) { test_modbus_frame_valid("41b1d1", MODBUS_CB_EVT_INVALID_LEN); }
+static void test_modbus_frame_valid_stub_11(void) { test_modbus_frame_valid("0142435151", 0); }
+static void test_modbus_frame_valid_stub_12(void) { test_modbus_frame_valid("f74243b163", 0); }
+static void test_modbus_frame_valid_stub_13(void) { test_modbus_frame_valid("0042430091", MODBUS_CB_EVT_INVALID_ID); }
+static void test_modbus_frame_valid_stub_14(void) { test_modbus_frame_valid("f842438160", MODBUS_CB_EVT_INVALID_ID); }
+static void test_myprintf_snsprintf_stub_15(void) { test_myprintf_snsprintf(NULL, 0, 0, ""); }
+static void test_myprintf_snsprintf_stub_16(void) { test_myprintf_snsprintf(NULL, 0, 0, "Z"); }
+static void test_myprintf_snsprintf_stub_17(void) { test_myprintf_snsprintf("", 1, 1, ""); }
+static void test_myprintf_snsprintf_stub_18(void) { test_myprintf_snsprintf("", 0, 1, "Z"); }
+static void test_myprintf_snsprintf_stub_19(void) { test_myprintf_snsprintf("", 1, 2, ""); }
+static void test_myprintf_snsprintf_stub_20(void) { test_myprintf_snsprintf("X", 1, 2, "X"); }
+static void test_myprintf_snsprintf_stub_21(void) { test_myprintf_snsprintf("X", 0, 2, "XZ"); }
+static void test_printf_format_stub_22(void) { test_printf_format("", ""); }
+static void test_printf_format_stub_23(void) { test_printf_format("x", "x"); }
+static void test_printf_format_stub_24(void) { test_printf_format("x%x", "x%%x"); }
+static void test_printf_format_stub_25(void) { test_printf_format("x%x", "x%3%x"); }
+static void test_printf_format_stub_26(void) { test_printf_format("x%x", "x%0%x"); }
+static void test_printf_format_stub_27(void) { test_printf_format("x%x", "x%03%x"); }
+static void test_printf_format_stub_28(void) { test_printf_format("x%x", "x%-3%x"); }
+static void test_printf_format_stub_29(void) { test_printf_format("xzx", "x%cx", 'z'); }
+static void test_printf_format_stub_30(void) { test_printf_format("xzx", "x%1cx", 'z'); }
+static void test_printf_format_stub_31(void) { test_printf_format("x zx", "x%2cx", 'z'); }
+static void test_printf_format_stub_32(void) { test_printf_format("xz x", "x%-2cx", 'z'); }
+static void test_printf_format_stub_33(void) { test_printf_format("xzx", "x%sx", "z"); }
+static void test_printf_format_stub_34(void) { test_printf_format("x(null)x", "x%sx", NULL); }
+static void test_printf_format_stub_35(void) { test_printf_format("x  zx", "x%3sx", "z"); }
+static void test_printf_format_stub_36(void) { test_printf_format("xz  x", "x%-3sx", "z"); }
+static void test_printf_format_stub_37(void) { test_printf_format("x0x", "x%dx", 0); }
+static void test_printf_format_stub_38(void) { test_printf_format("x123x", "x%dx", 123); }
+static void test_printf_format_stub_39(void) { test_printf_format("x1x", "x%0dx", 1); }
+static void test_printf_format_stub_40(void) { test_printf_format("x1x", "x%1dx", 1); }
+static void test_printf_format_stub_41(void) { test_printf_format("x 1x", "x%2dx", 1); }
+static void test_printf_format_stub_42(void) { test_printf_format("x01x", "x%02dx", 1); }
+static void test_printf_format_stub_43(void) { test_printf_format("x1 x", "x%-2dx", 1); }
+static void test_printf_format_stub_44(void) { test_printf_format("x65535x", "x%ux", 0xffff); }
+static void test_printf_format_stub_45(void) { test_printf_format("x4294967295x", "x%ux", 0xffffffff); }
+static void test_printf_format_stub_46(void) { test_printf_format("x65535x", "x%ux", 65535); }
+static void test_printf_format_stub_47(void) { test_printf_format("xffffffffx", "x%lxx", 0xffffffff); }
+static void test_printf_format_stub_48(void) { test_printf_format("x32767x", "x%dx", 32767); }
+static void test_printf_format_stub_49(void) { test_printf_format("x-32768x", "x%dx", -32768); }
+static void test_printf_format_stub_50(void) { test_printf_format("x2147483647x", "x%ldx", 2147483647); }
+static void test_printf_format_stub_51(void) { test_printf_format("x-2147483648x", "x%ldx", -2147483648); }
+static void test_printf_format_stub_52(void) { test_printf_format("x0x", "x%xx", 0); }
+static void test_printf_format_stub_53(void) { test_printf_format("xabcx", "x%xx", 0xABC); }
+static void test_printf_format_stub_54(void) { test_printf_format("xABCx", "x%Xx", 0xABC); }
+static void test_printf_format_stub_55(void) { test_printf_format("x0x", "x%bx", 0); }
+static void test_printf_format_stub_56(void) { test_printf_format("x101x", "x%bx", 5); }
+static void testUtilsQueuePut_stub_57(void) { testUtilsQueuePut(queueQPut, 0, 0, 10, 1); }
+static void testUtilsQueuePut_stub_58(void) { testUtilsQueuePut(queueQPut, 0, 1, 10, 1); }
+static void testUtilsQueuePut_stub_59(void) { testUtilsQueuePut(queueQPut, 0, 2, 10, 1); }
+static void testUtilsQueuePut_stub_60(void) { testUtilsQueuePut(queueQPut, 0, 3, 10, 1); }
+static void testUtilsQueuePut_stub_61(void) { testUtilsQueuePut(queueQPut, 0, 4, 10, 1); }
+static void testUtilsQueuePut_stub_62(void) { testUtilsQueuePut(queueQPut, 1, 0, 10, 1); }
+static void testUtilsQueuePut_stub_63(void) { testUtilsQueuePut(queueQPut, 1, 1, 10, 1); }
+static void testUtilsQueuePut_stub_64(void) { testUtilsQueuePut(queueQPut, 1, 2, 10, 1); }
+static void testUtilsQueuePut_stub_65(void) { testUtilsQueuePut(queueQPut, 1, 3, 10, 1); }
+static void testUtilsQueuePut_stub_66(void) { testUtilsQueuePut(queueQPut, 1, 4, 10, 1); }
+static void testUtilsQueuePut_stub_67(void) { testUtilsQueuePut(queueQPut, 2, 0, 10, 1); }
+static void testUtilsQueuePut_stub_68(void) { testUtilsQueuePut(queueQPut, 2, 1, 10, 1); }
+static void testUtilsQueuePut_stub_69(void) { testUtilsQueuePut(queueQPut, 2, 2, 10, 1); }
+static void testUtilsQueuePut_stub_70(void) { testUtilsQueuePut(queueQPut, 2, 3, 10, 1); }
+static void testUtilsQueuePut_stub_71(void) { testUtilsQueuePut(queueQPut, 2, 4, 10, 1); }
+static void testUtilsQueuePut_stub_72(void) { testUtilsQueuePut(queueQPut, 3, 0, 10, 1); }
+static void testUtilsQueuePut_stub_73(void) { testUtilsQueuePut(queueQPut, 3, 1, 10, 1); }
+static void testUtilsQueuePut_stub_74(void) { testUtilsQueuePut(queueQPut, 3, 2, 10, 1); }
+static void testUtilsQueuePut_stub_75(void) { testUtilsQueuePut(queueQPut, 3, 3, 10, 1); }
+static void testUtilsQueuePut_stub_76(void) { testUtilsQueuePut(queueQPut, 3, 4, 10, 1); }
+static void testUtilsQueuePut_stub_77(void) { testUtilsQueuePut(queueQPut, 4, 0, 10, 1); }
+static void testUtilsQueuePut_stub_78(void) { testUtilsQueuePut(queueQPut, 4, 1, 10, 1); }
+static void testUtilsQueuePut_stub_79(void) { testUtilsQueuePut(queueQPut, 4, 2, 10, 1); }
+static void testUtilsQueuePut_stub_80(void) { testUtilsQueuePut(queueQPut, 4, 3, 10, 1); }
+static void testUtilsQueuePut_stub_81(void) { testUtilsQueuePut(queueQPut, 4, 4, 10, 1); }
+static void testUtilsQueuePut_stub_82(void) { testUtilsQueuePut(queueQPut, 5, 0, 10, 1); }
+static void testUtilsQueuePut_stub_83(void) { testUtilsQueuePut(queueQPut, 5, 1, 10, 1); }
+static void testUtilsQueuePut_stub_84(void) { testUtilsQueuePut(queueQPut, 5, 2, 10, 1); }
+static void testUtilsQueuePut_stub_85(void) { testUtilsQueuePut(queueQPut, 5, 3, 10, 1); }
+static void testUtilsQueuePut_stub_86(void) { testUtilsQueuePut(queueQPut, 5, 4, 10, 1); }
+static void testUtilsQueuePut_stub_87(void) { testUtilsQueuePut(queueQPut, 254, 0, 10, 1); }
+static void testUtilsQueuePut_stub_88(void) { testUtilsQueuePut(queueQPut, 254, 1, 10, 1); }
+static void testUtilsQueuePut_stub_89(void) { testUtilsQueuePut(queueQPut, 254, 2, 10, 1); }
+static void testUtilsQueuePut_stub_90(void) { testUtilsQueuePut(queueQPut, 254, 3, 10, 1); }
+static void testUtilsQueuePut_stub_91(void) { testUtilsQueuePut(queueQPut, 254, 4, 10, 1); }
+static void testUtilsQueuePut_stub_92(void) { testUtilsQueuePut(queueQPut, 255, 0, 10, 1); }
+static void testUtilsQueuePut_stub_93(void) { testUtilsQueuePut(queueQPut, 255, 1, 10, 1); }
+static void testUtilsQueuePut_stub_94(void) { testUtilsQueuePut(queueQPut, 255, 2, 10, 1); }
+static void testUtilsQueuePut_stub_95(void) { testUtilsQueuePut(queueQPut, 255, 3, 10, 1); }
+static void testUtilsQueuePut_stub_96(void) { testUtilsQueuePut(queueQPut, 255, 4, 10, 1); }
+static void testUtilsQueuePutOvf_stub_97(void) { testUtilsQueuePutOvf(queueQPut, 0, 10, 1); }
+static void testUtilsQueuePutOvf_stub_98(void) { testUtilsQueuePutOvf(queueQPut, 1, 10, 1); }
+static void testUtilsQueuePutOvf_stub_99(void) { testUtilsQueuePutOvf(queueQPut, 2, 10, 1); }
+static void testUtilsQueuePutOvf_stub_100(void) { testUtilsQueuePutOvf(queueQPut, 3, 10, 1); }
+static void testUtilsQueuePutOvf_stub_101(void) { testUtilsQueuePutOvf(queueQPut, 4, 10, 1); }
+static void testUtilsQueuePutOvf_stub_102(void) { testUtilsQueuePutOvf(queueQPut, 5, 10, 1); }
+static void testUtilsQueuePutOvf_stub_103(void) { testUtilsQueuePutOvf(queueQPut, 254, 10, 1); }
+static void testUtilsQueuePutOvf_stub_104(void) { testUtilsQueuePutOvf(queueQPut, 255, 10, 1); }
+static void testUtilsQueuePut_stub_105(void) { testUtilsQueuePut(queueQPush, 0, 0, 9, -1); }
+static void testUtilsQueuePut_stub_106(void) { testUtilsQueuePut(queueQPush, 0, 1, 10, -1); }
+static void testUtilsQueuePut_stub_107(void) { testUtilsQueuePut(queueQPush, 0, 2, 11, -1); }
+static void testUtilsQueuePut_stub_108(void) { testUtilsQueuePut(queueQPush, 0, 3, 12, -1); }
+static void testUtilsQueuePut_stub_109(void) { testUtilsQueuePut(queueQPush, 0, 4, 13, -1); }
+static void testUtilsQueuePut_stub_110(void) { testUtilsQueuePut(queueQPush, 1, 0, 9, -1); }
+static void testUtilsQueuePut_stub_111(void) { testUtilsQueuePut(queueQPush, 1, 1, 10, -1); }
+static void testUtilsQueuePut_stub_112(void) { testUtilsQueuePut(queueQPush, 1, 2, 11, -1); }
+static void testUtilsQueuePut_stub_113(void) { testUtilsQueuePut(queueQPush, 1, 3, 12, -1); }
+static void testUtilsQueuePut_stub_114(void) { testUtilsQueuePut(queueQPush, 1, 4, 13, -1); }
+static void testUtilsQueuePut_stub_115(void) { testUtilsQueuePut(queueQPush, 2, 0, 9, -1); }
+static void testUtilsQueuePut_stub_116(void) { testUtilsQueuePut(queueQPush, 2, 1, 10, -1); }
+static void testUtilsQueuePut_stub_117(void) { testUtilsQueuePut(queueQPush, 2, 2, 11, -1); }
+static void testUtilsQueuePut_stub_118(void) { testUtilsQueuePut(queueQPush, 2, 3, 12, -1); }
+static void testUtilsQueuePut_stub_119(void) { testUtilsQueuePut(queueQPush, 2, 4, 13, -1); }
+static void testUtilsQueuePut_stub_120(void) { testUtilsQueuePut(queueQPush, 3, 0, 9, -1); }
+static void testUtilsQueuePut_stub_121(void) { testUtilsQueuePut(queueQPush, 3, 1, 10, -1); }
+static void testUtilsQueuePut_stub_122(void) { testUtilsQueuePut(queueQPush, 3, 2, 11, -1); }
+static void testUtilsQueuePut_stub_123(void) { testUtilsQueuePut(queueQPush, 3, 3, 12, -1); }
+static void testUtilsQueuePut_stub_124(void) { testUtilsQueuePut(queueQPush, 3, 4, 13, -1); }
+static void testUtilsQueuePut_stub_125(void) { testUtilsQueuePut(queueQPush, 4, 0, 9, -1); }
+static void testUtilsQueuePut_stub_126(void) { testUtilsQueuePut(queueQPush, 4, 1, 10, -1); }
+static void testUtilsQueuePut_stub_127(void) { testUtilsQueuePut(queueQPush, 4, 2, 11, -1); }
+static void testUtilsQueuePut_stub_128(void) { testUtilsQueuePut(queueQPush, 4, 3, 12, -1); }
+static void testUtilsQueuePut_stub_129(void) { testUtilsQueuePut(queueQPush, 4, 4, 13, -1); }
+static void testUtilsQueuePut_stub_130(void) { testUtilsQueuePut(queueQPush, 5, 0, 9, -1); }
+static void testUtilsQueuePut_stub_131(void) { testUtilsQueuePut(queueQPush, 5, 1, 10, -1); }
+static void testUtilsQueuePut_stub_132(void) { testUtilsQueuePut(queueQPush, 5, 2, 11, -1); }
+static void testUtilsQueuePut_stub_133(void) { testUtilsQueuePut(queueQPush, 5, 3, 12, -1); }
+static void testUtilsQueuePut_stub_134(void) { testUtilsQueuePut(queueQPush, 5, 4, 13, -1); }
+static void testUtilsQueuePut_stub_135(void) { testUtilsQueuePut(queueQPush, 254, 0, 9, -1); }
+static void testUtilsQueuePut_stub_136(void) { testUtilsQueuePut(queueQPush, 254, 1, 10, -1); }
+static void testUtilsQueuePut_stub_137(void) { testUtilsQueuePut(queueQPush, 254, 2, 11, -1); }
+static void testUtilsQueuePut_stub_138(void) { testUtilsQueuePut(queueQPush, 254, 3, 12, -1); }
+static void testUtilsQueuePut_stub_139(void) { testUtilsQueuePut(queueQPush, 254, 4, 13, -1); }
+static void testUtilsQueuePut_stub_140(void) { testUtilsQueuePut(queueQPush, 255, 0, 9, -1); }
+static void testUtilsQueuePut_stub_141(void) { testUtilsQueuePut(queueQPush, 255, 1, 10, -1); }
+static void testUtilsQueuePut_stub_142(void) { testUtilsQueuePut(queueQPush, 255, 2, 11, -1); }
+static void testUtilsQueuePut_stub_143(void) { testUtilsQueuePut(queueQPush, 255, 3, 12, -1); }
+static void testUtilsQueuePut_stub_144(void) { testUtilsQueuePut(queueQPush, 255, 4, 13, -1); }
+static void testUtilsQueuePutOvf_stub_145(void) { testUtilsQueuePutOvf(queueQPush, 0, 13, -1); }
+static void testUtilsQueuePutOvf_stub_146(void) { testUtilsQueuePutOvf(queueQPush, 1, 13, -1); }
+static void testUtilsQueuePutOvf_stub_147(void) { testUtilsQueuePutOvf(queueQPush, 2, 13, -1); }
+static void testUtilsQueuePutOvf_stub_148(void) { testUtilsQueuePutOvf(queueQPush, 3, 13, -1); }
+static void testUtilsQueuePutOvf_stub_149(void) { testUtilsQueuePutOvf(queueQPush, 4, 13, -1); }
+static void testUtilsQueuePutOvf_stub_150(void) { testUtilsQueuePutOvf(queueQPush, 5, 13, -1); }
+static void testUtilsQueuePutOvf_stub_151(void) { testUtilsQueuePutOvf(queueQPush, 254, 13, -1); }
+static void testUtilsQueuePutOvf_stub_152(void) { testUtilsQueuePutOvf(queueQPush, 255, 13, -1); }
+static void testUtilsQueuePutLifo_stub_153(void) { testUtilsQueuePutLifo(0, 0); }
+static void testUtilsQueuePutLifo_stub_154(void) { testUtilsQueuePutLifo(0, 1); }
+static void testUtilsQueuePutLifo_stub_155(void) { testUtilsQueuePutLifo(0, 2); }
+static void testUtilsQueuePutLifo_stub_156(void) { testUtilsQueuePutLifo(0, 3); }
+static void testUtilsQueuePutLifo_stub_157(void) { testUtilsQueuePutLifo(1, 0); }
+static void testUtilsQueuePutLifo_stub_158(void) { testUtilsQueuePutLifo(1, 1); }
+static void testUtilsQueuePutLifo_stub_159(void) { testUtilsQueuePutLifo(1, 2); }
+static void testUtilsQueuePutLifo_stub_160(void) { testUtilsQueuePutLifo(1, 3); }
+static void testUtilsQueuePutLifo_stub_161(void) { testUtilsQueuePutLifo(2, 0); }
+static void testUtilsQueuePutLifo_stub_162(void) { testUtilsQueuePutLifo(2, 1); }
+static void testUtilsQueuePutLifo_stub_163(void) { testUtilsQueuePutLifo(2, 2); }
+static void testUtilsQueuePutLifo_stub_164(void) { testUtilsQueuePutLifo(2, 3); }
+static void testUtilsQueuePutLifo_stub_165(void) { testUtilsQueuePutLifo(3, 0); }
+static void testUtilsQueuePutLifo_stub_166(void) { testUtilsQueuePutLifo(3, 1); }
+static void testUtilsQueuePutLifo_stub_167(void) { testUtilsQueuePutLifo(3, 2); }
+static void testUtilsQueuePutLifo_stub_168(void) { testUtilsQueuePutLifo(3, 3); }
+static void testUtilsQueuePutLifo_stub_169(void) { testUtilsQueuePutLifo(4, 0); }
+static void testUtilsQueuePutLifo_stub_170(void) { testUtilsQueuePutLifo(4, 1); }
+static void testUtilsQueuePutLifo_stub_171(void) { testUtilsQueuePutLifo(4, 2); }
+static void testUtilsQueuePutLifo_stub_172(void) { testUtilsQueuePutLifo(4, 3); }
+static void testUtilsQueuePutLifo_stub_173(void) { testUtilsQueuePutLifo(5, 0); }
+static void testUtilsQueuePutLifo_stub_174(void) { testUtilsQueuePutLifo(5, 1); }
+static void testUtilsQueuePutLifo_stub_175(void) { testUtilsQueuePutLifo(5, 2); }
+static void testUtilsQueuePutLifo_stub_176(void) { testUtilsQueuePutLifo(5, 3); }
+static void testUtilsQueuePutLifo_stub_177(void) { testUtilsQueuePutLifo(254, 0); }
+static void testUtilsQueuePutLifo_stub_178(void) { testUtilsQueuePutLifo(254, 1); }
+static void testUtilsQueuePutLifo_stub_179(void) { testUtilsQueuePutLifo(254, 2); }
+static void testUtilsQueuePutLifo_stub_180(void) { testUtilsQueuePutLifo(254, 3); }
+static void testUtilsQueuePutLifo_stub_181(void) { testUtilsQueuePutLifo(255, 0); }
+static void testUtilsQueuePutLifo_stub_182(void) { testUtilsQueuePutLifo(255, 1); }
+static void testUtilsQueuePutLifo_stub_183(void) { testUtilsQueuePutLifo(255, 2); }
+static void testUtilsQueuePutLifo_stub_184(void) { testUtilsQueuePutLifo(255, 3); }
+static void testUtilsQueuePutOverwrite_stub_185(void) { testUtilsQueuePutOverwrite(0, 0); }
+static void testUtilsQueuePutOverwrite_stub_186(void) { testUtilsQueuePutOverwrite(0, 1); }
+static void testUtilsQueuePutOverwrite_stub_187(void) { testUtilsQueuePutOverwrite(0, 2); }
+static void testUtilsQueuePutOverwrite_stub_188(void) { testUtilsQueuePutOverwrite(0, 3); }
+static void testUtilsQueuePutOverwrite_stub_189(void) { testUtilsQueuePutOverwrite(0, 4); }
+static void testUtilsQueuePutOverwrite_stub_190(void) { testUtilsQueuePutOverwrite(0, 5); }
+static void testUtilsQueuePutOverwrite_stub_191(void) { testUtilsQueuePutOverwrite(0, 6); }
+static void testUtilsQueuePutOverwrite_stub_192(void) { testUtilsQueuePutOverwrite(1, 0); }
+static void testUtilsQueuePutOverwrite_stub_193(void) { testUtilsQueuePutOverwrite(1, 1); }
+static void testUtilsQueuePutOverwrite_stub_194(void) { testUtilsQueuePutOverwrite(1, 2); }
+static void testUtilsQueuePutOverwrite_stub_195(void) { testUtilsQueuePutOverwrite(1, 3); }
+static void testUtilsQueuePutOverwrite_stub_196(void) { testUtilsQueuePutOverwrite(1, 4); }
+static void testUtilsQueuePutOverwrite_stub_197(void) { testUtilsQueuePutOverwrite(1, 5); }
+static void testUtilsQueuePutOverwrite_stub_198(void) { testUtilsQueuePutOverwrite(1, 6); }
+static void testUtilsQueuePutOverwrite_stub_199(void) { testUtilsQueuePutOverwrite(2, 0); }
+static void testUtilsQueuePutOverwrite_stub_200(void) { testUtilsQueuePutOverwrite(2, 1); }
+static void testUtilsQueuePutOverwrite_stub_201(void) { testUtilsQueuePutOverwrite(2, 2); }
+static void testUtilsQueuePutOverwrite_stub_202(void) { testUtilsQueuePutOverwrite(2, 3); }
+static void testUtilsQueuePutOverwrite_stub_203(void) { testUtilsQueuePutOverwrite(2, 4); }
+static void testUtilsQueuePutOverwrite_stub_204(void) { testUtilsQueuePutOverwrite(2, 5); }
+static void testUtilsQueuePutOverwrite_stub_205(void) { testUtilsQueuePutOverwrite(2, 6); }
+static void testUtilsQueuePutOverwrite_stub_206(void) { testUtilsQueuePutOverwrite(3, 0); }
+static void testUtilsQueuePutOverwrite_stub_207(void) { testUtilsQueuePutOverwrite(3, 1); }
+static void testUtilsQueuePutOverwrite_stub_208(void) { testUtilsQueuePutOverwrite(3, 2); }
+static void testUtilsQueuePutOverwrite_stub_209(void) { testUtilsQueuePutOverwrite(3, 3); }
+static void testUtilsQueuePutOverwrite_stub_210(void) { testUtilsQueuePutOverwrite(3, 4); }
+static void testUtilsQueuePutOverwrite_stub_211(void) { testUtilsQueuePutOverwrite(3, 5); }
+static void testUtilsQueuePutOverwrite_stub_212(void) { testUtilsQueuePutOverwrite(3, 6); }
+static void testUtilsQueuePutOverwrite_stub_213(void) { testUtilsQueuePutOverwrite(4, 0); }
+static void testUtilsQueuePutOverwrite_stub_214(void) { testUtilsQueuePutOverwrite(4, 1); }
+static void testUtilsQueuePutOverwrite_stub_215(void) { testUtilsQueuePutOverwrite(4, 2); }
+static void testUtilsQueuePutOverwrite_stub_216(void) { testUtilsQueuePutOverwrite(4, 3); }
+static void testUtilsQueuePutOverwrite_stub_217(void) { testUtilsQueuePutOverwrite(4, 4); }
+static void testUtilsQueuePutOverwrite_stub_218(void) { testUtilsQueuePutOverwrite(4, 5); }
+static void testUtilsQueuePutOverwrite_stub_219(void) { testUtilsQueuePutOverwrite(4, 6); }
+static void testUtilsQueuePutOverwrite_stub_220(void) { testUtilsQueuePutOverwrite(5, 0); }
+static void testUtilsQueuePutOverwrite_stub_221(void) { testUtilsQueuePutOverwrite(5, 1); }
+static void testUtilsQueuePutOverwrite_stub_222(void) { testUtilsQueuePutOverwrite(5, 2); }
+static void testUtilsQueuePutOverwrite_stub_223(void) { testUtilsQueuePutOverwrite(5, 3); }
+static void testUtilsQueuePutOverwrite_stub_224(void) { testUtilsQueuePutOverwrite(5, 4); }
+static void testUtilsQueuePutOverwrite_stub_225(void) { testUtilsQueuePutOverwrite(5, 5); }
+static void testUtilsQueuePutOverwrite_stub_226(void) { testUtilsQueuePutOverwrite(5, 6); }
+static void testUtilsQueuePutOverwrite_stub_227(void) { testUtilsQueuePutOverwrite(254, 0); }
+static void testUtilsQueuePutOverwrite_stub_228(void) { testUtilsQueuePutOverwrite(254, 1); }
+static void testUtilsQueuePutOverwrite_stub_229(void) { testUtilsQueuePutOverwrite(254, 2); }
+static void testUtilsQueuePutOverwrite_stub_230(void) { testUtilsQueuePutOverwrite(254, 3); }
+static void testUtilsQueuePutOverwrite_stub_231(void) { testUtilsQueuePutOverwrite(254, 4); }
+static void testUtilsQueuePutOverwrite_stub_232(void) { testUtilsQueuePutOverwrite(254, 5); }
+static void testUtilsQueuePutOverwrite_stub_233(void) { testUtilsQueuePutOverwrite(254, 6); }
+static void testUtilsQueuePutOverwrite_stub_234(void) { testUtilsQueuePutOverwrite(255, 0); }
+static void testUtilsQueuePutOverwrite_stub_235(void) { testUtilsQueuePutOverwrite(255, 1); }
+static void testUtilsQueuePutOverwrite_stub_236(void) { testUtilsQueuePutOverwrite(255, 2); }
+static void testUtilsQueuePutOverwrite_stub_237(void) { testUtilsQueuePutOverwrite(255, 3); }
+static void testUtilsQueuePutOverwrite_stub_238(void) { testUtilsQueuePutOverwrite(255, 4); }
+static void testUtilsQueuePutOverwrite_stub_239(void) { testUtilsQueuePutOverwrite(255, 5); }
+static void testUtilsQueuePutOverwrite_stub_240(void) { testUtilsQueuePutOverwrite(255, 6); }
+static void testBufferAddChar_stub_241(void) { testBufferAddChar(1); }
+static void testBufferAddChar_stub_242(void) { testBufferAddChar(TEST_UTILS_BUF_SIZE-1); }
+static void testBufferAddChar_stub_243(void) { testBufferAddChar(TEST_UTILS_BUF_SIZE); }
+static void testBufferAddU16_stub_244(void) { testBufferAddU16(1); }
+static void testBufferAddU16_stub_245(void) { testBufferAddU16(TEST_UTILS_BUF_SIZE/2-1); }
+static void testBufferAddU16_stub_246(void) { testBufferAddU16(TEST_UTILS_BUF_SIZE/2); }
+static void test_utils_scan_past_wsp_stub_247(void) { test_utils_scan_past_wsp("", '\0'); }
+static void test_utils_scan_past_wsp_stub_248(void) { test_utils_scan_past_wsp("\t ", '\0'); }
+static void test_utils_scan_past_wsp_stub_249(void) { test_utils_scan_past_wsp("\t a", 'a'); }
+static void testUtilsStrtoui_stub_250(void) { testUtilsStrtoui("", 0, 10, UTILS_STRTOUI_RC_NO_CHARS, 0, '\0'); }
+static void testUtilsStrtoui_stub_251(void) { testUtilsStrtoui("*", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, '*'); }
+static void testUtilsStrtoui_stub_252(void) { testUtilsStrtoui("9", 0,  10, UTILS_STRTOUI_RC_OK, 9, '\0'); }
+static void testUtilsStrtoui_stub_253(void) { testUtilsStrtoui("1", 0,  2, UTILS_STRTOUI_RC_OK, 1, '\0'); }
+static void testUtilsStrtoui_stub_254(void) { testUtilsStrtoui("f", 0,  16, UTILS_STRTOUI_RC_OK, 15, '\0'); }
+static void testUtilsStrtoui_stub_255(void) { testUtilsStrtoui("F", 0,  16, UTILS_STRTOUI_RC_OK, 15, '\0'); }
+static void testUtilsStrtoui_stub_256(void) { testUtilsStrtoui("z", 0,  36, UTILS_STRTOUI_RC_OK, 35, '\0'); }
+static void testUtilsStrtoui_stub_257(void) { testUtilsStrtoui("Z", 0,  36, UTILS_STRTOUI_RC_OK, 35, '\0'); }
+static void testUtilsStrtoui_stub_258(void) { testUtilsStrtoui("991", 0,  10, UTILS_STRTOUI_RC_OK, 991, '\0'); }
+static void testUtilsStrtoui_stub_259(void) { testUtilsStrtoui("1110", 0,  2, UTILS_STRTOUI_RC_OK, 14, '\0'); }
+static void testUtilsStrtoui_stub_260(void) { testUtilsStrtoui("fffe", 0,  16, UTILS_STRTOUI_RC_OK, 0xfffe, '\0'); }
+static void testUtilsStrtoui_stub_261(void) { testUtilsStrtoui("FFFE", 0,  16, UTILS_STRTOUI_RC_OK, 0xfffe, '\0'); }
+static void testUtilsStrtoui_stub_262(void) { testUtilsStrtoui("zz", 0,  36, UTILS_STRTOUI_RC_OK, 35*36+35, '\0'); }
+static void testUtilsStrtoui_stub_263(void) { testUtilsStrtoui("Zz", 0,  36, UTILS_STRTOUI_RC_OK, 35*36+35, '\0'); }
+static void testUtilsStrtoui_stub_264(void) { testUtilsStrtoui("+9", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, '+'); }
+static void testUtilsStrtoui_stub_265(void) { testUtilsStrtoui(" 9", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, ' '); }
+static void testUtilsStrtoui_stub_266(void) { testUtilsStrtoui("09", 0,  10, UTILS_STRTOUI_RC_OK, 9, '\0'); }
+static void testUtilsStrtoui_stub_267(void) { testUtilsStrtoui("9 ", 0,  10, UTILS_STRTOUI_RC_OK, 9, ' '); }
+static void testUtilsStrtoui_stub_268(void) { testUtilsStrtoui("99a", 0,  10, UTILS_STRTOUI_RC_OK, 99, 'a'); }
+static void testUtilsStrtoui_stub_269(void) { testUtilsStrtoui("999@", 0,  10, UTILS_STRTOUI_RC_OK, 999, '@'); }
+static void testUtilsStrtoui_stub_270(void) { testUtilsStrtoui("%llu", UINT_MAX,  10, UTILS_STRTOUI_RC_OK, UINT_MAX, '\0'); }
+static void testUtilsStrtoui_stub_271(void) { testUtilsStrtoui("%llx", UINT_MAX,  16, UTILS_STRTOUI_RC_OK, UINT_MAX, '\0'); }
+static void testUtilsStrtoui_stub_272(void) { testUtilsStrtoui("%llu", (unsigned long long)UINT_MAX+1,  10, UTILS_STRTOUI_RC_OVERFLOW, 0, '\0'); }
+static void testUtilsStrtoui_stub_273(void) { testUtilsStrtoui("%llx", (unsigned long long)UINT_MAX+1,  16, UTILS_STRTOUI_RC_OVERFLOW, 0, '\0'); }
 
 /*** Extra Unity support. ***/
 
@@ -415,44 +445,71 @@ int main(int argc, char** argv) {
   do_run_test(testEventTraceMaskInit, "testEventTraceMaskInit", 106);
   registerFixture(NULL, NULL, NULL);
   
+  UnitySetTestFile("test_modbus.cpp");
+  do_run_test(test_modbus_setup, "test_modbus_setup", 24);
+  registerFixture(test_modbus_setup, NULL, NULL);
+  do_run_test(test_modbus_crc_stub_3, "test_modbus_crc(\"414243\", 0x8550)", 63);
+  do_run_test(test_modbus_crc_stub_4, "test_modbus_crc(\"1103006B0003\", 0x8776)", 64);
+  do_run_test(test_modbus_send_raw, "test_modbus_send_raw", 66);
+  do_run_test(test_modbus_send, "test_modbus_send", 72);
+  do_run_test(test_modbus_frame_valid_ovf, "test_modbus_frame_valid_ovf", 80);
+  do_run_test(test_modbus_frame_valid_stub_5, "test_modbus_frame_valid(\"1103006B00037687\", 0)", 95);
+  do_run_test(test_modbus_frame_valid_stub_6, "test_modbus_frame_valid(\"1103006B00038776\", MODBUS_CB_EVT_INVALID_CRC)", 96);
+  do_run_test(test_modbus_frame_valid_stub_7, "test_modbus_frame_valid(\"1103006B00037688\", MODBUS_CB_EVT_INVALID_CRC)", 97);
+  do_run_test(test_modbus_frame_valid_stub_8, "test_modbus_frame_valid(\"4142435085\", 0)", 98);
+  do_run_test(test_modbus_frame_valid_stub_9, "test_modbus_frame_valid(\"\", MODBUS_CB_EVT_INVALID_LEN)", 99);
+  do_run_test(test_modbus_frame_valid_stub_10, "test_modbus_frame_valid(\"41b1d1\", MODBUS_CB_EVT_INVALID_LEN)", 100);
+  do_run_test(test_modbus_frame_valid_stub_11, "test_modbus_frame_valid(\"0142435151\", 0)", 101);
+  do_run_test(test_modbus_frame_valid_stub_12, "test_modbus_frame_valid(\"f74243b163\", 0)", 102);
+  do_run_test(test_modbus_frame_valid_stub_13, "test_modbus_frame_valid(\"0042430091\", MODBUS_CB_EVT_INVALID_ID)", 103);
+  do_run_test(test_modbus_frame_valid_stub_14, "test_modbus_frame_valid(\"f842438160\", MODBUS_CB_EVT_INVALID_ID)", 104);
+  registerFixture(NULL, NULL, NULL);
+  
   UnitySetTestFile("test_printf.cpp");
-  do_run_test(test_utils_myprintf_int_sizes, "test_utils_myprintf_int_sizes", 14);
-  do_run_test(test_printf_format_stub_3, "test_printf_format(\"\", \"\")", 54);
-  do_run_test(test_printf_format_stub_4, "test_printf_format(\"x\", \"x\")", 55);
-  do_run_test(test_printf_format_stub_5, "test_printf_format(\"x%x\", \"x%%x\")", 58);
-  do_run_test(test_printf_format_stub_6, "test_printf_format(\"x%x\", \"x%3%x\")", 59);
-  do_run_test(test_printf_format_stub_7, "test_printf_format(\"x%x\", \"x%0%x\")", 60);
-  do_run_test(test_printf_format_stub_8, "test_printf_format(\"x%x\", \"x%03%x\")", 61);
-  do_run_test(test_printf_format_stub_9, "test_printf_format(\"x%x\", \"x%-3%x\")", 62);
-  do_run_test(test_printf_format_stub_10, "test_printf_format(\"xzx\", \"x%cx\", 'z')", 65);
-  do_run_test(test_printf_format_stub_11, "test_printf_format(\"xzx\", \"x%1cx\", 'z')", 66);
-  do_run_test(test_printf_format_stub_12, "test_printf_format(\"x zx\", \"x%2cx\", 'z')", 67);
-  do_run_test(test_printf_format_stub_13, "test_printf_format(\"xz x\", \"x%-2cx\", 'z')", 68);
-  do_run_test(test_printf_format_stub_14, "test_printf_format(\"xzx\", \"x%sx\", \"z\")", 71);
-  do_run_test(test_printf_format_stub_15, "test_printf_format(\"x(null)x\", \"x%sx\", NULL)", 72);
-  do_run_test(test_printf_format_stub_16, "test_printf_format(\"x  zx\", \"x%3sx\", \"z\")", 73);
-  do_run_test(test_printf_format_stub_17, "test_printf_format(\"xz  x\", \"x%-3sx\", \"z\")", 74);
-  do_run_test(test_printf_format_stub_18, "test_printf_format(\"x0x\", \"x%dx\", 0)", 77);
-  do_run_test(test_printf_format_stub_19, "test_printf_format(\"x123x\", \"x%dx\", 123)", 78);
-  do_run_test(test_printf_format_stub_20, "test_printf_format(\"x1x\", \"x%0dx\", 1)", 79);
-  do_run_test(test_printf_format_stub_21, "test_printf_format(\"x1x\", \"x%1dx\", 1)", 80);
-  do_run_test(test_printf_format_stub_22, "test_printf_format(\"x 1x\", \"x%2dx\", 1)", 81);
-  do_run_test(test_printf_format_stub_23, "test_printf_format(\"x01x\", \"x%02dx\", 1)", 82);
-  do_run_test(test_printf_format_stub_24, "test_printf_format(\"x1 x\", \"x%-2dx\", 1)", 83);
-  do_run_test(test_printf_format_stub_25, "test_printf_format(\"x65535x\", \"x%ux\", 0xffff)", 86);
-  do_run_test(test_printf_format_stub_26, "test_printf_format(\"x4294967295x\", \"x%ux\", 0xffffffff)", 87);
-  do_run_test(test_printf_format_stub_27, "test_printf_format(\"x65535x\", \"x%ux\", 65535)", 88);
-  do_run_test(test_printf_format_stub_28, "test_printf_format(\"xffffffffx\", \"x%lxx\", 0xffffffff)", 89);
-  do_run_test(test_printf_format_stub_29, "test_printf_format(\"x32767x\", \"x%dx\", 32767)", 90);
-  do_run_test(test_printf_format_stub_30, "test_printf_format(\"x-32768x\", \"x%dx\", -32768)", 91);
-  do_run_test(test_printf_format_stub_31, "test_printf_format(\"x2147483647x\", \"x%ldx\", 2147483647)", 92);
-  do_run_test(test_printf_format_stub_32, "test_printf_format(\"x-2147483648x\", \"x%ldx\", -2147483648)", 93);
-  do_run_test(test_printf_format_stub_33, "test_printf_format(\"x0x\", \"x%xx\", 0)", 96);
-  do_run_test(test_printf_format_stub_34, "test_printf_format(\"xabcx\", \"x%xx\", 0xABC)", 97);
-  do_run_test(test_printf_format_stub_35, "test_printf_format(\"xABCx\", \"x%Xx\", 0xABC)", 98);
-  do_run_test(test_printf_format_stub_36, "test_printf_format(\"x0x\", \"x%bx\", 0)", 101);
-  do_run_test(test_printf_format_stub_37, "test_printf_format(\"x101x\", \"x%bx\", 5)", 102);
-  do_run_test(test_myprintf_format_binary_max, "test_myprintf_format_binary_max", 103);
+  do_run_test(test_utils_myprintf_int_sizes, "test_utils_myprintf_int_sizes", 16);
+  do_run_test(test_myprintf_snsprintf_stub_15, "test_myprintf_snsprintf(NULL, 0, 0, \"\")", 35);
+  do_run_test(test_myprintf_snsprintf_stub_16, "test_myprintf_snsprintf(NULL, 0, 0, \"Z\")", 36);
+  do_run_test(test_myprintf_snsprintf_stub_17, "test_myprintf_snsprintf(\"\", 1, 1, \"\")", 37);
+  do_run_test(test_myprintf_snsprintf_stub_18, "test_myprintf_snsprintf(\"\", 0, 1, \"Z\")", 38);
+  do_run_test(test_myprintf_snsprintf_stub_19, "test_myprintf_snsprintf(\"\", 1, 2, \"\")", 39);
+  do_run_test(test_myprintf_snsprintf_stub_20, "test_myprintf_snsprintf(\"X\", 1, 2, \"X\")", 40);
+  do_run_test(test_myprintf_snsprintf_stub_21, "test_myprintf_snsprintf(\"X\", 0, 2, \"XZ\")", 41);
+  do_run_test(test_printf_format_stub_22, "test_printf_format(\"\", \"\")", 56);
+  do_run_test(test_printf_format_stub_23, "test_printf_format(\"x\", \"x\")", 57);
+  do_run_test(test_printf_format_stub_24, "test_printf_format(\"x%x\", \"x%%x\")", 60);
+  do_run_test(test_printf_format_stub_25, "test_printf_format(\"x%x\", \"x%3%x\")", 61);
+  do_run_test(test_printf_format_stub_26, "test_printf_format(\"x%x\", \"x%0%x\")", 62);
+  do_run_test(test_printf_format_stub_27, "test_printf_format(\"x%x\", \"x%03%x\")", 63);
+  do_run_test(test_printf_format_stub_28, "test_printf_format(\"x%x\", \"x%-3%x\")", 64);
+  do_run_test(test_printf_format_stub_29, "test_printf_format(\"xzx\", \"x%cx\", 'z')", 67);
+  do_run_test(test_printf_format_stub_30, "test_printf_format(\"xzx\", \"x%1cx\", 'z')", 68);
+  do_run_test(test_printf_format_stub_31, "test_printf_format(\"x zx\", \"x%2cx\", 'z')", 69);
+  do_run_test(test_printf_format_stub_32, "test_printf_format(\"xz x\", \"x%-2cx\", 'z')", 70);
+  do_run_test(test_printf_format_stub_33, "test_printf_format(\"xzx\", \"x%sx\", \"z\")", 73);
+  do_run_test(test_printf_format_stub_34, "test_printf_format(\"x(null)x\", \"x%sx\", NULL)", 74);
+  do_run_test(test_printf_format_stub_35, "test_printf_format(\"x  zx\", \"x%3sx\", \"z\")", 75);
+  do_run_test(test_printf_format_stub_36, "test_printf_format(\"xz  x\", \"x%-3sx\", \"z\")", 76);
+  do_run_test(test_printf_format_stub_37, "test_printf_format(\"x0x\", \"x%dx\", 0)", 79);
+  do_run_test(test_printf_format_stub_38, "test_printf_format(\"x123x\", \"x%dx\", 123)", 80);
+  do_run_test(test_printf_format_stub_39, "test_printf_format(\"x1x\", \"x%0dx\", 1)", 81);
+  do_run_test(test_printf_format_stub_40, "test_printf_format(\"x1x\", \"x%1dx\", 1)", 82);
+  do_run_test(test_printf_format_stub_41, "test_printf_format(\"x 1x\", \"x%2dx\", 1)", 83);
+  do_run_test(test_printf_format_stub_42, "test_printf_format(\"x01x\", \"x%02dx\", 1)", 84);
+  do_run_test(test_printf_format_stub_43, "test_printf_format(\"x1 x\", \"x%-2dx\", 1)", 85);
+  do_run_test(test_printf_format_stub_44, "test_printf_format(\"x65535x\", \"x%ux\", 0xffff)", 88);
+  do_run_test(test_printf_format_stub_45, "test_printf_format(\"x4294967295x\", \"x%ux\", 0xffffffff)", 89);
+  do_run_test(test_printf_format_stub_46, "test_printf_format(\"x65535x\", \"x%ux\", 65535)", 90);
+  do_run_test(test_printf_format_stub_47, "test_printf_format(\"xffffffffx\", \"x%lxx\", 0xffffffff)", 91);
+  do_run_test(test_printf_format_stub_48, "test_printf_format(\"x32767x\", \"x%dx\", 32767)", 92);
+  do_run_test(test_printf_format_stub_49, "test_printf_format(\"x-32768x\", \"x%dx\", -32768)", 93);
+  do_run_test(test_printf_format_stub_50, "test_printf_format(\"x2147483647x\", \"x%ldx\", 2147483647)", 94);
+  do_run_test(test_printf_format_stub_51, "test_printf_format(\"x-2147483648x\", \"x%ldx\", -2147483648)", 95);
+  do_run_test(test_printf_format_stub_52, "test_printf_format(\"x0x\", \"x%xx\", 0)", 98);
+  do_run_test(test_printf_format_stub_53, "test_printf_format(\"xabcx\", \"x%xx\", 0xABC)", 99);
+  do_run_test(test_printf_format_stub_54, "test_printf_format(\"xABCx\", \"x%Xx\", 0xABC)", 100);
+  do_run_test(test_printf_format_stub_55, "test_printf_format(\"x0x\", \"x%bx\", 0)", 103);
+  do_run_test(test_printf_format_stub_56, "test_printf_format(\"x101x\", \"x%bx\", 5)", 104);
+  do_run_test(test_myprintf_format_binary_max, "test_myprintf_format_binary_max", 105);
   
   UnitySetTestFile("test_utils.cpp");
   do_run_test(test_utils_endianness, "test_utils_endianness", 12);
@@ -460,230 +517,232 @@ int main(int argc, char** argv) {
   do_run_test(testUtilsQueueSetup, "testUtilsQueueSetup", 44);
   registerFixture(testUtilsQueueSetup, NULL, NULL);
   do_run_test(testUtilsQueueEmpty, "testUtilsQueueEmpty", 56);
-  do_run_test(testUtilsQueuePut_stub_38, "testUtilsQueuePut(queueQPut, 0, 0, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_39, "testUtilsQueuePut(queueQPut, 0, 1, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_40, "testUtilsQueuePut(queueQPut, 0, 2, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_41, "testUtilsQueuePut(queueQPut, 0, 3, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_42, "testUtilsQueuePut(queueQPut, 0, 4, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_43, "testUtilsQueuePut(queueQPut, 1, 0, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_44, "testUtilsQueuePut(queueQPut, 1, 1, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_45, "testUtilsQueuePut(queueQPut, 1, 2, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_46, "testUtilsQueuePut(queueQPut, 1, 3, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_47, "testUtilsQueuePut(queueQPut, 1, 4, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_48, "testUtilsQueuePut(queueQPut, 2, 0, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_49, "testUtilsQueuePut(queueQPut, 2, 1, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_50, "testUtilsQueuePut(queueQPut, 2, 2, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_51, "testUtilsQueuePut(queueQPut, 2, 3, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_52, "testUtilsQueuePut(queueQPut, 2, 4, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_53, "testUtilsQueuePut(queueQPut, 3, 0, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_54, "testUtilsQueuePut(queueQPut, 3, 1, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_55, "testUtilsQueuePut(queueQPut, 3, 2, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_56, "testUtilsQueuePut(queueQPut, 3, 3, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_57, "testUtilsQueuePut(queueQPut, 3, 4, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_58, "testUtilsQueuePut(queueQPut, 4, 0, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_59, "testUtilsQueuePut(queueQPut, 4, 1, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_60, "testUtilsQueuePut(queueQPut, 4, 2, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_61, "testUtilsQueuePut(queueQPut, 4, 3, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_62, "testUtilsQueuePut(queueQPut, 4, 4, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_63, "testUtilsQueuePut(queueQPut, 5, 0, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_64, "testUtilsQueuePut(queueQPut, 5, 1, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_65, "testUtilsQueuePut(queueQPut, 5, 2, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_66, "testUtilsQueuePut(queueQPut, 5, 3, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_67, "testUtilsQueuePut(queueQPut, 5, 4, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_68, "testUtilsQueuePut(queueQPut, 254, 0, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_69, "testUtilsQueuePut(queueQPut, 254, 1, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_70, "testUtilsQueuePut(queueQPut, 254, 2, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_71, "testUtilsQueuePut(queueQPut, 254, 3, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_72, "testUtilsQueuePut(queueQPut, 254, 4, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_73, "testUtilsQueuePut(queueQPut, 255, 0, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_74, "testUtilsQueuePut(queueQPut, 255, 1, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_75, "testUtilsQueuePut(queueQPut, 255, 2, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_76, "testUtilsQueuePut(queueQPut, 255, 3, 10, 1)", 105);
-  do_run_test(testUtilsQueuePut_stub_77, "testUtilsQueuePut(queueQPut, 255, 4, 10, 1)", 105);
-  do_run_test(testUtilsQueuePutOvf_stub_78, "testUtilsQueuePutOvf(queueQPut, 0, 10, 1)", 112);
-  do_run_test(testUtilsQueuePutOvf_stub_79, "testUtilsQueuePutOvf(queueQPut, 1, 10, 1)", 112);
-  do_run_test(testUtilsQueuePutOvf_stub_80, "testUtilsQueuePutOvf(queueQPut, 2, 10, 1)", 112);
-  do_run_test(testUtilsQueuePutOvf_stub_81, "testUtilsQueuePutOvf(queueQPut, 3, 10, 1)", 112);
-  do_run_test(testUtilsQueuePutOvf_stub_82, "testUtilsQueuePutOvf(queueQPut, 4, 10, 1)", 112);
-  do_run_test(testUtilsQueuePutOvf_stub_83, "testUtilsQueuePutOvf(queueQPut, 5, 10, 1)", 112);
-  do_run_test(testUtilsQueuePutOvf_stub_84, "testUtilsQueuePutOvf(queueQPut, 254, 10, 1)", 112);
-  do_run_test(testUtilsQueuePutOvf_stub_85, "testUtilsQueuePutOvf(queueQPut, 255, 10, 1)", 112);
-  do_run_test(testUtilsQueuePut_stub_86, "testUtilsQueuePut(queueQPush, 0, 0, 9, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_87, "testUtilsQueuePut(queueQPush, 0, 1, 10, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_88, "testUtilsQueuePut(queueQPush, 0, 2, 11, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_89, "testUtilsQueuePut(queueQPush, 0, 3, 12, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_90, "testUtilsQueuePut(queueQPush, 0, 4, 13, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_91, "testUtilsQueuePut(queueQPush, 1, 0, 9, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_92, "testUtilsQueuePut(queueQPush, 1, 1, 10, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_93, "testUtilsQueuePut(queueQPush, 1, 2, 11, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_94, "testUtilsQueuePut(queueQPush, 1, 3, 12, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_95, "testUtilsQueuePut(queueQPush, 1, 4, 13, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_96, "testUtilsQueuePut(queueQPush, 2, 0, 9, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_97, "testUtilsQueuePut(queueQPush, 2, 1, 10, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_98, "testUtilsQueuePut(queueQPush, 2, 2, 11, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_99, "testUtilsQueuePut(queueQPush, 2, 3, 12, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_100, "testUtilsQueuePut(queueQPush, 2, 4, 13, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_101, "testUtilsQueuePut(queueQPush, 3, 0, 9, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_102, "testUtilsQueuePut(queueQPush, 3, 1, 10, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_103, "testUtilsQueuePut(queueQPush, 3, 2, 11, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_104, "testUtilsQueuePut(queueQPush, 3, 3, 12, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_105, "testUtilsQueuePut(queueQPush, 3, 4, 13, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_106, "testUtilsQueuePut(queueQPush, 4, 0, 9, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_107, "testUtilsQueuePut(queueQPush, 4, 1, 10, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_108, "testUtilsQueuePut(queueQPush, 4, 2, 11, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_109, "testUtilsQueuePut(queueQPush, 4, 3, 12, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_110, "testUtilsQueuePut(queueQPush, 4, 4, 13, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_111, "testUtilsQueuePut(queueQPush, 5, 0, 9, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_112, "testUtilsQueuePut(queueQPush, 5, 1, 10, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_113, "testUtilsQueuePut(queueQPush, 5, 2, 11, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_114, "testUtilsQueuePut(queueQPush, 5, 3, 12, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_115, "testUtilsQueuePut(queueQPush, 5, 4, 13, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_116, "testUtilsQueuePut(queueQPush, 254, 0, 9, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_117, "testUtilsQueuePut(queueQPush, 254, 1, 10, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_118, "testUtilsQueuePut(queueQPush, 254, 2, 11, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_119, "testUtilsQueuePut(queueQPush, 254, 3, 12, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_120, "testUtilsQueuePut(queueQPush, 254, 4, 13, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_121, "testUtilsQueuePut(queueQPush, 255, 0, 9, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_122, "testUtilsQueuePut(queueQPush, 255, 1, 10, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_123, "testUtilsQueuePut(queueQPush, 255, 2, 11, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_124, "testUtilsQueuePut(queueQPush, 255, 3, 12, -1)", 123);
-  do_run_test(testUtilsQueuePut_stub_125, "testUtilsQueuePut(queueQPush, 255, 4, 13, -1)", 123);
-  do_run_test(testUtilsQueuePutOvf_stub_126, "testUtilsQueuePutOvf(queueQPush, 0, 13, -1)", 130);
-  do_run_test(testUtilsQueuePutOvf_stub_127, "testUtilsQueuePutOvf(queueQPush, 1, 13, -1)", 130);
-  do_run_test(testUtilsQueuePutOvf_stub_128, "testUtilsQueuePutOvf(queueQPush, 2, 13, -1)", 130);
-  do_run_test(testUtilsQueuePutOvf_stub_129, "testUtilsQueuePutOvf(queueQPush, 3, 13, -1)", 130);
-  do_run_test(testUtilsQueuePutOvf_stub_130, "testUtilsQueuePutOvf(queueQPush, 4, 13, -1)", 130);
-  do_run_test(testUtilsQueuePutOvf_stub_131, "testUtilsQueuePutOvf(queueQPush, 5, 13, -1)", 130);
-  do_run_test(testUtilsQueuePutOvf_stub_132, "testUtilsQueuePutOvf(queueQPush, 254, 13, -1)", 130);
-  do_run_test(testUtilsQueuePutOvf_stub_133, "testUtilsQueuePutOvf(queueQPush, 255, 13, -1)", 130);
-  do_run_test(testUtilsQueuePutLifo_stub_134, "testUtilsQueuePutLifo(0, 0)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_135, "testUtilsQueuePutLifo(0, 1)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_136, "testUtilsQueuePutLifo(0, 2)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_137, "testUtilsQueuePutLifo(0, 3)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_138, "testUtilsQueuePutLifo(1, 0)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_139, "testUtilsQueuePutLifo(1, 1)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_140, "testUtilsQueuePutLifo(1, 2)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_141, "testUtilsQueuePutLifo(1, 3)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_142, "testUtilsQueuePutLifo(2, 0)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_143, "testUtilsQueuePutLifo(2, 1)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_144, "testUtilsQueuePutLifo(2, 2)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_145, "testUtilsQueuePutLifo(2, 3)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_146, "testUtilsQueuePutLifo(3, 0)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_147, "testUtilsQueuePutLifo(3, 1)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_148, "testUtilsQueuePutLifo(3, 2)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_149, "testUtilsQueuePutLifo(3, 3)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_150, "testUtilsQueuePutLifo(4, 0)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_151, "testUtilsQueuePutLifo(4, 1)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_152, "testUtilsQueuePutLifo(4, 2)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_153, "testUtilsQueuePutLifo(4, 3)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_154, "testUtilsQueuePutLifo(5, 0)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_155, "testUtilsQueuePutLifo(5, 1)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_156, "testUtilsQueuePutLifo(5, 2)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_157, "testUtilsQueuePutLifo(5, 3)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_158, "testUtilsQueuePutLifo(254, 0)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_159, "testUtilsQueuePutLifo(254, 1)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_160, "testUtilsQueuePutLifo(254, 2)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_161, "testUtilsQueuePutLifo(254, 3)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_162, "testUtilsQueuePutLifo(255, 0)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_163, "testUtilsQueuePutLifo(255, 1)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_164, "testUtilsQueuePutLifo(255, 2)", 153);
-  do_run_test(testUtilsQueuePutLifo_stub_165, "testUtilsQueuePutLifo(255, 3)", 153);
-  do_run_test(testUtilsQueuePutOverwrite_stub_166, "testUtilsQueuePutOverwrite(0, 0)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_167, "testUtilsQueuePutOverwrite(0, 1)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_168, "testUtilsQueuePutOverwrite(0, 2)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_169, "testUtilsQueuePutOverwrite(0, 3)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_170, "testUtilsQueuePutOverwrite(0, 4)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_171, "testUtilsQueuePutOverwrite(0, 5)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_172, "testUtilsQueuePutOverwrite(0, 6)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_173, "testUtilsQueuePutOverwrite(1, 0)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_174, "testUtilsQueuePutOverwrite(1, 1)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_175, "testUtilsQueuePutOverwrite(1, 2)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_176, "testUtilsQueuePutOverwrite(1, 3)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_177, "testUtilsQueuePutOverwrite(1, 4)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_178, "testUtilsQueuePutOverwrite(1, 5)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_179, "testUtilsQueuePutOverwrite(1, 6)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_180, "testUtilsQueuePutOverwrite(2, 0)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_181, "testUtilsQueuePutOverwrite(2, 1)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_182, "testUtilsQueuePutOverwrite(2, 2)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_183, "testUtilsQueuePutOverwrite(2, 3)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_184, "testUtilsQueuePutOverwrite(2, 4)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_185, "testUtilsQueuePutOverwrite(2, 5)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_186, "testUtilsQueuePutOverwrite(2, 6)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_187, "testUtilsQueuePutOverwrite(3, 0)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_188, "testUtilsQueuePutOverwrite(3, 1)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_189, "testUtilsQueuePutOverwrite(3, 2)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_190, "testUtilsQueuePutOverwrite(3, 3)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_191, "testUtilsQueuePutOverwrite(3, 4)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_192, "testUtilsQueuePutOverwrite(3, 5)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_193, "testUtilsQueuePutOverwrite(3, 6)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_194, "testUtilsQueuePutOverwrite(4, 0)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_195, "testUtilsQueuePutOverwrite(4, 1)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_196, "testUtilsQueuePutOverwrite(4, 2)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_197, "testUtilsQueuePutOverwrite(4, 3)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_198, "testUtilsQueuePutOverwrite(4, 4)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_199, "testUtilsQueuePutOverwrite(4, 5)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_200, "testUtilsQueuePutOverwrite(4, 6)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_201, "testUtilsQueuePutOverwrite(5, 0)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_202, "testUtilsQueuePutOverwrite(5, 1)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_203, "testUtilsQueuePutOverwrite(5, 2)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_204, "testUtilsQueuePutOverwrite(5, 3)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_205, "testUtilsQueuePutOverwrite(5, 4)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_206, "testUtilsQueuePutOverwrite(5, 5)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_207, "testUtilsQueuePutOverwrite(5, 6)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_208, "testUtilsQueuePutOverwrite(254, 0)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_209, "testUtilsQueuePutOverwrite(254, 1)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_210, "testUtilsQueuePutOverwrite(254, 2)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_211, "testUtilsQueuePutOverwrite(254, 3)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_212, "testUtilsQueuePutOverwrite(254, 4)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_213, "testUtilsQueuePutOverwrite(254, 5)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_214, "testUtilsQueuePutOverwrite(254, 6)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_215, "testUtilsQueuePutOverwrite(255, 0)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_216, "testUtilsQueuePutOverwrite(255, 1)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_217, "testUtilsQueuePutOverwrite(255, 2)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_218, "testUtilsQueuePutOverwrite(255, 3)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_219, "testUtilsQueuePutOverwrite(255, 4)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_220, "testUtilsQueuePutOverwrite(255, 5)", 179);
-  do_run_test(testUtilsQueuePutOverwrite_stub_221, "testUtilsQueuePutOverwrite(255, 6)", 179);
+  do_run_test(testUtilsQueuePut_stub_57, "testUtilsQueuePut(queueQPut, 0, 0, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_58, "testUtilsQueuePut(queueQPut, 0, 1, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_59, "testUtilsQueuePut(queueQPut, 0, 2, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_60, "testUtilsQueuePut(queueQPut, 0, 3, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_61, "testUtilsQueuePut(queueQPut, 0, 4, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_62, "testUtilsQueuePut(queueQPut, 1, 0, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_63, "testUtilsQueuePut(queueQPut, 1, 1, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_64, "testUtilsQueuePut(queueQPut, 1, 2, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_65, "testUtilsQueuePut(queueQPut, 1, 3, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_66, "testUtilsQueuePut(queueQPut, 1, 4, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_67, "testUtilsQueuePut(queueQPut, 2, 0, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_68, "testUtilsQueuePut(queueQPut, 2, 1, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_69, "testUtilsQueuePut(queueQPut, 2, 2, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_70, "testUtilsQueuePut(queueQPut, 2, 3, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_71, "testUtilsQueuePut(queueQPut, 2, 4, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_72, "testUtilsQueuePut(queueQPut, 3, 0, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_73, "testUtilsQueuePut(queueQPut, 3, 1, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_74, "testUtilsQueuePut(queueQPut, 3, 2, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_75, "testUtilsQueuePut(queueQPut, 3, 3, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_76, "testUtilsQueuePut(queueQPut, 3, 4, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_77, "testUtilsQueuePut(queueQPut, 4, 0, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_78, "testUtilsQueuePut(queueQPut, 4, 1, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_79, "testUtilsQueuePut(queueQPut, 4, 2, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_80, "testUtilsQueuePut(queueQPut, 4, 3, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_81, "testUtilsQueuePut(queueQPut, 4, 4, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_82, "testUtilsQueuePut(queueQPut, 5, 0, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_83, "testUtilsQueuePut(queueQPut, 5, 1, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_84, "testUtilsQueuePut(queueQPut, 5, 2, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_85, "testUtilsQueuePut(queueQPut, 5, 3, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_86, "testUtilsQueuePut(queueQPut, 5, 4, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_87, "testUtilsQueuePut(queueQPut, 254, 0, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_88, "testUtilsQueuePut(queueQPut, 254, 1, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_89, "testUtilsQueuePut(queueQPut, 254, 2, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_90, "testUtilsQueuePut(queueQPut, 254, 3, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_91, "testUtilsQueuePut(queueQPut, 254, 4, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_92, "testUtilsQueuePut(queueQPut, 255, 0, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_93, "testUtilsQueuePut(queueQPut, 255, 1, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_94, "testUtilsQueuePut(queueQPut, 255, 2, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_95, "testUtilsQueuePut(queueQPut, 255, 3, 10, 1)", 105);
+  do_run_test(testUtilsQueuePut_stub_96, "testUtilsQueuePut(queueQPut, 255, 4, 10, 1)", 105);
+  do_run_test(testUtilsQueuePutOvf_stub_97, "testUtilsQueuePutOvf(queueQPut, 0, 10, 1)", 112);
+  do_run_test(testUtilsQueuePutOvf_stub_98, "testUtilsQueuePutOvf(queueQPut, 1, 10, 1)", 112);
+  do_run_test(testUtilsQueuePutOvf_stub_99, "testUtilsQueuePutOvf(queueQPut, 2, 10, 1)", 112);
+  do_run_test(testUtilsQueuePutOvf_stub_100, "testUtilsQueuePutOvf(queueQPut, 3, 10, 1)", 112);
+  do_run_test(testUtilsQueuePutOvf_stub_101, "testUtilsQueuePutOvf(queueQPut, 4, 10, 1)", 112);
+  do_run_test(testUtilsQueuePutOvf_stub_102, "testUtilsQueuePutOvf(queueQPut, 5, 10, 1)", 112);
+  do_run_test(testUtilsQueuePutOvf_stub_103, "testUtilsQueuePutOvf(queueQPut, 254, 10, 1)", 112);
+  do_run_test(testUtilsQueuePutOvf_stub_104, "testUtilsQueuePutOvf(queueQPut, 255, 10, 1)", 112);
+  do_run_test(testUtilsQueuePut_stub_105, "testUtilsQueuePut(queueQPush, 0, 0, 9, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_106, "testUtilsQueuePut(queueQPush, 0, 1, 10, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_107, "testUtilsQueuePut(queueQPush, 0, 2, 11, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_108, "testUtilsQueuePut(queueQPush, 0, 3, 12, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_109, "testUtilsQueuePut(queueQPush, 0, 4, 13, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_110, "testUtilsQueuePut(queueQPush, 1, 0, 9, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_111, "testUtilsQueuePut(queueQPush, 1, 1, 10, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_112, "testUtilsQueuePut(queueQPush, 1, 2, 11, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_113, "testUtilsQueuePut(queueQPush, 1, 3, 12, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_114, "testUtilsQueuePut(queueQPush, 1, 4, 13, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_115, "testUtilsQueuePut(queueQPush, 2, 0, 9, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_116, "testUtilsQueuePut(queueQPush, 2, 1, 10, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_117, "testUtilsQueuePut(queueQPush, 2, 2, 11, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_118, "testUtilsQueuePut(queueQPush, 2, 3, 12, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_119, "testUtilsQueuePut(queueQPush, 2, 4, 13, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_120, "testUtilsQueuePut(queueQPush, 3, 0, 9, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_121, "testUtilsQueuePut(queueQPush, 3, 1, 10, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_122, "testUtilsQueuePut(queueQPush, 3, 2, 11, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_123, "testUtilsQueuePut(queueQPush, 3, 3, 12, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_124, "testUtilsQueuePut(queueQPush, 3, 4, 13, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_125, "testUtilsQueuePut(queueQPush, 4, 0, 9, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_126, "testUtilsQueuePut(queueQPush, 4, 1, 10, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_127, "testUtilsQueuePut(queueQPush, 4, 2, 11, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_128, "testUtilsQueuePut(queueQPush, 4, 3, 12, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_129, "testUtilsQueuePut(queueQPush, 4, 4, 13, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_130, "testUtilsQueuePut(queueQPush, 5, 0, 9, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_131, "testUtilsQueuePut(queueQPush, 5, 1, 10, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_132, "testUtilsQueuePut(queueQPush, 5, 2, 11, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_133, "testUtilsQueuePut(queueQPush, 5, 3, 12, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_134, "testUtilsQueuePut(queueQPush, 5, 4, 13, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_135, "testUtilsQueuePut(queueQPush, 254, 0, 9, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_136, "testUtilsQueuePut(queueQPush, 254, 1, 10, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_137, "testUtilsQueuePut(queueQPush, 254, 2, 11, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_138, "testUtilsQueuePut(queueQPush, 254, 3, 12, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_139, "testUtilsQueuePut(queueQPush, 254, 4, 13, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_140, "testUtilsQueuePut(queueQPush, 255, 0, 9, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_141, "testUtilsQueuePut(queueQPush, 255, 1, 10, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_142, "testUtilsQueuePut(queueQPush, 255, 2, 11, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_143, "testUtilsQueuePut(queueQPush, 255, 3, 12, -1)", 123);
+  do_run_test(testUtilsQueuePut_stub_144, "testUtilsQueuePut(queueQPush, 255, 4, 13, -1)", 123);
+  do_run_test(testUtilsQueuePutOvf_stub_145, "testUtilsQueuePutOvf(queueQPush, 0, 13, -1)", 130);
+  do_run_test(testUtilsQueuePutOvf_stub_146, "testUtilsQueuePutOvf(queueQPush, 1, 13, -1)", 130);
+  do_run_test(testUtilsQueuePutOvf_stub_147, "testUtilsQueuePutOvf(queueQPush, 2, 13, -1)", 130);
+  do_run_test(testUtilsQueuePutOvf_stub_148, "testUtilsQueuePutOvf(queueQPush, 3, 13, -1)", 130);
+  do_run_test(testUtilsQueuePutOvf_stub_149, "testUtilsQueuePutOvf(queueQPush, 4, 13, -1)", 130);
+  do_run_test(testUtilsQueuePutOvf_stub_150, "testUtilsQueuePutOvf(queueQPush, 5, 13, -1)", 130);
+  do_run_test(testUtilsQueuePutOvf_stub_151, "testUtilsQueuePutOvf(queueQPush, 254, 13, -1)", 130);
+  do_run_test(testUtilsQueuePutOvf_stub_152, "testUtilsQueuePutOvf(queueQPush, 255, 13, -1)", 130);
+  do_run_test(testUtilsQueuePutLifo_stub_153, "testUtilsQueuePutLifo(0, 0)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_154, "testUtilsQueuePutLifo(0, 1)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_155, "testUtilsQueuePutLifo(0, 2)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_156, "testUtilsQueuePutLifo(0, 3)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_157, "testUtilsQueuePutLifo(1, 0)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_158, "testUtilsQueuePutLifo(1, 1)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_159, "testUtilsQueuePutLifo(1, 2)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_160, "testUtilsQueuePutLifo(1, 3)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_161, "testUtilsQueuePutLifo(2, 0)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_162, "testUtilsQueuePutLifo(2, 1)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_163, "testUtilsQueuePutLifo(2, 2)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_164, "testUtilsQueuePutLifo(2, 3)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_165, "testUtilsQueuePutLifo(3, 0)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_166, "testUtilsQueuePutLifo(3, 1)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_167, "testUtilsQueuePutLifo(3, 2)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_168, "testUtilsQueuePutLifo(3, 3)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_169, "testUtilsQueuePutLifo(4, 0)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_170, "testUtilsQueuePutLifo(4, 1)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_171, "testUtilsQueuePutLifo(4, 2)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_172, "testUtilsQueuePutLifo(4, 3)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_173, "testUtilsQueuePutLifo(5, 0)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_174, "testUtilsQueuePutLifo(5, 1)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_175, "testUtilsQueuePutLifo(5, 2)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_176, "testUtilsQueuePutLifo(5, 3)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_177, "testUtilsQueuePutLifo(254, 0)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_178, "testUtilsQueuePutLifo(254, 1)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_179, "testUtilsQueuePutLifo(254, 2)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_180, "testUtilsQueuePutLifo(254, 3)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_181, "testUtilsQueuePutLifo(255, 0)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_182, "testUtilsQueuePutLifo(255, 1)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_183, "testUtilsQueuePutLifo(255, 2)", 153);
+  do_run_test(testUtilsQueuePutLifo_stub_184, "testUtilsQueuePutLifo(255, 3)", 153);
+  do_run_test(testUtilsQueuePutOverwrite_stub_185, "testUtilsQueuePutOverwrite(0, 0)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_186, "testUtilsQueuePutOverwrite(0, 1)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_187, "testUtilsQueuePutOverwrite(0, 2)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_188, "testUtilsQueuePutOverwrite(0, 3)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_189, "testUtilsQueuePutOverwrite(0, 4)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_190, "testUtilsQueuePutOverwrite(0, 5)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_191, "testUtilsQueuePutOverwrite(0, 6)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_192, "testUtilsQueuePutOverwrite(1, 0)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_193, "testUtilsQueuePutOverwrite(1, 1)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_194, "testUtilsQueuePutOverwrite(1, 2)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_195, "testUtilsQueuePutOverwrite(1, 3)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_196, "testUtilsQueuePutOverwrite(1, 4)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_197, "testUtilsQueuePutOverwrite(1, 5)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_198, "testUtilsQueuePutOverwrite(1, 6)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_199, "testUtilsQueuePutOverwrite(2, 0)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_200, "testUtilsQueuePutOverwrite(2, 1)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_201, "testUtilsQueuePutOverwrite(2, 2)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_202, "testUtilsQueuePutOverwrite(2, 3)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_203, "testUtilsQueuePutOverwrite(2, 4)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_204, "testUtilsQueuePutOverwrite(2, 5)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_205, "testUtilsQueuePutOverwrite(2, 6)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_206, "testUtilsQueuePutOverwrite(3, 0)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_207, "testUtilsQueuePutOverwrite(3, 1)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_208, "testUtilsQueuePutOverwrite(3, 2)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_209, "testUtilsQueuePutOverwrite(3, 3)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_210, "testUtilsQueuePutOverwrite(3, 4)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_211, "testUtilsQueuePutOverwrite(3, 5)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_212, "testUtilsQueuePutOverwrite(3, 6)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_213, "testUtilsQueuePutOverwrite(4, 0)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_214, "testUtilsQueuePutOverwrite(4, 1)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_215, "testUtilsQueuePutOverwrite(4, 2)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_216, "testUtilsQueuePutOverwrite(4, 3)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_217, "testUtilsQueuePutOverwrite(4, 4)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_218, "testUtilsQueuePutOverwrite(4, 5)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_219, "testUtilsQueuePutOverwrite(4, 6)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_220, "testUtilsQueuePutOverwrite(5, 0)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_221, "testUtilsQueuePutOverwrite(5, 1)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_222, "testUtilsQueuePutOverwrite(5, 2)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_223, "testUtilsQueuePutOverwrite(5, 3)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_224, "testUtilsQueuePutOverwrite(5, 4)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_225, "testUtilsQueuePutOverwrite(5, 5)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_226, "testUtilsQueuePutOverwrite(5, 6)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_227, "testUtilsQueuePutOverwrite(254, 0)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_228, "testUtilsQueuePutOverwrite(254, 1)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_229, "testUtilsQueuePutOverwrite(254, 2)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_230, "testUtilsQueuePutOverwrite(254, 3)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_231, "testUtilsQueuePutOverwrite(254, 4)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_232, "testUtilsQueuePutOverwrite(254, 5)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_233, "testUtilsQueuePutOverwrite(254, 6)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_234, "testUtilsQueuePutOverwrite(255, 0)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_235, "testUtilsQueuePutOverwrite(255, 1)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_236, "testUtilsQueuePutOverwrite(255, 2)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_237, "testUtilsQueuePutOverwrite(255, 3)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_238, "testUtilsQueuePutOverwrite(255, 4)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_239, "testUtilsQueuePutOverwrite(255, 5)", 179);
+  do_run_test(testUtilsQueuePutOverwrite_stub_240, "testUtilsQueuePutOverwrite(255, 6)", 179);
   do_run_test(testCleared, "testCleared", 182);
   do_run_test(testUtilsBufferSetup, "testUtilsBufferSetup", 198);
   registerFixture(testUtilsBufferSetup, NULL, NULL);
   do_run_test(testBufferInit, "testBufferInit", 210);
-  do_run_test(testBufferAddChar_stub_222, "testBufferAddChar(1)", 225);
-  do_run_test(testBufferAddChar_stub_223, "testBufferAddChar(TEST_UTILS_BUF_SIZE-1)", 226);
-  do_run_test(testBufferAddChar_stub_224, "testBufferAddChar(TEST_UTILS_BUF_SIZE)", 227);
+  do_run_test(testBufferAddChar_stub_241, "testBufferAddChar(1)", 225);
+  do_run_test(testBufferAddChar_stub_242, "testBufferAddChar(TEST_UTILS_BUF_SIZE-1)", 226);
+  do_run_test(testBufferAddChar_stub_243, "testBufferAddChar(TEST_UTILS_BUF_SIZE)", 227);
   do_run_test(testBufferAddCharOverflow, "testBufferAddCharOverflow", 229);
-  do_run_test(testBufferAddU16_stub_225, "testBufferAddU16(1)", 255);
-  do_run_test(testBufferAddU16_stub_226, "testBufferAddU16(TEST_UTILS_BUF_SIZE/2-1)", 256);
-  do_run_test(testBufferAddU16_stub_227, "testBufferAddU16(TEST_UTILS_BUF_SIZE/2)", 257);
+  do_run_test(testBufferAddU16_stub_244, "testBufferAddU16(1)", 255);
+  do_run_test(testBufferAddU16_stub_245, "testBufferAddU16(TEST_UTILS_BUF_SIZE/2-1)", 256);
+  do_run_test(testBufferAddU16_stub_246, "testBufferAddU16(TEST_UTILS_BUF_SIZE/2)", 257);
   do_run_test(testBufferAddU16Overflow, "testBufferAddU16Overflow", 259);
   do_run_test(testBufferAddMem, "testBufferAddMem", 272);
   do_run_test(testUtilsBufferReset, "testUtilsBufferReset", 289);
   do_run_test(test_utils_str_is_wsp, "test_utils_str_is_wsp", 300);
-  do_run_test(test_utils_scan_past_wsp_stub_228, "test_utils_scan_past_wsp(\"\", '\\0')", 315);
-  do_run_test(test_utils_scan_past_wsp_stub_229, "test_utils_scan_past_wsp(\"\\t \", '\\0')", 316);
-  do_run_test(test_utils_scan_past_wsp_stub_230, "test_utils_scan_past_wsp(\"\\t a\", 'a')", 317);
-  do_run_test(testUtilsStrtoui_stub_231, "testUtilsStrtoui(\"\", 0, 10, UTILS_STRTOUI_RC_NO_CHARS, 0, '\\0')", 354);
-  do_run_test(testUtilsStrtoui_stub_232, "testUtilsStrtoui(\"*\", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, '*')", 355);
-  do_run_test(testUtilsStrtoui_stub_233, "testUtilsStrtoui(\"9\", 0,  10, UTILS_STRTOUI_RC_OK, 9, '\\0')", 357);
-  do_run_test(testUtilsStrtoui_stub_234, "testUtilsStrtoui(\"1\", 0,  2, UTILS_STRTOUI_RC_OK, 1, '\\0')", 358);
-  do_run_test(testUtilsStrtoui_stub_235, "testUtilsStrtoui(\"f\", 0,  16, UTILS_STRTOUI_RC_OK, 15, '\\0')", 359);
-  do_run_test(testUtilsStrtoui_stub_236, "testUtilsStrtoui(\"F\", 0,  16, UTILS_STRTOUI_RC_OK, 15, '\\0')", 360);
-  do_run_test(testUtilsStrtoui_stub_237, "testUtilsStrtoui(\"z\", 0,  36, UTILS_STRTOUI_RC_OK, 35, '\\0')", 361);
-  do_run_test(testUtilsStrtoui_stub_238, "testUtilsStrtoui(\"Z\", 0,  36, UTILS_STRTOUI_RC_OK, 35, '\\0')", 362);
-  do_run_test(testUtilsStrtoui_stub_239, "testUtilsStrtoui(\"991\", 0,  10, UTILS_STRTOUI_RC_OK, 991, '\\0')", 364);
-  do_run_test(testUtilsStrtoui_stub_240, "testUtilsStrtoui(\"1110\", 0,  2, UTILS_STRTOUI_RC_OK, 14, '\\0')", 365);
-  do_run_test(testUtilsStrtoui_stub_241, "testUtilsStrtoui(\"fffe\", 0,  16, UTILS_STRTOUI_RC_OK, 0xfffe, '\\0')", 366);
-  do_run_test(testUtilsStrtoui_stub_242, "testUtilsStrtoui(\"FFFE\", 0,  16, UTILS_STRTOUI_RC_OK, 0xfffe, '\\0')", 367);
-  do_run_test(testUtilsStrtoui_stub_243, "testUtilsStrtoui(\"zz\", 0,  36, UTILS_STRTOUI_RC_OK, 35*36+35, '\\0')", 368);
-  do_run_test(testUtilsStrtoui_stub_244, "testUtilsStrtoui(\"Zz\", 0,  36, UTILS_STRTOUI_RC_OK, 35*36+35, '\\0')", 369);
-  do_run_test(testUtilsStrtoui_stub_245, "testUtilsStrtoui(\"+9\", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, '+')", 371);
-  do_run_test(testUtilsStrtoui_stub_246, "testUtilsStrtoui(\" 9\", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, ' ')", 372);
-  do_run_test(testUtilsStrtoui_stub_247, "testUtilsStrtoui(\"09\", 0,  10, UTILS_STRTOUI_RC_OK, 9, '\\0')", 373);
-  do_run_test(testUtilsStrtoui_stub_248, "testUtilsStrtoui(\"9 \", 0,  10, UTILS_STRTOUI_RC_OK, 9, ' ')", 375);
-  do_run_test(testUtilsStrtoui_stub_249, "testUtilsStrtoui(\"%llu\", UINT_MAX,  10, UTILS_STRTOUI_RC_OK, UINT_MAX, '\\0')", 379);
-  do_run_test(testUtilsStrtoui_stub_250, "testUtilsStrtoui(\"%llx\", UINT_MAX,  16, UTILS_STRTOUI_RC_OK, UINT_MAX, '\\0')", 380);
-  do_run_test(testUtilsStrtoui_stub_251, "testUtilsStrtoui(\"%llu\", (unsigned long long)UINT_MAX+1,  10, UTILS_STRTOUI_RC_OVERFLOW, 0, '\\0')", 382);
-  do_run_test(testUtilsStrtoui_stub_252, "testUtilsStrtoui(\"%llx\", (unsigned long long)UINT_MAX+1,  16, UTILS_STRTOUI_RC_OVERFLOW, 0, '\\0')", 383);
+  do_run_test(test_utils_scan_past_wsp_stub_247, "test_utils_scan_past_wsp(\"\", '\\0')", 315);
+  do_run_test(test_utils_scan_past_wsp_stub_248, "test_utils_scan_past_wsp(\"\\t \", '\\0')", 316);
+  do_run_test(test_utils_scan_past_wsp_stub_249, "test_utils_scan_past_wsp(\"\\t a\", 'a')", 317);
+  do_run_test(testUtilsStrtoui_stub_250, "testUtilsStrtoui(\"\", 0, 10, UTILS_STRTOUI_RC_NO_CHARS, 0, '\\0')", 354);
+  do_run_test(testUtilsStrtoui_stub_251, "testUtilsStrtoui(\"*\", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, '*')", 355);
+  do_run_test(testUtilsStrtoui_stub_252, "testUtilsStrtoui(\"9\", 0,  10, UTILS_STRTOUI_RC_OK, 9, '\\0')", 357);
+  do_run_test(testUtilsStrtoui_stub_253, "testUtilsStrtoui(\"1\", 0,  2, UTILS_STRTOUI_RC_OK, 1, '\\0')", 358);
+  do_run_test(testUtilsStrtoui_stub_254, "testUtilsStrtoui(\"f\", 0,  16, UTILS_STRTOUI_RC_OK, 15, '\\0')", 359);
+  do_run_test(testUtilsStrtoui_stub_255, "testUtilsStrtoui(\"F\", 0,  16, UTILS_STRTOUI_RC_OK, 15, '\\0')", 360);
+  do_run_test(testUtilsStrtoui_stub_256, "testUtilsStrtoui(\"z\", 0,  36, UTILS_STRTOUI_RC_OK, 35, '\\0')", 361);
+  do_run_test(testUtilsStrtoui_stub_257, "testUtilsStrtoui(\"Z\", 0,  36, UTILS_STRTOUI_RC_OK, 35, '\\0')", 362);
+  do_run_test(testUtilsStrtoui_stub_258, "testUtilsStrtoui(\"991\", 0,  10, UTILS_STRTOUI_RC_OK, 991, '\\0')", 364);
+  do_run_test(testUtilsStrtoui_stub_259, "testUtilsStrtoui(\"1110\", 0,  2, UTILS_STRTOUI_RC_OK, 14, '\\0')", 365);
+  do_run_test(testUtilsStrtoui_stub_260, "testUtilsStrtoui(\"fffe\", 0,  16, UTILS_STRTOUI_RC_OK, 0xfffe, '\\0')", 366);
+  do_run_test(testUtilsStrtoui_stub_261, "testUtilsStrtoui(\"FFFE\", 0,  16, UTILS_STRTOUI_RC_OK, 0xfffe, '\\0')", 367);
+  do_run_test(testUtilsStrtoui_stub_262, "testUtilsStrtoui(\"zz\", 0,  36, UTILS_STRTOUI_RC_OK, 35*36+35, '\\0')", 368);
+  do_run_test(testUtilsStrtoui_stub_263, "testUtilsStrtoui(\"Zz\", 0,  36, UTILS_STRTOUI_RC_OK, 35*36+35, '\\0')", 369);
+  do_run_test(testUtilsStrtoui_stub_264, "testUtilsStrtoui(\"+9\", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, '+')", 371);
+  do_run_test(testUtilsStrtoui_stub_265, "testUtilsStrtoui(\" 9\", 0,  10, UTILS_STRTOUI_RC_NO_CHARS, 0, ' ')", 372);
+  do_run_test(testUtilsStrtoui_stub_266, "testUtilsStrtoui(\"09\", 0,  10, UTILS_STRTOUI_RC_OK, 9, '\\0')", 373);
+  do_run_test(testUtilsStrtoui_stub_267, "testUtilsStrtoui(\"9 \", 0,  10, UTILS_STRTOUI_RC_OK, 9, ' ')", 375);
+  do_run_test(testUtilsStrtoui_stub_268, "testUtilsStrtoui(\"99a\", 0,  10, UTILS_STRTOUI_RC_OK, 99, 'a')", 376);
+  do_run_test(testUtilsStrtoui_stub_269, "testUtilsStrtoui(\"999@\", 0,  10, UTILS_STRTOUI_RC_OK, 999, '@')", 377);
+  do_run_test(testUtilsStrtoui_stub_270, "testUtilsStrtoui(\"%llu\", UINT_MAX,  10, UTILS_STRTOUI_RC_OK, UINT_MAX, '\\0')", 379);
+  do_run_test(testUtilsStrtoui_stub_271, "testUtilsStrtoui(\"%llx\", UINT_MAX,  16, UTILS_STRTOUI_RC_OK, UINT_MAX, '\\0')", 380);
+  do_run_test(testUtilsStrtoui_stub_272, "testUtilsStrtoui(\"%llu\", (unsigned long long)UINT_MAX+1,  10, UTILS_STRTOUI_RC_OVERFLOW, 0, '\\0')", 382);
+  do_run_test(testUtilsStrtoui_stub_273, "testUtilsStrtoui(\"%llx\", (unsigned long long)UINT_MAX+1,  16, UTILS_STRTOUI_RC_OVERFLOW, 0, '\\0')", 383);
   registerFixture(NULL, NULL, NULL);
 
   return UnityEnd();
