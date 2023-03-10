@@ -13,6 +13,12 @@ TT_END_INCLUDE()
 void test_utils_endianness() {
 	const uint16_t u16 = 0x1234, u16_r = 0x3412;
 	const uint32_t u32 = 0x12345678, u32_r = 0x78563412;
+
+	// These always swap. 
+	TEST_ASSERT_EQUAL_UINT16(u16, utilsU16_bswap(u16_r));
+	TEST_ASSERT_EQUAL_UINT16(u32, utilsU32_bswap(u32_r));
+	
+	// Swap depends on native endiannesss.
 	TEST_ASSERT_EQUAL_UINT16(u16, utilsU16_native_to_le(u16));
 	TEST_ASSERT_EQUAL_UINT16(u16, utilsU16_le_to_native(u16));
 	TEST_ASSERT_EQUAL_UINT32(u32, utilsU32_native_to_le(u32));
