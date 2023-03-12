@@ -1,6 +1,3 @@
-//#include <stdint.h>
-//#include <stdbool.h>
-//#include <stdlib.h>
 
 #include "unity.h"
 
@@ -77,4 +74,15 @@ void test_buffer_add_u16() {
 	memcpy(&u16, buf, 2);
 	b.add(u16);
 	verify_buffer(b, 4, 2);
+}
+
+// Copy constructor.
+void test_copy() {
+	/* Buffer b(4);
+	b.add('a');
+	b.add('b');
+	verify_buffer(b, 4, 2);
+	Buffer c(b);
+	verify_buffer(c, 4, 2);
+	TEST_ASSERT_EQUAL(0, memcmp((const uint8_t*)b, (const uint8_t*)c, b.len())); */
 }

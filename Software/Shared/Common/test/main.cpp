@@ -38,6 +38,7 @@ void test_buffer_add_mem();
 void test_buffer_add_mem_full_ovf();
 void test_buffer_add_mem_part_ovf();
 void test_buffer_add_u16();
+void test_copy();
 void testMakeEvent(t_event ev, uint8_t id, uint8_t p8=0, uint16_t p16=0);
 void testEventNameStr();
 void testEventDescStr();
@@ -454,17 +455,18 @@ int main(int argc, char** argv) {
 		return rc_parse;
   
   UnitySetTestFile("test_buffer.cpp");
-  do_run_test(test_buffer_new_stub_0, "test_buffer_new(0)", 24);
-  do_run_test(test_buffer_new_stub_1, "test_buffer_new(1)", 25);
-  do_run_test(test_buffer_new_stub_2, "test_buffer_new(2)", 26);
-  do_run_test(test_buffer_add_byte_stub_3, "test_buffer_add_byte(2, 1)", 35);
-  do_run_test(test_buffer_add_byte_stub_4, "test_buffer_add_byte(2, 2)", 36);
-  do_run_test(test_buffer_add_byte_stub_5, "test_buffer_add_byte(4, 4)", 37);
-  do_run_test(test_buffer_clear, "test_buffer_clear", 39);
-  do_run_test(test_buffer_add_mem, "test_buffer_add_mem", 48);
-  do_run_test(test_buffer_add_mem_full_ovf, "test_buffer_add_mem_full_ovf", 54);
-  do_run_test(test_buffer_add_mem_part_ovf, "test_buffer_add_mem_part_ovf", 62);
-  do_run_test(test_buffer_add_u16, "test_buffer_add_u16", 72);
+  do_run_test(test_buffer_new_stub_0, "test_buffer_new(0)", 21);
+  do_run_test(test_buffer_new_stub_1, "test_buffer_new(1)", 22);
+  do_run_test(test_buffer_new_stub_2, "test_buffer_new(2)", 23);
+  do_run_test(test_buffer_add_byte_stub_3, "test_buffer_add_byte(2, 1)", 32);
+  do_run_test(test_buffer_add_byte_stub_4, "test_buffer_add_byte(2, 2)", 33);
+  do_run_test(test_buffer_add_byte_stub_5, "test_buffer_add_byte(4, 4)", 34);
+  do_run_test(test_buffer_clear, "test_buffer_clear", 36);
+  do_run_test(test_buffer_add_mem, "test_buffer_add_mem", 45);
+  do_run_test(test_buffer_add_mem_full_ovf, "test_buffer_add_mem_full_ovf", 51);
+  do_run_test(test_buffer_add_mem_part_ovf, "test_buffer_add_mem_part_ovf", 59);
+  do_run_test(test_buffer_add_u16, "test_buffer_add_u16", 69);
+  do_run_test(test_copy, "test_copy", 79);
   
   UnitySetTestFile("test_event.cpp");
   do_run_test(testMakeEvent_stub_6, "testMakeEvent(event_mk(0xef), 0xef)", 18);
