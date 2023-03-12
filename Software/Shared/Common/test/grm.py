@@ -134,14 +134,15 @@ MACRO_PREFIX = 'TT_'
 def parse_source_line(ln):
 	# Look for macro.
 	if m := re.match(fr'''
-	  \s*		# Leading whitespace.
+	  \s*					# Leading whitespace.
 	  ({MACRO_PREFIX}\w+)
-	  \s*\(		# Space + open bracket.
-	  (.*)		# Args.
-	  \)		# Closing bracket.
-	  ;?		# Trailing `;' ignored.
-	  (?:\s*//.*)? 	# Optional comment.
-	  \s*$		# Whitespace only.
+	  \s*\(					# Space + open bracket.
+	  (.*)					# Args.
+	  \)					# Closing bracket.
+	  \s*;?					# Trailing `;' ignored.
+	  (?:\s*/\*.*\*/)? 		# Optional C comment.
+	  (?:\s*//.*)? 			# Optional C++ comment.
+	  \s*$					# Whitespace only.
 	''', ln, re.X | re.S):
 		macro, raw_args = m.groups()
 		return macro, raw_args

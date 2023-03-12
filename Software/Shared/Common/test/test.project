@@ -19,6 +19,8 @@
   <Description/>
   <Dependencies/>
   <VirtualDirectory Name="test">
+    <File Name="buffer.h"/>
+    <File Name="test_buffer.cpp"/>
     <File Name="test_modbus.cpp"/>
     <File Name="project_config.h"/>
     <File Name="test_printf.cpp"/>
