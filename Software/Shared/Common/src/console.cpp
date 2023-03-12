@@ -338,10 +338,6 @@ static uint8_t execute(char* cmd) {
 	return CONSOLE_RC_ERROR_UNKNOWN_COMMAND;
 }
 
-static bool is_whitespace(char c) {
-	return (' ' == c) || ('\t' == c);
-}
-
 static console_rc_t console_process(char* str) {
 	const char wsp[] = " \t";		// These chars separate tokens in input.
 	

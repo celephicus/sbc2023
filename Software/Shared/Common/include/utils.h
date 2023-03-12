@@ -445,9 +445,9 @@ void tholdScanRescan(const thold_scanner_def_t* defs, thold_scanner_context_t* c
 //
 
 // From Niall Murphy article "Assert Yourself". Gives each file a guaranteed unique number by misusing the linker. Usage: FILENUM(33);
-#define FILENUM(num_) 									\
-    void filenum_##num_##_(void) __attribute__ ((unused));	\
-    void filenum_##num_##_(void) {}							\
+#define FILENUM(num_) 														\
+    void filenum_##num_##_(void) __attribute__ ((unused));					\
+    void filenum_##num_##_(void) {}	/* cppcheck-suppress unusedFunction */	\
     enum { F_NUM = (num_) }
 
 // Define this somewhere, it can be used to log a runtime error, and should not return.
