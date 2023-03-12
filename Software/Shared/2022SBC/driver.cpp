@@ -150,7 +150,7 @@ static void do_handle_modbus_cb(uint8_t evt, const uint8_t* frame, uint8_t frame
 						while (count--) {
 							uint16_t value;
 							read_holding_register(address++, &value);
-							bufferFrameAddU16(&response, value);
+							bufferFrameAddU16(&response, utilsU16_native_to_be(value));
 						}
 						modbusSlaveSend(response.buf, bufferFrameLen(&response));
 					}
@@ -307,8 +307,8 @@ static void do_handle_modbus_cb(uint8_t evt, const uint8_t* frame, uint8_t frame
 #endif
 
 void modbus_cb(uint8_t evt) {
-	uint8_t frame[RESP_SIZE];
-	uint8_t frame_len = RESP_SIZE;	// Must call modbusGetResponse() with buffer length set.
+	uint8_t frame[MODBUS_MAX_RESP_SIZE];
+	uint8_t frame_len = MODBUS_MAX_RESP_SIZE;	// Must call modbusGetResponse() with buffer length set.
 	const bool resp_ok = modbusGetResponse(&frame_len, frame);
 
 	// Dump MODBUS...
@@ -333,17 +333,31 @@ void modbus_cb(uint8_t evt) {
 // Stuff for debugging MODBUS timing.
 void modbus_timing_debug(uint8_t id, uint8_t s) {
 	switch (id) {
-		case MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT: gpioSp1Write(s); break;
-		case MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT: 	gpioSp2Write(s); break;
-		case MODBUS_TIMING_DEBUG_EVENT_RX_FRAME: 	gpioSp3Write(s); break;
+		case MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT: gpioSp0Write(s); break;
+		case MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT: 	gpioSp1Write(s); break;
+		case MODBUS_TIMING_DEBUG_EVENT_RX_FRAME: 	gpioSp2Write(s); break;
 	}
+}
+
+static int16_t modbus_recv() {
+	return (GPIO_SERIAL_RS485.available() > 0) ? GPIO_SERIAL_RS485.read() : -1;
+}
+static void modbus_send_buf(const uint8_t* buf, uint8_t sz) {		
+	digitalWrite(GPIO_PIN_RS485_TX_EN, HIGH);
+	GPIO_SERIAL_RS485.write(buf, sz);
+	GPIO_SERIAL_RS485.flush();
+	digitalWrite(GPIO_PIN_RS485_TX_EN, LOW);
 }
 
 static const uint32_t MODBUS_BAUDRATE = 9600UL;
 static const uint16_t MODBUS_RESPONSE_TIMEOUT_MILLIS = 30U;
 static void modbus_init() {
 	GPIO_SERIAL_RS485.begin(MODBUS_BAUDRATE);
-	modbusInit(GPIO_SERIAL_RS485, GPIO_PIN_RS485_TX_EN, MODBUS_BAUDRATE, MODBUS_RESPONSE_TIMEOUT_MILLIS, modbus_cb);
+	digitalWrite(GPIO_PIN_RS485_TX_EN, LOW);
+	pinMode(GPIO_PIN_RS485_TX_EN, OUTPUT);
+	while(GPIO_SERIAL_RS485.available() > 0) GPIO_SERIAL_RS485.read();		// Flush any received chars from buffer.
+	modbusInit(modbus_send_buf, modbus_recv, MODBUS_RESPONSE_TIMEOUT_MILLIS, MODBUS_BAUDRATE, modbus_cb);
+	
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 	modbusSetSlaveId(SBC2022_MODBUS_SLAVE_ID_RELAY);
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
@@ -357,8 +371,6 @@ static void modbus_init() {
 	gpioSp0SetModeOutput();		// These are used by the RS485 debug cb.
 	gpioSp1SetModeOutput();
 	gpioSp2SetModeOutput();
-	gpioSp3SetModeOutput();
-	gpioSp4SetModeOutput();
 }
 static void modbus_service() {
 	modbusService();
@@ -607,8 +619,8 @@ static int8_t thread_query_slaves(void* arg) {
 		bufferFrameReset(&req);
 		bufferFrameAdd(&req, SBC2022_MODBUS_SLAVE_ID_RELAY);
 		bufferFrameAdd(&req, MODBUS_FC_WRITE_SINGLE_REGISTER);
-		bufferFrameAddU16(&req, SBC2022_MODBUS_REGISTER_RELAY);
-		bufferFrameAddU16(&req, REGS[REGS_IDX_RELAY_STATE]);
+		bufferFrameAddU16(&req, utilsU16_native_to_be(SBC2022_MODBUS_REGISTER_RELAY));
+		bufferFrameAddU16(&req, utilsU16_native_to_be(REGS[REGS_IDX_RELAY_STATE]));
 		THREAD_WAIT_UNTIL(!modbusIsBusy());
 		modbusMasterSend(req.buf, bufferFrameLen(&req));
 		THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(SLAVE_QUERY_PERIOD));
@@ -622,8 +634,8 @@ static int8_t thread_query_slaves(void* arg) {
 			bufferFrameReset(&req);
 			bufferFrameAdd(&req, SBC2022_MODBUS_SLAVE_ID_SENSOR_0 + sidx);
 			bufferFrameAdd(&req, MODBUS_FC_READ_HOLDING_REGISTERS);
-			bufferFrameAddU16(&req, SBC2022_MODBUS_REGISTER_SENSOR_TILT);
-			bufferFrameAddU16(&req, 2);
+			bufferFrameAddU16(&req, utilsU16_native_to_be(SBC2022_MODBUS_REGISTER_SENSOR_TILT));
+			bufferFrameAddU16(&req, utilsU16_native_to_be(2));
 			THREAD_WAIT_UNTIL(!modbusIsBusy());
 			modbusMasterSend(req.buf, bufferFrameLen(&req));
 			THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(SLAVE_QUERY_PERIOD));
@@ -642,10 +654,6 @@ static int8_t thread_query_slaves(void* arg) {
 
 static thread_control_t tcb_query_slaves;
 static void setup_devices() {
-	gpioSp4SetModeOutput();
-	gpioSp5SetModeOutput();
-	gpioSp6SetModeOutput();
-	gpioSp7SetModeOutput();
 	threadInit(&tcb_query_slaves);
 	regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_FAULT|REGS_FLAGS_MASK_RELAY_FAULT, true);
 }
@@ -654,6 +662,18 @@ static void service_devices() {
 }
 
 #endif
+
+// Spare GPIO, used for debugging at present. Other spare GPIO setup in modbus_init().
+// At present all hardware versions have the same set of spare GPIO, but this might change, which will require a compile time test on CFG_BUILD in this function. 
+static void setup_spare_gpio() {
+	gpioSp3SetModeOutput();
+	gpioSp4SetModeOutput();
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD || CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
+	gpioSp5SetModeOutput();
+	gpioSp6SetModeOutput();
+	gpioSp7SetModeOutput();
+#endif	
+}
 
 // Non-volatile objects.
 
@@ -915,6 +935,7 @@ void driverInit() {
 	adc_init();
 	scanner_init();
 	setup_devices();
+	setup_spare_gpio();
 	modbus_init();
 	atn_init();
 	init_fault_timer();
@@ -922,6 +943,7 @@ void driverInit() {
 
 void driverService() {
 	modbus_service();
+	service_devices();
 	utilsRunEvery(100) {
 		service_fault_timers();
 		adc_start();
@@ -930,7 +952,6 @@ void driverService() {
 	utilsRunEvery(50) {
 		led_service();
 	}
-	service_devices();
 	if (devAdcIsConversionDone()) {		// Run scanner when all ADC channels converted.
 		adc_do_scaling();
 		scanner_scan();

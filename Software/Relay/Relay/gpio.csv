@@ -1,6 +1,6 @@
-@processor,Arduino Mega2560,,,,,,,,,
-,,,,,,,,,,
-@symbol,SERIAL_RS485,Serial,Serial port for RS485.,,,,,,,
+@processor,Arduino Mega2560,,,,,,,,
+,,,,,,,,,
+@symbol,SERIAL_RS485,Serial,Serial port for RS485.,,,,,,
 ,,,,,,,,,
 #Arduino Pin,Signal,Function,Description,Group,Arduino Pin No.,Processor Pin No.,Processor Port,Processor Alternate Function,Comment
 D1/TXO,RS485_TXD,TXD,RS485 TX,Bus,J7/12,31,PD1,TXD/PCINT17,Bootloader
@@ -15,14 +15,14 @@ D8,CONS_TX,output,console serial data out,Console,J7/2,12,PB0,PCINT0/CLKO/ICP1,
 D9,SP_3,output direct,Spare to adaptor board (SPARE_3 on schematic),Bed Adaptor,J7/1,13,PB1,PCINT1/OC1A,PWM
 D10,SSEL,output,SPI slave select to Adaptor,SPI,J6/12,14,PB2,PCINT2/SS/OC1B,PWM
 D11/MOSI,MOSI,MOSI,SPI to Adaptor,SPI,J6/11,15,PB3,PCINT3/OC2A/MOSI,PWM
-D12/MISO,MISO,MISO,SPI to Adaptor,SPI,J6/10,16,PB4,PCINT4/MISO,
+D12/MISO,MISO,MISO output direct alias=SP_5,SPI to Adaptor (also SP_5),SPI,J6/10,16,PB4,PCINT4/MISO,
 D13/SCK,SCK,SCK,SPI to Adaptor,SPI,J6/9,17,PB5,SCK/PCINT5,LED returned to GND.
 A0,RS485_TX_EN,output,Enable RS485 xmitter,Bus,J6/8,23,PC0,ADC0/PCINT8,
 A1,LED,output direct,Blinky LED,Misc,J6/7,24,PC1,ADC1/PCINT9,
 A2,SP_1,output direct,Spare to adaptor board (SPARE_1 on schematic),Bed Adaptor,J6/6,25,PC2,ADC2/PCINT10,
 A3,SP_2,output direct,Spare to adaptor board (SPARE_2 on schematic),Bed Adaptor,J6/5,26,PC3,ADC3/PCINT11,
-A4,SDA,SDA,I2C to Adaptor,Bed Adaptor,,27,PC4,ADC4/SDA/PCINT12,
-A5,SCL,SCL,I2C to Adaptor,Bed Adaptor,,28,PC5,ADC5/SCL/PCINT13,
+A4,SDA,SDA  output direct alias=SP_6,I2C to Adaptor (also SP_6),Bed Adaptor,,27,PC4,ADC4/SDA/PCINT12,
+A5,SCL,SCL  output direct alias=SP_7,I2C to Adaptor (also SP_7),Bed Adaptor,,28,PC5,ADC5/SCL/PCINT13,
 A6,VOLTS_MON_12V_IN,ADC6,Monitor volts input,Power,,19,ADC6,ADC6,Analogue input only.
 A7,VOLTS_MON_BUS,ADC7,Monitor volts on bus,Bus,,22,ADC7,ADC7,Analogue input only.
 RST,,,,,"J7/10, J6/3",29,PC6,RESET/PCINT14,

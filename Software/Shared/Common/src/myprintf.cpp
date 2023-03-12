@@ -113,12 +113,17 @@ char myprintf_snprintf(char* buf, unsigned len, const char* fmt, ...) {
 	va_end(ap);
 	return rc;
 }
-#if 1
-static CFG_MYPRINTF_TYPE_SIGNED_LONG_INT grab_integer(char is_long, va_list ap) {
-	return ((is_long && (sizeof(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT) > sizeof(int))) ?
-	  va_arg(ap, long int) : va_arg(ap, int));
-}
-#endif
+
+/* This has to be a macro, some weirdness with va_args. It expands to not much machine code.
+ * You can pass them as arguments to functions and call va_arg() on them, but not in two separate functions it seems. 
+ * Anyway I had a failure on AVR with a format like "%ld %d", added a test, found he same error on the x86 run test.
+ * Then fixed the fault. */
+#define grab_integer()	((CFG_MYPRINTF_TYPE_SIGNED_LONG_INT)(							\
+  ((flags & FLAG_LONG) && (sizeof(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT) > sizeof(int))) ?	\
+    va_arg(ap, CFG_MYPRINTF_TYPE_SIGNED_LONG_INT) :										\
+	va_arg(ap, int)																		\
+  ))
+
 void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) {
 	uint_least8_t width;			// Holds field width.
 	uint_least8_t base;				// Holds number base.
@@ -181,11 +186,11 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 				goto p_str;
 			case 'c':
 				buf[0] = (char)va_arg(ap, int);			/* Gcc can give a warning about char promotion when using va_arg(). */
-p_char:			buf[1] = '\0';
+				buf[1] = '\0';
 				str.c = &buf[0];
 				goto p_str;
 			case 'd':
-				num.i = grab_integer(flags & FLAG_LONG, ap);
+				num.i = grab_integer();
 				if (num.i < 0) {
 					num.i = -num.i;
 					flags |= FLAG_NEG;
@@ -203,7 +208,7 @@ p_char:			buf[1] = '\0';
 				base = 16;
 				// Fall through...
 			case 'u':
-do_unsigned:	num.i = (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)grab_integer(flags & FLAG_LONG, ap);
+do_unsigned:	num.i = grab_integer(); // cppcheck-suppress unusedLabelSwitchConfiguration
 				break;
 			case '%': 						/* Literal '%', just print it. */
 				flags = 0;					/* Clear format flag. */

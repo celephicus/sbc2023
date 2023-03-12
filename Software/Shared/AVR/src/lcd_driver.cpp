@@ -3,7 +3,7 @@
 #include "project_config.h"
 #include "gpio.h"
 #include "utils.h"
-FILENUM(4);
+FILENUM(4); 
 
 #include "myprintf.h"
 #include "lcd_driver.h"
@@ -120,7 +120,8 @@ void lcdDriverWrite(uint8_t row, uint8_t timeout, PGM_P fmt, ...) {
     f_lcdMgrData[row].timer_temporary = timeout;        // If a timeout is supplied message is temporary, else it is static.
     const bool is_temporary_message = (f_lcdMgrData[row].timer_temporary > 0);
     
-    myprintf_snprintf(f_lcdMgrData[row].message_buffer[is_temporary_message], LCD_DRIVER_MAX_MESSAGE_LENGTH + 1, fmt, ap);  // Don't overwrite buffer, note max length includes nul terminator. 
+	// Note that we are calling the version that takes a va_args arg, rather than a variable number of args like printf().
+    myprintf_vsnprintf(f_lcdMgrData[row].message_buffer[is_temporary_message], LCD_DRIVER_MAX_MESSAGE_LENGTH + 1, fmt, ap);  // Don't overwrite buffer, note max length includes nul terminator. 
     va_end(ap);
 
 	set_new_static_message(row, is_temporary_message);       // Set line to display to start of new message

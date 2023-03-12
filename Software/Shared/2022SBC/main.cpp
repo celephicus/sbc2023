@@ -25,6 +25,7 @@ static bool console_cmds_user(char* cmd) {
 	static int32_t f_acc;
   switch (console_hash(cmd)) {
 	case /** ?VER **/ 0xc33b: print_banner(); break;
+	case /** P **/ 0xb5f5: { uint32_t x = 0x12345678; printf_s(PSTR("%lx%S"),x, PSTR("foo"));} break;
 	case /** F **/ 0xb5e3:  consolePrint(CFMT_D, utilsFilter(&f_acc, consoleStackPop(), 3, false)); break;
 	// Command processor.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
@@ -68,6 +69,7 @@ static bool console_cmds_user(char* cmd) {
 #endif
 
 	// MODBUS
+	case /** M **/ 0xb5e8: regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS|REGS_ENABLES_MASK_DUMP_MODBUS_DATA, true); break;
 	case /** ATN **/ 0xb87e: driverSendAtn(); break;
     case /** SL **/ 0x74fa: modbusSetSlaveId(consoleStackPop()); break;
     case /** ?SL **/ 0x79e5: consolePrint(CFMT_D, modbusGetSlaveId()); break;
@@ -84,7 +86,7 @@ static bool console_cmds_user(char* cmd) {
       } break;
 
     case /** WRITE **/ 0xa8f8: { // (val addr sl -) REQ: [FC=6 addr:16 value:16] -- RESP: [FC=6 addr:16 value:16]
-		uint8_t req[RESP_SIZE];
+		uint8_t req[MODBUS_MAX_RESP_SIZE];
 		req[MODBUS_FRAME_IDX_SLAVE_ID] = consoleStackPop();
 		req[MODBUS_FRAME_IDX_FUNCTION] = MODBUS_FC_WRITE_SINGLE_REGISTER;
 		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 0], consoleStackPop());
@@ -92,7 +94,7 @@ static bool console_cmds_user(char* cmd) {
 		modbusMasterSend(req, 6);
       } break;
     case /** READ **/ 0xd8b7: { // (count addr sl -) REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
-		uint8_t req[RESP_SIZE];
+		uint8_t req[MODBUS_MAX_RESP_SIZE];
 		req[MODBUS_FRAME_IDX_SLAVE_ID] = consoleStackPop();
 		req[MODBUS_FRAME_IDX_FUNCTION] = MODBUS_FC_READ_HOLDING_REGISTERS;
 		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 0], consoleStackPop());

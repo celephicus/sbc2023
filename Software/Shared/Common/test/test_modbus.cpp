@@ -93,7 +93,7 @@ void test_modbus_frame_valid(const char* f, uint8_t rc) {
 	TEST_ASSERT_EQUAL_UINT8(rc, modbusVerifyFrameValid(&bf));
 } 
 
-TT_TEST_CASE(test_modbus_frame_valid("1103006B00037687", 0));
+TT_TEST_CASE(test_modbus_frame_valid("1103006B00037687", 0)); /* Good frame (and checking that C-style comments do not result in test case not being seen by grm.py) */
 TT_TEST_CASE(test_modbus_frame_valid("1103006B00038776", MODBUS_CB_EVT_INVALID_CRC));	// CRC swapped.
 TT_TEST_CASE(test_modbus_frame_valid("1103006B00037688", MODBUS_CB_EVT_INVALID_CRC));	// CRC munged.
 TT_TEST_CASE(test_modbus_frame_valid("4142435085", 0));	// Smallest frame.
@@ -103,3 +103,14 @@ TT_TEST_CASE(test_modbus_frame_valid("0142435151", 0));	// Smallest slave ID.
 TT_TEST_CASE(test_modbus_frame_valid("f74243b163", 0));	// Largest slave ID.
 TT_TEST_CASE(test_modbus_frame_valid("0042430091", MODBUS_CB_EVT_INVALID_ID));	// Invalid slave ID.
 TT_TEST_CASE(test_modbus_frame_valid("f842438160", MODBUS_CB_EVT_INVALID_ID));	// Invalid slave ID.
+
+void test_modbus_set_u16() {
+	uint8_t f[2];
+	modbusSetU16(f, 0x1234);
+	TEST_ASSERT_EQUAL_HEX8(0x12, f[0]);
+	TEST_ASSERT_EQUAL_HEX8(0x34, f[1]);
+}
+void test_modbus_get_u16() {
+	uint8_t f[2] = {0x12,0x34};
+	TEST_ASSERT_EQUAL_HEX8(0x1234, modbusGetU16(f));
+}

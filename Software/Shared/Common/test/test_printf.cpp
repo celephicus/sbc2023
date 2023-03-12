@@ -11,8 +11,6 @@ TT_BEGIN_INCLUDE()
 #include "myprintf.h"
 TT_END_INCLUDE()
 
-// TODO: Test multiple mofifiers e.g %0ld.
-
 // We expect these sizes used in myprintf.
 void test_utils_myprintf_int_sizes() {
 	TEST_ASSERT_EQUAL(2, sizeof(CFG_MYPRINTF_TYPE_SIGNED_INT));
@@ -85,6 +83,15 @@ TT_TEST_CASE(test_printf_format("x 1x", "x%2dx", 1));
 TT_TEST_CASE(test_printf_format("x01x", "x%02dx", 1));
 TT_TEST_CASE(test_printf_format("x1 x", "x%-2dx", 1));
 
+// Integer decimal. Long, copy of above.
+TT_TEST_CASE(test_printf_format("x0x", "x%ldx", 0));
+TT_TEST_CASE(test_printf_format("x123x", "x%ldx", 123));
+TT_TEST_CASE(test_printf_format("x1x", "x%0ldx", 1));
+TT_TEST_CASE(test_printf_format("x1x", "x%1Ldx", 1));
+TT_TEST_CASE(test_printf_format("x 1x", "x%2Ldx", 1));
+TT_TEST_CASE(test_printf_format("x01x", "x%02Ldx", 1));
+TT_TEST_CASE(test_printf_format("x1 x", "x%-2Ldx", 1));
+
 // Min/max values.
 TT_TEST_CASE(test_printf_format("x65535x", "x%ux", 0xffff));
 TT_TEST_CASE(test_printf_format("x4294967295x", "x%ux", 0xffffffff));
@@ -100,6 +107,11 @@ TT_TEST_CASE(test_printf_format("x0x", "x%xx", 0));
 TT_TEST_CASE(test_printf_format("xabcx", "x%xx", 0xABC));
 TT_TEST_CASE(test_printf_format("xABCx", "x%Xx", 0xABC));
 
+// Hex integer. Long, copy of above.
+TT_TEST_CASE(test_printf_format("x0x", "x%Lxx", 0));
+TT_TEST_CASE(test_printf_format("xabcx", "x%Lxx", 0xABC));
+TT_TEST_CASE(test_printf_format("xABCx", "x%LXx", 0xABC));
+
 // Binary integer.
 TT_TEST_CASE(test_printf_format("x0x", "x%bx", 0));
 TT_TEST_CASE(test_printf_format("x101x", "x%bx", 5));
@@ -111,4 +123,8 @@ void test_myprintf_format_binary_max() {
 	expected[sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_INT)*8] = '\0';
 	test_printf_format(expected, "%b", 0xffff);
 }
+
+// Multiple values. The AVR was giving corrupt value following a long value.
+TT_TEST_CASE(test_printf_format("!12345678!f00f!", "!%lx!%x!", 0x12345678, 0xf00f));
+TT_TEST_CASE(test_printf_format("!f00f!12345678!", "!%lx!%x!", 0xf00f, 0x12345678));
 

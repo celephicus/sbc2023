@@ -18,8 +18,9 @@ enum {
     GPIO_PIN_SP_2 = 5,                             // Spare for debugging
     GPIO_PIN_SP_3 = 6,                             // Spare for debugging
     GPIO_PIN_SP_4 = 7,                             // Spare for debugging
-    GPIO_PIN_SP_5 = A4,                            // Spare for debugging
-    GPIO_PIN_SP_6 = A5,                            // Spare for debugging
+    GPIO_PIN_SP_5 = 12,                            // Spare for debugging
+    GPIO_PIN_SP_6 = A4,                            // Spare for debugging
+    GPIO_PIN_SP_7 = A5,                            // Spare for debugging
 
     // Console
     GPIO_PIN_CONS_RX = 8,                          // console serial data in
@@ -28,7 +29,6 @@ enum {
     // SPI
     GPIO_PIN_SSEL = 10,                            // SPI slave select to Accelerometer
     GPIO_PIN_MOSI = 11,                            // SPI to Accelerometer
-    GPIO_PIN_MISO = 12,                            // SPI to Accelerometer
     GPIO_PIN_SCK = 13,                             // SPI to Accelerometer
 
     // Misc
@@ -92,6 +92,16 @@ static inline void gpioSp4Set() { PORTD |= _BV(7); }
 static inline void gpioSp4Clear() { PORTD &= ~_BV(7); }
 static inline void gpioSp4Write(bool b) { if (b) PORTD |= _BV(7); else PORTD &= ~_BV(7); }
 
+// SP_5: Spare for debugging
+static inline void gpioSp5SetModeOutput() { DDRB |= _BV(4); }
+static inline void gpioSp5SetModeInput() { DDRB &= ~_BV(4); }
+static inline void gpioSp5SetMode(bool fout) { if (fout) DDRB |= _BV(4); else DDRB &= ~_BV(4); }
+static inline bool gpioSp5Read() { return PINB | _BV(4); }
+static inline void gpioSp5Toggle() { PORTB ^= _BV(4); }
+static inline void gpioSp5Set() { PORTB |= _BV(4); }
+static inline void gpioSp5Clear() { PORTB &= ~_BV(4); }
+static inline void gpioSp5Write(bool b) { if (b) PORTB |= _BV(4); else PORTB &= ~_BV(4); }
+
 // LED: Blinky LED
 static inline void gpioLedSetModeOutput() { DDRC |= _BV(1); }
 static inline void gpioLedSetModeInput() { DDRC &= ~_BV(1); }
@@ -102,24 +112,24 @@ static inline void gpioLedSet() { PORTC |= _BV(1); }
 static inline void gpioLedClear() { PORTC &= ~_BV(1); }
 static inline void gpioLedWrite(bool b) { if (b) PORTC |= _BV(1); else PORTC &= ~_BV(1); }
 
-// SP_5: Spare for debugging
-static inline void gpioSp5SetModeOutput() { DDRC |= _BV(4); }
-static inline void gpioSp5SetModeInput() { DDRC &= ~_BV(4); }
-static inline void gpioSp5SetMode(bool fout) { if (fout) DDRC |= _BV(4); else DDRC &= ~_BV(4); }
-static inline bool gpioSp5Read() { return PINC | _BV(4); }
-static inline void gpioSp5Toggle() { PORTC ^= _BV(4); }
-static inline void gpioSp5Set() { PORTC |= _BV(4); }
-static inline void gpioSp5Clear() { PORTC &= ~_BV(4); }
-static inline void gpioSp5Write(bool b) { if (b) PORTC |= _BV(4); else PORTC &= ~_BV(4); }
-
 // SP_6: Spare for debugging
-static inline void gpioSp6SetModeOutput() { DDRC |= _BV(5); }
-static inline void gpioSp6SetModeInput() { DDRC &= ~_BV(5); }
-static inline void gpioSp6SetMode(bool fout) { if (fout) DDRC |= _BV(5); else DDRC &= ~_BV(5); }
-static inline bool gpioSp6Read() { return PINC | _BV(5); }
-static inline void gpioSp6Toggle() { PORTC ^= _BV(5); }
-static inline void gpioSp6Set() { PORTC |= _BV(5); }
-static inline void gpioSp6Clear() { PORTC &= ~_BV(5); }
-static inline void gpioSp6Write(bool b) { if (b) PORTC |= _BV(5); else PORTC &= ~_BV(5); }
+static inline void gpioSp6SetModeOutput() { DDRC |= _BV(4); }
+static inline void gpioSp6SetModeInput() { DDRC &= ~_BV(4); }
+static inline void gpioSp6SetMode(bool fout) { if (fout) DDRC |= _BV(4); else DDRC &= ~_BV(4); }
+static inline bool gpioSp6Read() { return PINC | _BV(4); }
+static inline void gpioSp6Toggle() { PORTC ^= _BV(4); }
+static inline void gpioSp6Set() { PORTC |= _BV(4); }
+static inline void gpioSp6Clear() { PORTC &= ~_BV(4); }
+static inline void gpioSp6Write(bool b) { if (b) PORTC |= _BV(4); else PORTC &= ~_BV(4); }
+
+// SP_7: Spare for debugging
+static inline void gpioSp7SetModeOutput() { DDRC |= _BV(5); }
+static inline void gpioSp7SetModeInput() { DDRC &= ~_BV(5); }
+static inline void gpioSp7SetMode(bool fout) { if (fout) DDRC |= _BV(5); else DDRC &= ~_BV(5); }
+static inline bool gpioSp7Read() { return PINC | _BV(5); }
+static inline void gpioSp7Toggle() { PORTC ^= _BV(5); }
+static inline void gpioSp7Set() { PORTC |= _BV(5); }
+static inline void gpioSp7Clear() { PORTC &= ~_BV(5); }
+static inline void gpioSp7Write(bool b) { if (b) PORTC |= _BV(5); else PORTC &= ~_BV(5); }
 
 #endif   // GPIO_H__

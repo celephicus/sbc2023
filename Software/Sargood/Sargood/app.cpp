@@ -231,7 +231,8 @@ bool service_trace_log() {
 	EventTraceItem evt;
 	if (eventTraceRead(&evt)) {
 		const uint8_t id = event_id(evt.event);
-		printf_s(PSTR("Ev: %lu: %S %u(%u,%u)\r\n"), evt.timestamp, eventGetEventName(id), id, event_p8(evt.event), event_p16(evt.event));
+		const char * name = eventGetEventName(id);
+		printf_s(PSTR("Ev: %lu: %S %u(%u,%u)\r\n"), evt.timestamp, name, id, event_p8(evt.event), event_p16(evt.event));
 		return true;
 	}
 	return false;

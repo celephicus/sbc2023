@@ -36,7 +36,7 @@ static void start_adc_conversion() {
 #if defined(__AVR_ATmega328P__)
 		ADMUX = mux;					// MEGA328 is easy
 #elif defined(__AVR_ATmega2560__)
-        ADCSRB = (ADCSRB & ~_BV(MUX5)) | (mux & _BV(5)) ? _BV(MUX5) : 0;	// MUX5 is on bit 3, grrrr.
+        ADCSRB = ((ADCSRB & ~_BV(MUX5)) | (mux & _BV(5))) ? _BV(MUX5) : 0;	// MUX5 is on bit 3, grrrr.
         mux &= ~_BV(5);														// Clear bit 5 which is ADLAR.
 		ADMUX = mux;
 #else

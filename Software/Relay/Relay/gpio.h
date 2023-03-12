@@ -28,13 +28,13 @@ enum {
     GPIO_PIN_SP_3 = 9,                             // Spare to adaptor board (SPARE_3 on schematic)
     GPIO_PIN_SP_1 = A2,                            // Spare to adaptor board (SPARE_1 on schematic)
     GPIO_PIN_SP_2 = A3,                            // Spare to adaptor board (SPARE_2 on schematic)
-    GPIO_PIN_SDA = A4,                             // I2C to Adaptor
-    GPIO_PIN_SCL = A5,                             // I2C to Adaptor
+    GPIO_PIN_SDA = A4,                             // I2C to Adaptor (also SP_6)
+    GPIO_PIN_SCL = A5,                             // I2C to Adaptor (also SP_7)
 
     // SPI
     GPIO_PIN_SSEL = 10,                            // SPI slave select to Adaptor
     GPIO_PIN_MOSI = 11,                            // SPI to Adaptor
-    GPIO_PIN_MISO = 12,                            // SPI to Adaptor
+    GPIO_PIN_MISO = 12,                            // SPI to Adaptor (also SP_5)
     GPIO_PIN_SCK = 13,                             // SPI to Adaptor
 
     // Misc
@@ -89,6 +89,16 @@ static inline void gpioSp3Set() { PORTB |= _BV(1); }
 static inline void gpioSp3Clear() { PORTB &= ~_BV(1); }
 static inline void gpioSp3Write(bool b) { if (b) PORTB |= _BV(1); else PORTB &= ~_BV(1); }
 
+// MISO: SPI to Adaptor (also SP_5)
+static inline void gpioMisoSetModeOutput() { DDRB |= _BV(4); }
+static inline void gpioMisoSetModeInput() { DDRB &= ~_BV(4); }
+static inline void gpioMisoSetMode(bool fout) { if (fout) DDRB |= _BV(4); else DDRB &= ~_BV(4); }
+static inline bool gpioMisoRead() { return PINB | _BV(4); }
+static inline void gpioMisoToggle() { PORTB ^= _BV(4); }
+static inline void gpioMisoSet() { PORTB |= _BV(4); }
+static inline void gpioMisoClear() { PORTB &= ~_BV(4); }
+static inline void gpioMisoWrite(bool b) { if (b) PORTB |= _BV(4); else PORTB &= ~_BV(4); }
+
 // LED: Blinky LED
 static inline void gpioLedSetModeOutput() { DDRC |= _BV(1); }
 static inline void gpioLedSetModeInput() { DDRC &= ~_BV(1); }
@@ -118,5 +128,25 @@ static inline void gpioSp2Toggle() { PORTC ^= _BV(3); }
 static inline void gpioSp2Set() { PORTC |= _BV(3); }
 static inline void gpioSp2Clear() { PORTC &= ~_BV(3); }
 static inline void gpioSp2Write(bool b) { if (b) PORTC |= _BV(3); else PORTC &= ~_BV(3); }
+
+// SDA: I2C to Adaptor (also SP_6)
+static inline void gpioSdaSetModeOutput() { DDRC |= _BV(4); }
+static inline void gpioSdaSetModeInput() { DDRC &= ~_BV(4); }
+static inline void gpioSdaSetMode(bool fout) { if (fout) DDRC |= _BV(4); else DDRC &= ~_BV(4); }
+static inline bool gpioSdaRead() { return PINC | _BV(4); }
+static inline void gpioSdaToggle() { PORTC ^= _BV(4); }
+static inline void gpioSdaSet() { PORTC |= _BV(4); }
+static inline void gpioSdaClear() { PORTC &= ~_BV(4); }
+static inline void gpioSdaWrite(bool b) { if (b) PORTC |= _BV(4); else PORTC &= ~_BV(4); }
+
+// SCL: I2C to Adaptor (also SP_7)
+static inline void gpioSclSetModeOutput() { DDRC |= _BV(5); }
+static inline void gpioSclSetModeInput() { DDRC &= ~_BV(5); }
+static inline void gpioSclSetMode(bool fout) { if (fout) DDRC |= _BV(5); else DDRC &= ~_BV(5); }
+static inline bool gpioSclRead() { return PINC | _BV(5); }
+static inline void gpioSclToggle() { PORTC ^= _BV(5); }
+static inline void gpioSclSet() { PORTC |= _BV(5); }
+static inline void gpioSclClear() { PORTC &= ~_BV(5); }
+static inline void gpioSclWrite(bool b) { if (b) PORTC |= _BV(5); else PORTC &= ~_BV(5); }
 
 #endif   // GPIO_H__
