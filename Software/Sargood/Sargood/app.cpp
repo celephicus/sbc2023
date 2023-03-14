@@ -133,6 +133,12 @@ static int8_t thread_cmd(void* arg) {
 			cmd_done(APP_CMD_STATUS_BAD_CMD);
 			THREAD_YIELD();
 			break;
+			
+		case APP_CMD_STOP:		// Stop, a no-op as we are already stopped if idle.
+			cmd_start();
+			cmd_done();
+			THREAD_YIELD();
+			break;
 
 		case APP_CMD_HEAD_UP:	// Move head up...
 			regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_UP);
