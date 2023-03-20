@@ -1,0 +1,105 @@
+$PARTS
+
+RES 
+    [1-2] 
+TRANS
+    {C,B,E}
+ProMini328
+    1  TXO         
+    2  RXI         
+    3  \RESET
+    4  GND
+    [5-12] D[2-9]
+    13	D10
+    14	{MOSI,D11}
+    15	{MISO,D12}
+    16	{SCK,D13}
+    [17-20]	A[3-0]
+    21	VCC
+    22	\RESET
+    23	GND
+    24	VIN
+    A[4-7]          # Extra analogue/digital IO pins off DIP24 grid.    
+A5841 
+    1    VEE        
+    2    CLK        
+    3    SDI        
+    4    VSS        
+    5    VDD        
+    6    SDO        
+    7    STB        
+    8    \OE
+    9    VEE        
+    10   VBB        
+    [11-18] OUT[1-8]
+A5890 
+    1   VSS         
+    2   CLK         
+    3   SDI
+    4   STB
+    [5-12] OUT[1-8]
+    13  VBB
+    14  \OE
+    15  VDD
+    16  SDO
+{HC4051,CD4051}
+    {13,14,15,12,1,5,2,4} Y[0-7]
+    3   Z
+    16  VCC
+    6   \EN
+    [11-9] A[0-2]
+    8   GND
+    7   VEE
+{L293,L293D}
+    1   EN12
+    2   IN1
+    3   OUT1
+    {4,5,12,13} GND
+    6   OUT2
+    7   IN2
+    8   VBB
+    9   EN34
+    10  IN3
+    11  OUT3
+    14  OUT4
+    15  IN4
+    16  VCC
+HC595
+    [1-7] Q[1-7]
+        8   GND
+        9   SDO
+        10  *SRCLR
+        11  CLK
+        12  STB
+        13  *OE
+        14  SDI
+        15  Q0
+        16  VCC
+ULN2803
+    [1-8]   IN[1-8] 
+    9   GND
+    10  VBB
+    [11-18] OUT[8-1]
+A2982
+    [1-8]   IN[1-8]
+    9  VBB
+    10  GND
+    [11-18] OUT[8-1]
+
+$comps
+R1 		RES         11K
+R2 		RES         4K7
+R[3-10] RES         10K
+R11 	RES         10K
+R12 	RES         4K7
+Q{1,2}	TRANS       2N2222
+U1 		ProMini328
+U2 		A5841 
+U3 		A5890 
+U4 		HC4051
+U{5,6}  L293D
+
+$nets
++5V         U2/VDD U3/VDD R2/1 U1/VCC U4/VCC U[5-6]/VCC R12/1
+    
+    
