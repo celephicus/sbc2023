@@ -14,13 +14,13 @@ def process_parts(s):
 	current_parts = None
 	for ln in s:
 		if not ln[0].isspace():
-			current_parts = exp.expand([ln.split()[0]])
+			current_parts = exp.expand(ln.split()[0])
 			for part in current_parts:
 				parts[part] = {}
 		else:
 			pindef = ln.split()
-			pins = exp.expand([pindef[0]])
-			names = exp.expand([pindef[1]]) if len(pindef) == 2 else pins
+			pins = exp.expand(pindef[0])
+			names = exp.expand(pindef[1]) if len(pindef) == 2 else pins
 			if len(pins) == 1: # One pin with several names.
 				pins = pins * len(names)
 			if len(names) == 1: # Several pins wth the same name.
@@ -31,15 +31,16 @@ def process_parts(s):
 			for n,p in zip(names, pins):
 				for part in current_parts:
 					parts[part][n] = parts[part].get(n, []) + [p]
+					
 def process_comps(s):
 	for ln in s:    
-		compdef = ln.split()
+		compdef = ln.split(None, 2)
 		if len(compdef) == 2: compdef += [compdef[1]]
 		if len(compdef) != 3:
 			sys.exit("Error in component defnition: %s." % ln)
 		if compdef[1] not in parts:
 			sys.exit("Unknown part %s." % compdef[1])
-		for comp in exp.expand([compdef[0]]):
+		for comp in exp.expand(compdef[0]):
 			if comp in comps:
 				sys.exit("Error: Duplicate component %s." % comp)
 			comps[comp] = compdef[1:]
@@ -64,12 +65,12 @@ def process_nets(s):
 			netnames = [f'*_{ns[0]}']
 			raw_nets = ns
 		else:
-			netnames = exp.expand([ns[0]])
+			netnames = exp.expand(ns[0])
 			raw_nets = ns[1:]
 		
 		raw_terms = []		
 		for rp in raw_nets:
-			raw_terms += exp.expand([rp])
+			raw_terms += exp.expand(rp)
 		#print(netnames, raw_terms)
 		if len(netnames) > 1:
 			assert(len(netnames) == len(raw_terms))
@@ -109,5 +110,9 @@ for ln in open(infile, 'rt').read().splitlines():
 			rawlines.append(ln)
 process(section, rawlines)
 
+connections = 0
 for n in nets:
 	print(n, ':', ' '.join(nets[n]))
+	connections += len(nets[n]) - 1
+print(f"Total connections: {connections}.")
+
