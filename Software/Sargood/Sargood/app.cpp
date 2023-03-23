@@ -12,13 +12,6 @@
 #include "app.h"
 
 FILENUM(9);
-#if 0
-#include "dev.h"
-#include "console.h"
-#include "modbus.h"
-
-#include "myprintf.h"
-#endif
 
 // Sanity check that the app does not need more sensors than are possible to have. 
 UTILS_STATIC_ASSERT(CFG_TILT_SENSOR_COUNT <= SBC2022_MODBUS_SLAVE_COUNT_SENSOR);
@@ -94,20 +87,34 @@ static bool check_sensors() {		// If sensor fault set fail status.
 	}
 	return false;
 }
-static bool is_preset_valid(uint8_t idx) {
+static bool is_preset_valid(uint8_t idx) { // Can we use this preset?
 	fori(CFG_TILT_SENSOR_COUNT) {
 		if (driverSlaveIsEnabled(i) && (SBC2022_MODBUS_TILT_FAULT == driverPresets(idx)[i]))
 			return false;
 	}
 	return true;
 }
+
+
 static void load_command() {
 	REGS[REGS_IDX_CMD_ACTIVE] = f_app_ctx.cmd_req;
 	f_app_ctx.cmd_req = APP_CMD_IDLE;
+	if (APP_CMD_IDLE != REGS[REGS_IDX_CMD_ACTIVE])
+		cmd_start();
 }
-static bool  check_stop_command() {
+
+static bool check_stop_command() {
 	if (APP_CMD_STOP == f_app_ctx.cmd_req) {
 		load_command();
+		return true;
+	}
+	return false;
+}
+
+static const uint16_t SLEW_TIMEOUT_DECIS = 5*10;
+static bool check_slew_timeout() {
+	if (0U == REGS[REGS_IDX_SLEW_TIMER]) {
+		cmd_done(APP_CMD_STATUS_SLEW_TIMEOUT);
 		return true;
 	}
 	return false;
@@ -129,13 +136,11 @@ static int8_t thread_cmd(void* arg) {
 			break;
 
 		default:			// Bad command...
-			cmd_start();
 			cmd_done(APP_CMD_STATUS_BAD_CMD);
 			THREAD_YIELD();
 			break;
 			
 		case APP_CMD_STOP:		// Stop, a no-op as we are already stopped if idle.
-			cmd_start();
 			cmd_done();
 			THREAD_YIELD();
 			break;
@@ -147,8 +152,7 @@ static int8_t thread_cmd(void* arg) {
 		case APP_CMD_HEAD_DOWN:	// Move head down...
 			regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_DOWN);
 
-do_manual:	cmd_start();
-			if (!check_relay()) {	// If relay OK...
+do_manual:	if (!check_relay()) {	// If relay OK...
 				THREAD_START_DELAY();
 				THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(RELAY_RUN_DURATION_MS) || check_stop_command());
 				if (REGS[REGS_IDX_CMD_ACTIVE] == f_app_ctx.cmd_req) {	// If repeat of previous, restart timing. If not then active register will either have new command or idle.
@@ -169,7 +173,6 @@ do_manual:	cmd_start();
 		case APP_CMD_SAVE_POS_2:
 		case APP_CMD_SAVE_POS_3:
 		case APP_CMD_SAVE_POS_4: {
-			cmd_start();
 			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_SAVE_POS_1;
 			if (!check_sensors()) {		// All _enabled_ sensors OK.
 				fori (CFG_TILT_SENSOR_COUNT) // Read sensor value or force it to invalid is not enabled.
@@ -186,8 +189,8 @@ do_manual:	cmd_start();
 		case APP_CMD_RESTORE_POS_2:
 		case APP_CMD_RESTORE_POS_3:
 		case APP_CMD_RESTORE_POS_4: {
+			REGS[REGS_IDX_SLEW_TIMER] = SLEW_TIMEOUT_DECIS;
 			regsUpdateMask(REGS_IDX_RELAY_STATE, (RELAY_HEAD_MASK|RELAY_FOOT_MASK), RELAY_STOP);	// Should always be true...
-			cmd_start();
 			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_RESTORE_POS_1;
 			if (!is_preset_valid(preset_idx)) {				// Invalid preset, abort.
 				cmd_done(APP_CMD_STATUS_PRESET_INVALID);
@@ -196,11 +199,13 @@ do_manual:	cmd_start();
 
 			// Preset good, start slewing...
 			// TODO: Add timeout.
-			while ((!check_sensors()) && (!check_relay()) && (!check_stop_command())) {
+			while ((!check_sensors()) && (!check_relay()) && (!check_stop_command()) && (!check_slew_timeout())) {
+				// TODO: Verify sensor going offline can't lock up.
 				THREAD_WAIT_UNTIL(avail);		// Wait for new reading.
 				int8_t dir = (int8_t)get_slew_dir(preset_idx, 0);
 
-				if (REGS[REGS_IDX_RELAY_STATE] & RELAY_HEAD_DOWN) {	// If we are moving in one direction, check for position reached...
+				// If we are moving in one direction, check for position reached. We can't just check for zero as it might overshoot.
+				if (REGS[REGS_IDX_RELAY_STATE] & RELAY_HEAD_DOWN) {	
 					if (dir >= 0)
 						break;
 				}
@@ -226,6 +231,7 @@ do_manual:	cmd_start();
 			}
 
 			cmd_done();
+			REGS[REGS_IDX_SLEW_TIMER] = 0U;
 			THREAD_YIELD();
 			} break;
 		}	// Closes `switch (REGS[REGS_IDX_CMD_ACTIVE]) {'
@@ -282,6 +288,7 @@ static const char* get_cmd_status_desc(uint8_t cmd) {
 	case APP_CMD_STATUS_SENSOR_FAIL_1:	return PSTR("Foot Sensor Bad");
 	case APP_CMD_STATUS_NO_MOTION_0:	return PSTR("Head No Motion");
 	case APP_CMD_STATUS_NO_MOTION_1:	return PSTR("Foot No Motion");
+	case APP_CMD_STATUS_SLEW_TIMEOUT:	return PSTR("Timeout");
 
 	default: return PSTR("Unknown Status");
 	}
@@ -301,9 +308,6 @@ enum {
 	ST_RUN, 
 };
 	
-void eventSmTimerStart(uint8_t timer_idx, uint16_t period);
-bool eventSmGetTimerCookie(uint8_t timer_idx);
-
 static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 	SmLcdContext* my_context = (SmLcdContext*)context;        // Downcast to derived class.
 	(void)my_context;
@@ -311,16 +315,27 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 		case ST_RUN:
 		switch(event_id(ev)) {
 			case EV_SM_ENTRY:
+			eventSmPostSelf(context);
+			break;
+			
+			case EV_SM_SELF:
 			lcdDriverWrite(LCD_DRIVER_ROW_1, 0, PSTR("  TSA MBC 2022"));
 			lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("    Ready..."));
 			break;
 
 			case EV_COMMAND_START:
-			lcdDriverWrite(LCD_DRIVER_ROW_1, 100, get_cmd_desc(event_p8(ev)));
+			lcdDriverWrite(LCD_DRIVER_ROW_1, 0, get_cmd_desc(event_p8(ev)));
+			lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("Running"));
 			break;
+			
 			case EV_COMMAND_DONE:
-			lcdDriverWrite(LCD_DRIVER_ROW_1, DISPLAY_CMD_START_DURATION_MS/100, get_cmd_desc(event_p8(ev)));
-			lcdDriverWrite(LCD_DRIVER_ROW_2, DISPLAY_CMD_START_DURATION_MS/100, get_cmd_status_desc(event_p16(ev)));
+			lcdDriverWrite(LCD_DRIVER_ROW_2, 0, get_cmd_status_desc(event_p16(ev)));
+			eventSmTimerStart(0, DISPLAY_CMD_START_DURATION_MS/100U);
+			break;
+			
+			case EV_TIMER:
+			//if (event_p8(ev) == 0)
+				eventSmPostSelf(context);
 			break;
 		}	// Closes ST_RUN...
 		break;
@@ -350,6 +365,9 @@ void appService() {
 }
 void appService10hz() { 
 	lcdDriverService_10Hz(); 
+	eventSmTimerService();
+	if (REGS[REGS_IDX_SLEW_TIMER] > 0)
+		REGS[REGS_IDX_SLEW_TIMER] -= 1;
 }
 
 #if 0

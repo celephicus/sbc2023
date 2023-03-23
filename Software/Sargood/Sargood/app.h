@@ -59,6 +59,7 @@ enum {
 
 	APP_CMD_STATUS_NO_MOTION_0 = 20,	// No motion detected on sensor 0.
 	APP_CMD_STATUS_NO_MOTION_1 = 21,	// No motion detected on sensor 1.
+	APP_CMD_STATUS_SLEW_TIMEOUT = 22,	// Timeout on slew to position. 
 };
 
 #endif	// APP_H__

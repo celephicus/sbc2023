@@ -27,6 +27,7 @@ RELAY_STATE "Value written to relays."
 UPDATE_COUNT "Incremented on each update cycle."
 CMD_ACTIVE "Current running command."
 CMD_STATUS "Status from previous command."
+SLEW_TIMER "Timeout for slew motion."
 SLAVE_DISABLE [nv hex 0x02] "Disable errors from selected sensors."
 	TILT_0 [0] "Tilt sensor 0."
 	TILT_1 [1] "Tilt sensor 1."
@@ -57,10 +58,11 @@ enum {
     REGS_IDX_UPDATE_COUNT = 12,
     REGS_IDX_CMD_ACTIVE = 13,
     REGS_IDX_CMD_STATUS = 14,
-    REGS_IDX_SLAVE_DISABLE = 15,
-    REGS_IDX_ENABLES = 16,
-    REGS_IDX_SLEW_DEADBAND = 17,
-    COUNT_REGS = 18
+    REGS_IDX_SLEW_TIMER = 15,
+    REGS_IDX_SLAVE_DISABLE = 16,
+    REGS_IDX_ENABLES = 17,
+    REGS_IDX_SLEW_DEADBAND = 18,
+    COUNT_REGS = 19
 };
 
 // Define the start of the NV regs. The region is from this index up to the end of the register array.
@@ -70,7 +72,7 @@ enum {
 #define REGS_NV_DEFAULT_VALS 2, 0, 5
 
 // Define how to format the reg when printing.
-#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U
+#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U
 
 // Flags/masks for register FLAGS.
 enum {
@@ -114,9 +116,10 @@ enum {
  static const char REGS_NAMES_12[] PROGMEM = "UPDATE_COUNT";                            \
  static const char REGS_NAMES_13[] PROGMEM = "CMD_ACTIVE";                              \
  static const char REGS_NAMES_14[] PROGMEM = "CMD_STATUS";                              \
- static const char REGS_NAMES_15[] PROGMEM = "SLAVE_DISABLE";                           \
- static const char REGS_NAMES_16[] PROGMEM = "ENABLES";                                 \
- static const char REGS_NAMES_17[] PROGMEM = "SLEW_DEADBAND";                           \
+ static const char REGS_NAMES_15[] PROGMEM = "SLEW_TIMER";                              \
+ static const char REGS_NAMES_16[] PROGMEM = "SLAVE_DISABLE";                           \
+ static const char REGS_NAMES_17[] PROGMEM = "ENABLES";                                 \
+ static const char REGS_NAMES_18[] PROGMEM = "SLEW_DEADBAND";                           \
                                                                                         \
  static const char* const REGS_NAMES[] PROGMEM = {                                      \
    REGS_NAMES_0,                                                                        \
@@ -137,6 +140,7 @@ enum {
    REGS_NAMES_15,                                                                       \
    REGS_NAMES_16,                                                                       \
    REGS_NAMES_17,                                                                       \
+   REGS_NAMES_18,                                                                       \
  }
 
 // Declare an array of description text for each register.
@@ -156,9 +160,10 @@ enum {
  static const char REGS_DESCRS_12[] PROGMEM = "Incremented on each update cycle.";      \
  static const char REGS_DESCRS_13[] PROGMEM = "Current running command.";               \
  static const char REGS_DESCRS_14[] PROGMEM = "Status from previous command.";          \
- static const char REGS_DESCRS_15[] PROGMEM = "Disable errors from selected sensors.";  \
- static const char REGS_DESCRS_16[] PROGMEM = "Enable flags.";                          \
- static const char REGS_DESCRS_17[] PROGMEM = "If delta tilt less than deadband then stop.";\
+ static const char REGS_DESCRS_15[] PROGMEM = "Timeout for slew motion.";               \
+ static const char REGS_DESCRS_16[] PROGMEM = "Disable errors from selected sensors.";  \
+ static const char REGS_DESCRS_17[] PROGMEM = "Enable flags.";                          \
+ static const char REGS_DESCRS_18[] PROGMEM = "If delta tilt less than deadband then stop.";\
                                                                                         \
  static const char* const REGS_DESCRS[] PROGMEM = {                                     \
    REGS_DESCRS_0,                                                                       \
@@ -179,6 +184,7 @@ enum {
    REGS_DESCRS_15,                                                                      \
    REGS_DESCRS_16,                                                                      \
    REGS_DESCRS_17,                                                                      \
+   REGS_DESCRS_18,                                                                      \
  }
 
 // Declare a multiline string description of the fields.

@@ -110,9 +110,6 @@ void eventSmPostSelf(EventSmContextBase* state);
 // Start the given timer with the given period in ticks.
 void eventSmTimerStart(uint8_t timer_idx, uint16_t period);
 
-// Helper to return cookie for this timer, used to check if this timeout event is valid.
-bool eventSmGetTimerCookie(uint8_t timer_idx);
-
 // Stop the timer, a timeout event will not be generated.
 void eventSmTimerStop(uint8_t timer_idx);
 

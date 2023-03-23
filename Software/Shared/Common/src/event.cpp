@@ -143,16 +143,15 @@ void eventTraceMaskSetDefault() {
 //  from getting to the SM. Timer events are never sent with a cookie value of -1, so this is used to stop a timer event read from the queue being sent to
 //  a SM if the timer is stopped. 
 // Timers are not shared between SMs.
-static const uint16_t TIMER_COOKIE_INVALID = (uint16_t)-1;
+static const uint16_t TIMER_COOKIE_INVALID = 0U;
 static bool timer_cookie_is_valid(uint16_t v) { return (TIMER_COOKIE_INVALID != v); }
 static uint16_t timer_cookie_get() {
 	static uint16_t cookie;
-	if (!timer_cookie_is_valid(++cookie)) 
-		cookie = 0; 
+	do { ++cookie; } while (!timer_cookie_is_valid(cookie));
 	return cookie;
 }
 
-// TODO: Make cookie a hash of SM ID and cookie, then non-targetted SMs will not receive the timer event at all.
+// TODO: Make cookie a hash of SM ID and cookie, then non-targeted SMs will not receive the timer event at all.
 static struct {
     uint16_t counter;		// Counts down to zero, then timeout.
     uint16_t cookie;		// Unique value used to block older timeouts.
@@ -160,8 +159,6 @@ static struct {
 
 // Helper to queue a timeout event.
 static void publish_timer_timeout(uint8_t idx) { eventPublish(EV_TIMER, idx, l_timers[idx].cookie); }
-
-bool eventSmGetTimerCookie(uint8_t timer_idx) { return l_timers[timer_idx].cookie; }
 
 void eventSmTimerStart(uint8_t timer_idx, uint16_t timeout) {
     eventTraceWrite(EV_DEBUG_TIMER_ARM, timer_idx, timeout);
@@ -198,10 +195,10 @@ void eventSmInit(EventSmFunc sm, EventSmContextBase* state, uint8_t id) {
 }
 
 void eventSmService(EventSmFunc sm, EventSmContextBase* state, t_event ev) {
-	// Don't bother sending event expired timeout events to the non-targeted SMs.
+	// Don't bother sending expired timeout events to the non-targeted SMs.
 	if (EV_TIMER == event_id(ev)) {
 		uint8_t timer_idx = event_p8(ev);
-		if ((timer_idx >= CFG_EVENT_TIMER_COUNT) || (eventSmGetTimerCookie(timer_idx) != event_p16(ev)))
+		if ((timer_idx >= CFG_EVENT_TIMER_COUNT) || (l_timers[timer_idx].cookie != event_p16(ev)))
 			return;
 	}
 

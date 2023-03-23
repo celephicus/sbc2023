@@ -4,12 +4,12 @@ import serial
 port = sys.argv[1]
 regs = sys.argv[2:]
 
-s = serial.Serial(port, 19200, timeout=0.2)
+s = serial.Serial(port, 38400, timeout=0.2)
 start = None
 then = time.time()
 
 while 1:
-	while (time.time() - then) < 1.0:
+	while (time.time() - then) < 0.2:
 		pass
 	then = time.time()
 	if start is None: start = time.time()

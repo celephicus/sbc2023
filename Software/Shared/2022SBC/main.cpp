@@ -16,7 +16,6 @@ FILENUM(1);
 #include "lcd_driver.h"
 #include "event.h"
 #include "app.h"
-
 #endif
 
 // Console
@@ -25,7 +24,6 @@ static bool console_cmds_user(char* cmd) {
 	static int32_t f_acc;
   switch (console_hash(cmd)) {
 	case /** ?VER **/ 0xc33b: print_banner(); break;
-	case /** P **/ 0xb5f5: { uint32_t x = 0x12345678; printf_s(PSTR("%lx%S"),x, PSTR("foo"));} break;
 	case /** F **/ 0xb5e3:  consolePrint(CFMT_D, utilsFilter(&f_acc, consoleStackPop(), 3, false)); break;
 	// Command processor.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
