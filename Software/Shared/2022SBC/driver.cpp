@@ -656,10 +656,12 @@ static thread_control_t tcb_query_slaves;
 static void setup_devices() {
 	threadInit(&tcb_query_slaves);
 	regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_FAULT|REGS_FLAGS_MASK_RELAY_FAULT, true);
+	pinMode(GPIO_PIN_LCD_BL, OUTPUT);
 }
 static void service_devices() {
 	threadRun(&tcb_query_slaves, thread_query_slaves, NULL);
 }
+void driverSetLcdBacklight(bool f) { digitalWrite(GPIO_PIN_LCD_BL, f); }
 
 #endif
 
