@@ -5,7 +5,11 @@
 
 	COMMAND_START	Command received, code in p8.
 	COMMAND_DONE	Command done, code in p8, status code in p16.
-
+	SW_TOUCH_LEFT	Touch switch LEFT
+	SW_TOUCH_RIGHT	Touch switch RIGHT
+	SW_TOUCH_MENU	Touch switch MENU
+	SW_TOUCH_RET	Touch switch RET
+	 
    >>> End event definitions, begin generated code. */
 
 // Event IDs

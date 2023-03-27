@@ -13,6 +13,7 @@ FILENUM(2);
 
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 
+#include "sw_scanner.h"
 #include "myprintf.h"
 
 // Helper for myprintf to write a single character to the serial port.
@@ -663,6 +664,29 @@ static void service_devices() {
 
 #endif
 
+// Switches
+//
+
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
+
+// Action delay for touch switches.
+static uint8_t switches_action_delay_touch() return 2; }
+static sw_scan_def_t SWITCHES_DEFS[] PROGMEM = {
+	{ GPIO_PIN_TS_LEFT, false, switches_action_delay_touch, SW_TOUCH_LEFT, EV_SW_TOUCH_LEFT },
+	{ GPIO_PIN_TS_RIGHT, false, switches_action_delay_touch, SW_TOUCH_RIGHT, EV_SW_TOUCH_RIGHT },
+	{ GPIO_PIN_TS_MENU, false, switches_action_delay_touch, SW_TOUCH_MENU, EV_SW_TOUCH_MENU },
+	{ GPIO_PIN_TS_RET, false, switches_action_delay_touch, SW_TOUCH_RET, EV_SW_TOUCH_RET },
+};
+static sw_scan_context_t switches_contexts[UTILS_ELEMENT_COUNT(SWITCHES_DEFS)];
+
+static void switches_setup() { swScanInit(SWITCHES_DEFS, switches_contexts, UTILS_ELEMENT_COUNT(SWITCHES_DEFS)); }
+static void switches_service() { swScanSample(SWITCHES_DEFS, switches_contexts, UTILS_ELEMENT_COUNT(SWITCHES_DEFS)); }
+
+#else
+static void switches_setup() { /* empty */ }
+static void switches_service() { /* empty */ }
+#endif
+
 // Spare GPIO, used for debugging at present. Other spare GPIO setup in modbus_init().
 // At present all hardware versions have the same set of spare GPIO, but this might change, which will require a compile time test on CFG_BUILD in this function. 
 static void setup_spare_gpio() {
@@ -939,6 +963,7 @@ void driverInit() {
 	modbus_init();
 	atn_init();
 	init_fault_timer();
+	switches_setup();
 }
 
 void driverService() {
@@ -951,6 +976,7 @@ void driverService() {
 	}
 	utilsRunEvery(50) {
 		led_service();
+		switches_service();
 	}
 	if (devAdcIsConversionDone()) {		// Run scanner when all ADC channels converted.
 		adc_do_scaling();

@@ -3,7 +3,8 @@
 
 #include "event.local.h"
 
-// EV_SW_xxx events have these values in p8.
+// EV_SW_xxx events have these values in p8. 
+// These are not in the switch driver so that clients canuse the events without including the driver header. 
 enum {
 	EV_P8_SW_CLEAR = 0,							// A condition becomes clear.
 	EV_P8_SW_RELEASE = EV_P8_SW_CLEAR,			// Switches are released
