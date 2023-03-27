@@ -414,7 +414,12 @@ static void led_service() { utilsSeqService(&f_led_seq); }
 
 #include "SparkFun_ADXL345.h"
 
-const uint8_t ACCEL_MAX_SAMPLES = 1; //1U << (16 - 10);	// Accelerometer provides 10 bit data.
+const float ADXL_RATE_HZ = 50.0;
+const uint16_t ACCEL_RAW_SAMPLE_RATE_NOMINAL = static_cast<uint16_t>(ADXL_RATE_HZ + 0.5);
+const uint16_t ACCEL_CHECK_PERIOD_MS = 1000;
+const uint16_t ACCEL_RAW_SAMPLE_RATE_TOLERANCE_PERC = 25;
+
+//const uint8_t ACCEL_MAX_SAMPLES = 1; //1U << (16 - 10);	// Accelerometer provides 10 bit data.
 static struct {
 	int16_t r[3];   			// Accumulators for 3 axes.
 	uint8_t counts;				// Sample counter.
@@ -443,39 +448,8 @@ static void sensor_accel_init() {
   adxl.setSpiBit(0);                  // Configure the device to be in 4 wire SPI mode when set to '0' or 3 wire SPI mode when set to 1
                                       // Default: Set to 1
                                       // SPI pins on the ATMega328: 11, 12 and 13 as reference in SPI Library
-
-  adxl.setActivityXYZ(1, 0, 0);       // Set to activate movement detection in the axes "adxl.setActivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
-  adxl.setActivityThreshold(75);      // 62.5mg per increment   // Set activity   // Inactivity thresholds (0-255)
-
-  adxl.setInactivityXYZ(1, 0, 0);     // Set to detect inactivity in all the axes "adxl.setInactivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
-  adxl.setInactivityThreshold(75);    // 62.5mg per increment   // Set inactivity // Inactivity thresholds (0-255)
-  adxl.setTimeInactivity(10);         // How many seconds of no activity is inactive?
-
-  adxl.setTapDetectionOnXYZ(0, 0, 1); // Detect taps in the directions turned ON "adxl.setTapDetectionOnX(X, Y, Z);" (1 == ON, 0 == OFF)
-
-  // Set values for what is considered a TAP and what is a DOUBLE TAP (0-255)
-  adxl.setTapThreshold(50);           // 62.5 mg per increment
-  adxl.setTapDuration(15);            // 625 μs per increment
-  adxl.setDoubleTapLatency(80);       // 1.25 ms per increment
-  adxl.setDoubleTapWindow(200);       // 1.25 ms per increment
-
-  // Set values for what is considered FREE FALL (0-255)
-  adxl.setFreeFallThreshold(7);       // (5 - 9) recommended - 62.5mg per increment
-  adxl.setFreeFallDuration(30);       // (20 - 70) recommended - 5ms per increment
-
-  // Setting all interupts to take place on INT1 pin
-  //adxl.setImportantInterruptMapping(1, 1, 1, 1, 1);     // Sets "adxl.setEveryInterruptMapping(single tap, double tap, free fall, activity, inactivity);"
-                                                        // Accepts only 1 or 2 values for pins INT1 and INT2. This chooses the pin on the ADXL345 to use for Interrupts.
-                                                        // This library may have a problem using INT2 pin. Default to INT1 pin.
-
-  // Turn on Interrupts for each mode (1 == ON, 0 == OFF)
-  adxl.InactivityINT(0);
-  adxl.ActivityINT(0);
-  adxl.FreeFallINT(0);
-  adxl.doubleTapINT(0);
-  adxl.singleTapINT(0);
-
-//attachInterrupt(digitalPinToInterrupt(interruptPin), ADXL_ISR, RISING);   // Attach Interrupt
+ adxl.setRate(ADXL_RATE_HZ);
+ 
 	f_accel_data.restart = true;	// Flag processing as needing a restart
 }
 
@@ -492,10 +466,6 @@ static float tilt(float a, float b, float c, bool quad_correct) {
 	if (quad_correct && (b < 0.0)) mean = -mean;
 	return 2.0 * TILT_FS / M_PI * atan2(a, mean);
 }
-
-const uint16_t ACCEL_CHECK_PERIOD_MS = 1000;
-const uint16_t ACCEL_RAW_SAMPLE_RATE_NOMINAL = 100;
-const uint16_t ACCEL_RAW_SAMPLE_RATE_TOLERANCE_PERC = 25;
 
 void service_devices() {
 	static uint16_t raw_sample_count;
