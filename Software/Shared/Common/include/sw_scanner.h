@@ -1,6 +1,8 @@
 #ifndef SW_SCANNER_H__
 #define SW_SCANNER_H__
 
+#include <stdint.h>
+
 enum {
 	SW_HOLD_TIME = 10,
 	SW_LONG_HOLD_TIME = 30,

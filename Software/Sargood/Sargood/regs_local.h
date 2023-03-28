@@ -83,6 +83,10 @@ enum {
     	REGS_FLAGS_MASK_DC_LOW = (int)0x1,
     	REGS_FLAGS_MASK_SENSOR_FAULT = (int)0x2,
     	REGS_FLAGS_MASK_RELAY_FAULT = (int)0x4,
+    	REGS_FLAGS_MASK_SW_TOUCH_LEFT = (int)0x10,
+    	REGS_FLAGS_MASK_SW_TOUCH_RIGHT = (int)0x20,
+    	REGS_FLAGS_MASK_SW_TOUCH_MENU = (int)0x40,
+    	REGS_FLAGS_MASK_SW_TOUCH_RET = (int)0x80,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_0 = (int)0x2000,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_1 = (int)0x4000,
     	REGS_FLAGS_MASK_WATCHDOG_RESTART = (int)0x8000,
@@ -198,6 +202,10 @@ enum {
     "\n DC_LOW: 0 (Bus volts low.)"                                                     \
     "\n SENSOR_FAULT: 1 (Fault state of all _enabled_ Sensor modules.)"                 \
     "\n RELAY_FAULT: 2 (Fault state for Relay module _if_ enabled.)"                    \
+    "\n SW_TOUCH_LEFT: 4 (Touch sw LEFT.)"                                              \
+    "\n SW_TOUCH_RIGHT: 5 (Touch sw RIGHT.)"                                            \
+    "\n SW_TOUCH_MENU: 6 (Touch sw MENU.)"                                              \
+    "\n SW_TOUCH_RET: 7 (Touch sw RET.)"                                                \
     "\n EEPROM_READ_BAD_0: 13 (EEPROM bank 0 corrupt.)"                                 \
     "\n EEPROM_READ_BAD_1: 14 (EEPROM bank 1 corrupt.)"                                 \
     "\n WATCHDOG_RESTART: 15 (Whoops.)"                                                 \

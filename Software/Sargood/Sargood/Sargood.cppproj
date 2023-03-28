@@ -48,7 +48,7 @@
     <com_atmel_avrdbg_tool_atmelice>
       <ToolOptions>
         <InterfaceProperties>
-          <JtagDbgClock>3800000</JtagDbgClock>
+          <JtagDbgClock>3267885</JtagDbgClock>
         </InterfaceProperties>
         <InterfaceName>JTAG</InterfaceName>
       </ToolOptions>
@@ -57,7 +57,7 @@
       <ToolName>Atmel-ICE</ToolName>
     </com_atmel_avrdbg_tool_atmelice>
     <avrtoolinterface>JTAG</avrtoolinterface>
-    <avrtoolinterfaceclock>3800000</avrtoolinterfaceclock>
+    <avrtoolinterfaceclock>3267885</avrtoolinterfaceclock>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
     <ToolchainSettings>
@@ -318,6 +318,10 @@ build.cmd
       <SubType>compile</SubType>
       <Link>Shared\Common\myprintf.h</Link>
     </Compile>
+    <Compile Include="..\..\Shared\Common\include\sw_scanner.h">
+      <SubType>compile</SubType>
+      <Link>Shared\Common\sw_scanner.h</Link>
+    </Compile>
     <Compile Include="..\..\Shared\Common\include\thread.h">
       <SubType>compile</SubType>
       <Link>Shared\Common\thread.h</Link>
@@ -345,6 +349,10 @@ build.cmd
     <Compile Include="..\..\Shared\Common\src\myprintf.cpp">
       <SubType>compile</SubType>
       <Link>Shared\Common\myprintf.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\Shared\Common\src\sw_scanner.cpp">
+      <SubType>compile</SubType>
+      <Link>Shared\Common\sw_scanner.cpp</Link>
     </Compile>
     <Compile Include="..\..\Shared\Common\src\thread.cpp">
       <SubType>compile</SubType>

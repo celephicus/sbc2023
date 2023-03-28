@@ -9,7 +9,7 @@
 	SW_TOUCH_RIGHT	Touch switch RIGHT
 	SW_TOUCH_MENU	Touch switch MENU
 	SW_TOUCH_RET	Touch switch RET
-	 
+
    >>> End event definitions, begin generated code. */
 
 // Event IDs
@@ -26,7 +26,11 @@ enum {
     EV_DEBUG = 9,                       // Generic debug event.
     EV_COMMAND_START = 10,              // Command received, code in p8.
     EV_COMMAND_DONE = 11,               // Command done, code in p8, status code in p16.
-    COUNT_EV = 12,                      // Total number of events defined.
+    EV_SW_TOUCH_LEFT = 12,              // Touch switch LEFT
+    EV_SW_TOUCH_RIGHT = 13,             // Touch switch RIGHT
+    EV_SW_TOUCH_MENU = 14,              // Touch switch MENU
+    EV_SW_TOUCH_RET = 15,               // Touch switch RET
+    COUNT_EV = 16,                      // Total number of events defined.
 };
 
 // Size of trace mask in bytes.
@@ -46,6 +50,10 @@ enum {
  static const char EVENT_NAMES_9[] PROGMEM = "DEBUG";                                   \
  static const char EVENT_NAMES_10[] PROGMEM = "COMMAND_START";                          \
  static const char EVENT_NAMES_11[] PROGMEM = "COMMAND_DONE";                           \
+ static const char EVENT_NAMES_12[] PROGMEM = "SW_TOUCH_LEFT";                          \
+ static const char EVENT_NAMES_13[] PROGMEM = "SW_TOUCH_RIGHT";                         \
+ static const char EVENT_NAMES_14[] PROGMEM = "SW_TOUCH_MENU";                          \
+ static const char EVENT_NAMES_15[] PROGMEM = "SW_TOUCH_RET";                           \
                                                                                         \
  static const char* const EVENT_NAMES[] PROGMEM = {                                     \
    EVENT_NAMES_0,                                                                       \
@@ -60,6 +68,10 @@ enum {
    EVENT_NAMES_9,                                                                       \
    EVENT_NAMES_10,                                                                      \
    EVENT_NAMES_11,                                                                      \
+   EVENT_NAMES_12,                                                                      \
+   EVENT_NAMES_13,                                                                      \
+   EVENT_NAMES_14,                                                                      \
+   EVENT_NAMES_15,                                                                      \
  }
 
 // Event Descriptions.
@@ -76,6 +88,10 @@ enum {
  static const char EVENT_DESCS_9[] PROGMEM = "Generic debug event.";                                                                        \
  static const char EVENT_DESCS_10[] PROGMEM = "Command received, code in p8.";                                                              \
  static const char EVENT_DESCS_11[] PROGMEM = "Command done, code in p8, status code in p16.";                                              \
+ static const char EVENT_DESCS_12[] PROGMEM = "Touch switch LEFT";                                                                          \
+ static const char EVENT_DESCS_13[] PROGMEM = "Touch switch RIGHT";                                                                         \
+ static const char EVENT_DESCS_14[] PROGMEM = "Touch switch MENU";                                                                          \
+ static const char EVENT_DESCS_15[] PROGMEM = "Touch switch RET";                                                                           \
                                                                                                                                             \
  static const char* const EVENT_DESCS[] PROGMEM = {                                                                                         \
    EVENT_DESCS_0,                                                                                                                           \
@@ -90,6 +106,10 @@ enum {
    EVENT_DESCS_9,                                                                                                                           \
    EVENT_DESCS_10,                                                                                                                          \
    EVENT_DESCS_11,                                                                                                                          \
+   EVENT_DESCS_12,                                                                                                                          \
+   EVENT_DESCS_13,                                                                                                                          \
+   EVENT_DESCS_14,                                                                                                                          \
+   EVENT_DESCS_15,                                                                                                                          \
  }
 
 // ]]] End generated code.

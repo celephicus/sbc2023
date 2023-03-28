@@ -15,6 +15,8 @@ FILENUM(2);
 
 #include "sw_scanner.h"
 #include "myprintf.h"
+#include "event.h"
+
 
 // Helper for myprintf to write a single character to the serial port.
 static void myprintf_of(char c, void* arg) {
@@ -670,12 +672,12 @@ static void service_devices() {
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 
 // Action delay for touch switches.
-static uint8_t switches_action_delay_touch() return 2; }
-static sw_scan_def_t SWITCHES_DEFS[] PROGMEM = {
-	{ GPIO_PIN_TS_LEFT, false, switches_action_delay_touch, SW_TOUCH_LEFT, EV_SW_TOUCH_LEFT },
-	{ GPIO_PIN_TS_RIGHT, false, switches_action_delay_touch, SW_TOUCH_RIGHT, EV_SW_TOUCH_RIGHT },
-	{ GPIO_PIN_TS_MENU, false, switches_action_delay_touch, SW_TOUCH_MENU, EV_SW_TOUCH_MENU },
-	{ GPIO_PIN_TS_RET, false, switches_action_delay_touch, SW_TOUCH_RET, EV_SW_TOUCH_RET },
+static uint8_t switches_action_delay_touch() { return 2; }
+static const sw_scan_def_t SWITCHES_DEFS[] PROGMEM = {
+	{ GPIO_PIN_TS_LEFT, false, switches_action_delay_touch, REGS_FLAGS_MASK_SW_TOUCH_LEFT, EV_SW_TOUCH_LEFT },
+	{ GPIO_PIN_TS_RIGHT, false, switches_action_delay_touch, REGS_FLAGS_MASK_SW_TOUCH_RIGHT, EV_SW_TOUCH_RIGHT },
+	{ GPIO_PIN_TS_MENU, false, switches_action_delay_touch, REGS_FLAGS_MASK_SW_TOUCH_MENU, EV_SW_TOUCH_MENU },
+	{ GPIO_PIN_TS_RET, false, switches_action_delay_touch, REGS_FLAGS_MASK_SW_TOUCH_RET, EV_SW_TOUCH_RET },
 };
 static sw_scan_context_t switches_contexts[UTILS_ELEMENT_COUNT(SWITCHES_DEFS)];
 
@@ -700,10 +702,6 @@ static void setup_spare_gpio() {
 }
 
 // Non-volatile objects.
-
-#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
-#include "event.h"
-#endif
 
 // All data managed by NV. Complicated as only the last portion of the regs array is written to NV.
 typedef struct {
