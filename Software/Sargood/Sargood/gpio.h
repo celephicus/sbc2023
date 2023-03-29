@@ -8,8 +8,8 @@ enum {
     // Serial
     GPIO_PIN_RX0 = 0,                              // Onboard USB serial port
     GPIO_PIN_TX0 = 1,                              // Onboard USB serial port
-    GPIO_PIN_CONS_TXO = 16,                        // Console FDTI serial
-    GPIO_PIN_CONS_RXI = 17,                        // Console FDTI serial
+    GPIO_PIN_CONS_TXO = 14,                        // Console FDTI serial
+    GPIO_PIN_CONS_RXI = 15,                        // Console FDTI serial
     GPIO_PIN_EXT_TXD = 18,                         // Ext. RS232 port
     GPIO_PIN_EXT_RXD = 19,                         // Ext. RS232 port
 
@@ -23,7 +23,7 @@ enum {
     GPIO_PIN_TS_RET = 36,                          // Touchswitch module
 
     // LCD
-    GPIO_PIN_LCD_BL = 3,                           // LCD backlight
+    GPIO_PIN_LCD_BL = 4,                           // LCD backlight
     GPIO_PIN_LCD_RS = 22,                          // LCD control
     GPIO_PIN_LCD_E = 23,                           // LCD control
     GPIO_PIN_LCD_D4 = 24,                          // LCD data
@@ -32,8 +32,8 @@ enum {
     GPIO_PIN_LCD_D7 = 27,                          // LCD data
 
     // Bus
-    GPIO_PIN_RS485_TXD = 14,                       // RS485 TX
-    GPIO_PIN_RS485_RXD = 15,                       // RS485 RX
+    GPIO_PIN_RS485_TXD = 16,                       // RS485 TX
+    GPIO_PIN_RS485_RXD = 17,                       // RS485 RX
     GPIO_PIN_ATN = 31,                             // Pulse high to signal ATN low on bus.
     GPIO_PIN_RS485_TX_EN = 32,                     // Enable RS485 xmitter
 
@@ -61,7 +61,9 @@ enum {
 };
 // Extra symbols from symbol directive.
 #define GPIO_SERIAL_CONSOLE Serial // Serial port for console.
-#define GPIO_SERIAL_RS485 Serial3 // Serial port for RS485.
+#define GPIO_SERIAL_RS485 Serial2 // Serial port for RS485.
+#define GPIO_SERIAL_RS232 Serial1 // Serial port for customer RS232.
+#define GPIO_SERIAL_FDTI_CONS Serial3 // Serial port for board FDTI header.
 #define GPIO_LCD_NUM_ROWS 2 // 
 #define GPIO_LCD_NUM_COLS 16 // 
 
@@ -169,6 +171,6 @@ static inline void gpioSp7Clear() { PORTK &= ~_BV(7); }
 static inline void gpioSp7Write(bool b) { if (b) PORTK |= _BV(7); else PORTK &= ~_BV(7); }
 
 // List unused pins
-#define GPIO_UNUSED_PINS 4, 5, 6, 7, 8, 9, 10, 11, 12, 20, 21, 28, 29, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 53, A1, A2, A3, A4, A5, A6, A7
+#define GPIO_UNUSED_PINS 3, 5, 6, 7, 8, 9, 10, 11, 12, 20, 21, 28, 29, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 53, A1, A2, A3, A4, A5, A6, A7
 
 #endif   // GPIO_H__

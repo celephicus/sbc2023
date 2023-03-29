@@ -50,7 +50,7 @@ static bool console_cmds_user(char* cmd) {
 		const uint8_t timeout = (uint8_t)consoleStackPop();
 		lcdDriverWrite(consoleStackPop(), timeout, PSTR("%s"), msg);
 		} break;
-
+	case /** BL **/ 0x728b: driverSetLcdBacklight(consoleStackPop()); break;
 	// Events & trace...
 	case /** EVENT **/ 0x8a29: eventPublish(consoleStackPop()); break;
 	case /** EVENT-EX **/ 0x2f99: { const uint16_t p16 = consoleStackPop(); const uint8_t p8 = consoleStackPop(); eventPublish(consoleStackPop(), p8, p16); } break;
