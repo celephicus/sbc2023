@@ -21,7 +21,7 @@ thread_ticks_t threadGetTicks() { return (thread_ticks_t)millis(); }
 
 // Relays are assigned in parallel with move commands like APP_CMD_HEAD_UP. Only one relay of each set can be active at a time.
 enum {
-	RELAY_STOP = 0,				// Stops any axis.
+	RELAY_STOP = 0,				// Stops all axes.
 
 	RELAY_HEAD_UP = 0x01,
 	RELAY_HEAD_DOWN = 0x02,
@@ -38,6 +38,10 @@ enum {
 	RELAY_TILT_MASK = 0xc0,
 };
 
+static inline uint8_t relay_axis_up(uint8_t axis) { return RELAY_HEAD_UP << (axis*2); }
+static inline uint8_t relay_axis_down(uint8_t axis) { return RELAY_HEAD_DOWN << (axis*2); }
+static inline uint8_t relay_axis_mask(uint8_t axis) { return RELAY_HEAD_MASK << (axis*2); }
+
 static const uint16_t RELAY_RUN_DURATION_MS = 1000U;
 static const uint16_t RELAY_STOP_DURATION_MS = 200U;
 
@@ -48,12 +52,6 @@ static struct {
 
 void appCmdRun(uint8_t cmd) {
 	f_app_ctx.cmd_req = cmd;
-}
-
-static int16_t get_slew_dir(uint8_t preset_idx, uint8_t sensor_idx) {
-	const int16_t* presets = driverPresets(preset_idx);
-	const int16_t delta = presets[sensor_idx] - (int16_t)REGS[REGS_IDX_TILT_SENSOR_0+sensor_idx];
-	return utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_DEADBAND]);
 }
 
 // Really place holders, start called when command started, stop may be called multiple times but only has an effect the first time.
@@ -111,9 +109,8 @@ static bool check_stop_command() {
 	return false;
 }
 
-static const uint16_t SLEW_TIMEOUT_DECIS = 5*10;
 static bool check_slew_timeout() {
-	if (0U == REGS[REGS_IDX_SLEW_TIMER]) {
+	if (0U == f_slew_timer) {
 		cmd_done(APP_CMD_STATUS_SLEW_TIMEOUT);
 		return true;
 	}
@@ -189,7 +186,6 @@ do_manual:	if (!check_relay()) {	// If relay OK...
 		case APP_CMD_RESTORE_POS_2:
 		case APP_CMD_RESTORE_POS_3:
 		case APP_CMD_RESTORE_POS_4: {
-			REGS[REGS_IDX_SLEW_TIMER] = SLEW_TIMEOUT_DECIS;
 			regsUpdateMask(REGS_IDX_RELAY_STATE, (RELAY_HEAD_MASK|RELAY_FOOT_MASK), RELAY_STOP);	// Should always be true...
 			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_RESTORE_POS_1;
 			if (!is_preset_valid(preset_idx)) {				// Invalid preset, abort.
@@ -198,32 +194,51 @@ do_manual:	if (!check_relay()) {	// If relay OK...
 			}
 
 			// Preset good, start slewing...
-			// TODO: Add timeout.
-			while ((!check_sensors()) && (!check_relay()) && (!check_stop_command()) && (!check_slew_timeout())) {
-				// TODO: Verify sensor going offline can't lock up.
-				THREAD_WAIT_UNTIL(avail);		// Wait for new reading.
-				int8_t dir = (int8_t)get_slew_dir(preset_idx, 0);
+			for (static uint8_t axis_idx = 0; axis_idx < 2; axis_idx += 1) {
+				if (!driverSlaveIsEnabled(axis_idx))		// Do not do disabled axes.
+					continue;
+					
+				f_slew_timer = REGS[REGS_IDX_SLEW_TIMEOUT]*10U;
+				while ((!check_sensors()) && (!check_relay()) && (!check_stop_command()) && (!check_slew_timeout())) {
+					// TODO: Verify sensor going offline can't lock up.
+					THREAD_WAIT_UNTIL(avail);		// Wait for new reading.
+				
+					// Get direction to go, or we mightbe there anyways.
+					const int16_t* presets = driverPresets(preset_idx);
+					const int16_t delta = presets[axis_idx] - (int16_t)REGS[REGS_IDX_TILT_SENSOR_0+sensor_idx];
+					const int8_t dir =
+					  utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_DEADBAND]);
 
-				// If we are moving in one direction, check for position reached. We can't just check for zero as it might overshoot.
-				if (REGS[REGS_IDX_RELAY_STATE] & RELAY_HEAD_DOWN) {	
-					if (dir >= 0)
-						break;
-				}
-				else if (REGS[REGS_IDX_RELAY_STATE] & RELAY_HEAD_UP) {		// Or the other...
-					if (dir <= 0)
-						break;
-				}
-				else {															// If not moving, turn on motors.
-					if (dir < 0)
-						regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_DOWN);
-					else if (dir > 0)
-						regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_UP);
-					else // No slew necessary...
-						break;
-				}
-				THREAD_YIELD();	// We need to yield to allow the flag to be updated at the start of the thread.
-			}	// Closes `while (1) {' ...
+					// If we are moving in one direction, check for position reached. We can't just check for zero as it might overshoot.
+					if (REGS[REGS_IDX_RELAY_STATE] & relay_axis_down(axis_idx)) {	
+						if (dir >= 0)
+							break;
+					}
+					else if (REGS[REGS_IDX_RELAY_STATE] & relay_axis_up(axis_idx)) {		// Or the other...
+						if (dir <= 0)
+							break;
+					}
+					else {															// If not moving, turn on motors.
+						if (dir < 0)
+							regsUpdateMask(REGS_IDX_RELAY_STATE, relay_axis_mask(axis_idx), relay_axis_down(axis_idx));
+						else if (dir > 0)
+							regsUpdateMask(REGS_IDX_RELAY_STATE, relay_axis_mask(axis_idx), relay_axis_up(axis_idx));
+						else // No slew necessary...
+							break;
+					}
+					THREAD_YIELD();	// We need to yield to allow the avail flag to be updated at the start of the thread.
+				}	// Closes `while (...) {' ...
 
+				// Stop and let axis motors rundown if they are moving...
+				if (REGS[REGS_IDX_RELAY_STATE] & (RELAY_HEAD_MASK|RELAY_FOOT_MASK)) {
+					regsUpdateMask(REGS_IDX_RELAY_STATE, (RELAY_HEAD_MASK|RELAY_FOOT_MASK), RELAY_STOP);
+					THREAD_DELAY(RELAY_STOP_DURATION_MS);
+				}
+			}	// Closes for (...) ...
+
+
+			// This is here in case the command aborts for some reason with the motors going. Itpurposely doesn't check for comms with the relay, just stops.
+			// TODO: Fix duplicated code. 
 			// Stop and let axis motors rundown if they are moving...
 			if (REGS[REGS_IDX_RELAY_STATE] & (RELAY_HEAD_MASK|RELAY_FOOT_MASK)) {
 				regsUpdateMask(REGS_IDX_RELAY_STATE, (RELAY_HEAD_MASK|RELAY_FOOT_MASK), RELAY_STOP);
@@ -231,7 +246,6 @@ do_manual:	if (!check_relay()) {	// If relay OK...
 			}
 
 			cmd_done();
-			REGS[REGS_IDX_SLEW_TIMER] = 0U;
 			THREAD_YIELD();
 			} break;
 		}	// Closes `switch (REGS[REGS_IDX_CMD_ACTIVE]) {'
@@ -366,8 +380,8 @@ void appService() {
 void appService10hz() { 
 	lcdDriverService_10Hz(); 
 	eventSmTimerService();
-	if (REGS[REGS_IDX_SLEW_TIMER] > 0)
-		REGS[REGS_IDX_SLEW_TIMER] -= 1;
+	if (f_slew_timer > 0)
+		f_slew_timer -= 1;
 }
 
 #if 0
