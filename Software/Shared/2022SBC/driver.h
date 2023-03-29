@@ -25,7 +25,7 @@ bool driverSlaveIsEnabled(uint8_t slave_idx);
 // Minimal printf.
 void printf_s(PGM_P fmt, ...);
 
-void driverSetLcdBacklight(bool f);
+void driverSetLcdBacklight(uint8_t f);
 
 #endif
 

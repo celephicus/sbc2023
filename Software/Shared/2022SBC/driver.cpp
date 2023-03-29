@@ -93,6 +93,12 @@ static uint8_t read_holding_register(uint16_t address, uint16_t* value) {
 		*value = REGS[REGS_IDX_ACCEL_TILT_STATUS];
 		return 0;
 	}
+	if (SBC2022_MODBUS_REGISTER_SENSOR_SAMPLE_COUNT == address) {
+		static uint16_t last;
+		*value = REGS[REGS_IDX_ACCEL_SAMPLE_COUNT] - last;
+		last = REGS[REGS_IDX_ACCEL_SAMPLE_COUNT];
+		return 0;
+	}
 	*value = (uint16_t)-1;
 	return 1;
 }
@@ -260,7 +266,7 @@ static void do_handle_modbus_cb(uint8_t evt, const uint8_t* frame, uint8_t frame
 				uint16_t address = modbusGetU16(&modbusPeekRequestData()[MODBUS_FRAME_IDX_DATA]); // Get register address from request frame.
 				uint8_t byte_count = frame[MODBUS_FRAME_IDX_DATA];		// Retrieve byte count from response frame.
 				if (((byte_count & 1) == 0) && (frame_len == (byte_count + 5))) { 	// Generic check for correct response to read multiple regs.
-					if ((4 == byte_count) && (SBC2022_MODBUS_REGISTER_SENSOR_TILT == address)) { 	// We expect to read two registers from this address...
+					if ((byte_count >= 4) && (SBC2022_MODBUS_REGISTER_SENSOR_TILT == address)) { 	// We expect to read _AT_LEAST_ two registers from this address...
 						REGS[REGS_IDX_TILT_SENSOR_0 + sensor_idx] = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 1 + 0]);
 						do_set_slave_status(REGS_IDX_SENSOR_STATUS_0 + sensor_idx, modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 1 + 2]));
 					}
@@ -417,7 +423,7 @@ static void led_service() { utilsSeqService(&f_led_seq); }
 
 #include "SparkFun_ADXL345.h"
 
-const float ADXL_RATE_HZ = 50.0;
+const float ADXL_RATE_HZ = 100.0;
 const uint16_t ACCEL_RAW_SAMPLE_RATE_NOMINAL = static_cast<uint16_t>(ADXL_RATE_HZ + 0.5);
 const uint16_t ACCEL_CHECK_PERIOD_MS = 1000;
 const uint16_t ACCEL_RAW_SAMPLE_RATE_TOLERANCE_PERC = 25;
@@ -533,6 +539,8 @@ void service_devices() {
 	}
 }
 
+void service_devices_50ms() { /* empty */ }
+	
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 
 // MAX4820 relay driver driver.
@@ -557,6 +565,8 @@ void service_devices() {
 	if (f_relay_data != (uint8_t)REGS[REGS_IDX_RELAYS])
 		write_relays((uint8_t)REGS[REGS_IDX_RELAYS]);
 }
+
+void service_devices_50ms() { /* empty */ }
 
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 
@@ -608,7 +618,8 @@ static int8_t thread_query_slaves(void* arg) {
 			bufferFrameAdd(&req, SBC2022_MODBUS_SLAVE_ID_SENSOR_0 + sidx);
 			bufferFrameAdd(&req, MODBUS_FC_READ_HOLDING_REGISTERS);
 			bufferFrameAddU16(&req, utilsU16_native_to_be(SBC2022_MODBUS_REGISTER_SENSOR_TILT));
-			bufferFrameAddU16(&req, utilsU16_native_to_be(2));
+			// TODO: only need two registers here. 
+			bufferFrameAddU16(&req, utilsU16_native_to_be(3));
 			THREAD_WAIT_UNTIL(!modbusIsBusy());
 			modbusMasterSend(req.buf, bufferFrameLen(&req));
 			THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(SLAVE_QUERY_PERIOD));
@@ -625,17 +636,35 @@ static int8_t thread_query_slaves(void* arg) {
 	THREAD_END();
 }
 
+static const uint8_t LED_GAMMA[] PROGMEM = { // https://ledshield.wordpress.com/2012/11/13/led-brightness-to-your-eye-gamma-correction-no/
+	0, 0, 0, 1, 1, 2, 2, 3, 4, 5, 6, 8, 9, 11, 13, 14,
+	16, 19, 21, 23, 26, 28, 31, 34, 37, 40, 43, 47, 50, 54, 58, 62,
+	66, 70, 74, 79, 83, 88, 93, 98, 103, 108, 113, 119, 124, 130, 136, 142,
+	148, 154, 161, 167, 174, 180, 187, 194, 201, 209, 216, 224, 231, 239, 247, 255,
+};
+static uint8_t f_lcd_bl_demand, f_lcd_bl_current;
+static void set_lcd_backlight(uint8_t b) {
+	f_lcd_bl_current = b;
+	analogWrite(GPIO_PIN_LCD_BL, 255 - pgm_read_byte(&LED_GAMMA[f_lcd_bl_current]));
+}
 static thread_control_t tcb_query_slaves;
 static void setup_devices() {
 	threadInit(&tcb_query_slaves);
 	regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_FAULT|REGS_FLAGS_MASK_RELAY_FAULT, true);
-	pinMode(GPIO_PIN_LCD_BL, OUTPUT);
+	driverSetLcdBacklight(0);
 }
 static void service_devices() {
 	threadRun(&tcb_query_slaves, thread_query_slaves, NULL);
 }
-void driverSetLcdBacklight(bool f) { digitalWrite(GPIO_PIN_LCD_BL, f); }
-
+void service_devices_50ms() {
+	if (f_lcd_bl_current > f_lcd_bl_demand)
+		set_lcd_backlight(f_lcd_bl_current - 1);
+}
+void driverSetLcdBacklight(uint8_t b) { 
+	f_lcd_bl_demand = utilsRescaleU8(b, 255, UTILS_ELEMENT_COUNT(LED_GAMMA)-1);
+	if (f_lcd_bl_demand > f_lcd_bl_current)
+		set_lcd_backlight(f_lcd_bl_demand);
+}
 #endif
 
 // Switches
@@ -939,6 +968,7 @@ void driverInit() {
 void driverService() {
 	modbus_service();
 	service_devices();
+	
 	utilsRunEvery(100) {
 		service_fault_timers();
 		adc_start();
@@ -947,6 +977,7 @@ void driverService() {
 	utilsRunEvery(50) {
 		led_service();
 		switches_service();
+		service_devices_50ms();
 	}
 	if (devAdcIsConversionDone()) {		// Run scanner when all ADC channels converted.
 		adc_do_scaling();

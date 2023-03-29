@@ -294,6 +294,7 @@ static const char* get_cmd_status_desc(uint8_t cmd) {
 	}
 }
 
+// State machine to handle display. 
 typedef struct {
 	EventSmContextBase base;
 	//uint16_t timer_cookie[CFG_TIMER_COUNT_SM_LEDS];
@@ -302,16 +303,41 @@ static SmLcdContext f_sm_lcd_ctx;
 
 // Timeouts.
 static const uint16_t DISPLAY_CMD_START_DURATION_MS =		1000U;
+static const uint16_t DISPLAY_BANNER_DURATION_MS =			2000U;
+static const uint16_t BACKLIGHT_TIMEOUT_MS =				4000U;
+static const uint16_t UPDATE_INFO_PERIOD_MS =				500U;
 
+// Timers
+enum {
+	TIMER_MSG,
+	TIMER_BL,
+	TIMER_UPDATE_INFO,
+};
 // Define states.
 enum { 
-	ST_RUN, 
+	ST_INIT, ST_RUN, ST_DEBUG 
 };
 	
 static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 	SmLcdContext* my_context = (SmLcdContext*)context;        // Downcast to derived class.
 	(void)my_context;
 	switch (context->st) {
+		case ST_INIT:
+		switch(event_id(ev)) {
+			case EV_SM_ENTRY:
+			lcdDriverWrite(LCD_DRIVER_ROW_1, 0, PSTR("  TSA MBC 2022"));
+			lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("V" CFG_VER_STR " build " CFG_BUILD_NUMBER_STR));
+			driverSetLcdBacklight(255);
+			eventSmTimerStart(TIMER_MSG, DISPLAY_BANNER_DURATION_MS/100U);
+			break;
+			
+			case EV_TIMER:
+			if (event_p8(ev) == TIMER_MSG)
+				return ST_RUN;
+			break;
+		}	// Closes ST_INIT...
+		break;
+				
 		case ST_RUN:
 		switch(event_id(ev)) {
 			case EV_SM_ENTRY:
@@ -319,23 +345,38 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 			break;
 			
 			case EV_SM_SELF:
-			lcdDriverWrite(LCD_DRIVER_ROW_1, 0, PSTR("  TSA MBC 2022"));
-			lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("    Ready..."));
+			eventSmTimerStart(TIMER_UPDATE_INFO, 1);
+			eventSmTimerStart(TIMER_BL, BACKLIGHT_TIMEOUT_MS/100U);
+			driverSetLcdBacklight(255);
 			break;
 
 			case EV_COMMAND_START:
-			lcdDriverWrite(LCD_DRIVER_ROW_1, 0, get_cmd_desc(event_p8(ev)));
+			lcdDriverWrite(LCD_DRIVER_ROW_1, 0, PSTR("CMD %S"), get_cmd_desc(event_p8(ev)));
 			lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("Running"));
+			eventSmTimerStop(TIMER_BL);
+			eventSmTimerStop(TIMER_UPDATE_INFO);
+			driverSetLcdBacklight(255);
 			break;
 			
 			case EV_COMMAND_DONE:
 			lcdDriverWrite(LCD_DRIVER_ROW_2, 0, get_cmd_status_desc(event_p16(ev)));
-			eventSmTimerStart(0, DISPLAY_CMD_START_DURATION_MS/100U);
+			eventSmTimerStart(TIMER_MSG, DISPLAY_CMD_START_DURATION_MS/100U);
+			eventSmTimerStart(TIMER_BL, BACKLIGHT_TIMEOUT_MS/100U);
+			driverSetLcdBacklight(255);
 			break;
 			
 			case EV_TIMER:
-			//if (event_p8(ev) == 0)
+			if (event_p8(ev) == TIMER_MSG)
 				eventSmPostSelf(context);
+			if (event_p8(ev) == TIMER_BL)
+				driverSetLcdBacklight(0);
+			if (event_p8(ev) == TIMER_UPDATE_INFO) {
+				//lcdDriverWrite(LCD_DRIVER_ROW_1, 0, PSTR("  TSA MBC 2022"));
+				lcdDriverWrite(LCD_DRIVER_ROW_1, 0, PSTR("R %S"), (regsFlags() & REGS_FLAGS_MASK_RELAY_FAULT) ? PSTR("FAIL") : PSTR("OK"));
+				//lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("    Ready..."));
+				lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("H%6d T%6d"), REGS[REGS_IDX_TILT_SENSOR_0], REGS[REGS_IDX_TILT_SENSOR_1]);
+				eventSmTimerStart(TIMER_UPDATE_INFO, UPDATE_INFO_PERIOD_MS/100U);
+			}
 			break;
 		}	// Closes ST_RUN...
 		break;
