@@ -74,6 +74,7 @@
             <Value>..\include\libraries\Wire</Value>
             <Value>..\include\libraries\Wire\utility</Value>
             <Value>..\include\libraries\LiquidCrystal</Value>
+            <Value>..\include\libraries\irmp</Value>
             <Value>..\include\libraries\SPI</Value>
             <Value>..\include\core</Value>
             <Value>..\include\variants\mega</Value>
@@ -108,6 +109,7 @@
             <Value>..\include\libraries\Wire</Value>
             <Value>..\include\libraries\Wire\utility</Value>
             <Value>..\include\libraries\LiquidCrystal</Value>
+            <Value>..\include\libraries\irmp</Value>
             <Value>..\include\libraries\SPI</Value>
             <Value>..\include\core</Value>
             <Value>..\include\variants\mega</Value>
@@ -166,6 +168,7 @@
       <Value>..\include\libraries\Wire</Value>
       <Value>..\include\libraries\Wire\utility</Value>
       <Value>..\include\libraries\LiquidCrystal</Value>
+      <Value>..\include\libraries\irmp</Value>
       <Value>..\include\libraries\SPI</Value>
       <Value>..\include\core</Value>
       <Value>..\include\variants\mega</Value>
@@ -199,6 +202,7 @@
       <Value>..\include\libraries\Wire</Value>
       <Value>..\include\libraries\Wire\utility</Value>
       <Value>..\include\libraries\LiquidCrystal</Value>
+      <Value>..\include\libraries\irmp</Value>
       <Value>..\include\libraries\SPI</Value>
       <Value>..\include\core</Value>
       <Value>..\include\variants\mega</Value>
@@ -289,6 +293,21 @@
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="include\libraries\LiquidCrystal\LiquidCrystal.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="include\libraries\irmp\irmpSelectAllProtocols.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="include\libraries\irmp\irmp.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="include\libraries\irmp\irmp.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="include\libraries\irmp\irmpArduinoExt.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="include\libraries\irmp\irmpprotocols.hpp">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="include\libraries\Wire\utility\twi.h">

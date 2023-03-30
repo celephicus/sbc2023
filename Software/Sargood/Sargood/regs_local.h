@@ -41,7 +41,7 @@ ENABLES [nv hex 0x0000] "Enable flags."
 	DUMP_REGS [2] "Regs values dump to console."
 	DUMP_REGS_FAST [3] "Dump at 5/s rather than 1/s."
 	DISABLE_BLINKY_LED [15] "Disable setting Blinky Led from fault states."
-SLEW_DEADBAND [5 nv] "If delta tilt less than deadband then stop."
+SLEW_DEADBAND [20 nv] "If delta tilt less than deadband then stop."
 
 >>>  Definition end, declaration start... */
 
@@ -62,7 +62,7 @@ enum {
     REGS_IDX_UPDATE_COUNT = 12,
     REGS_IDX_CMD_ACTIVE = 13,
     REGS_IDX_CMD_STATUS = 14,
-    REGS_IDX_SLEW_TIMER = 15,
+    REGS_IDX_SLEW_TIMEOUT = 15,
     REGS_IDX_SLAVE_DISABLE = 16,
     REGS_IDX_ENABLES = 17,
     REGS_IDX_SLEW_DEADBAND = 18,
@@ -70,10 +70,10 @@ enum {
 };
 
 // Define the start of the NV regs. The region is from this index up to the end of the register array.
-#define REGS_START_NV_IDX REGS_IDX_SLAVE_DISABLE
+#define REGS_START_NV_IDX REGS_IDX_SLEW_TIMEOUT
 
 // Define default values for the NV segment.
-#define REGS_NV_DEFAULT_VALS 2, 0, 5
+#define REGS_NV_DEFAULT_VALS 10, 2, 0, 20
 
 // Define how to format the reg when printing.
 #define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U
@@ -124,7 +124,7 @@ enum {
  static const char REGS_NAMES_12[] PROGMEM = "UPDATE_COUNT";                            \
  static const char REGS_NAMES_13[] PROGMEM = "CMD_ACTIVE";                              \
  static const char REGS_NAMES_14[] PROGMEM = "CMD_STATUS";                              \
- static const char REGS_NAMES_15[] PROGMEM = "SLEW_TIMER";                              \
+ static const char REGS_NAMES_15[] PROGMEM = "SLEW_TIMEOUT";                            \
  static const char REGS_NAMES_16[] PROGMEM = "SLAVE_DISABLE";                           \
  static const char REGS_NAMES_17[] PROGMEM = "ENABLES";                                 \
  static const char REGS_NAMES_18[] PROGMEM = "SLEW_DEADBAND";                           \
@@ -168,7 +168,7 @@ enum {
  static const char REGS_DESCRS_12[] PROGMEM = "Incremented on each update cycle.";      \
  static const char REGS_DESCRS_13[] PROGMEM = "Current running command.";               \
  static const char REGS_DESCRS_14[] PROGMEM = "Status from previous command.";          \
- static const char REGS_DESCRS_15[] PROGMEM = "Timeout for slew motion.";               \
+ static const char REGS_DESCRS_15[] PROGMEM = "Timeout for axis slew in seconds.";      \
  static const char REGS_DESCRS_16[] PROGMEM = "Disable errors from selected sensors.";  \
  static const char REGS_DESCRS_17[] PROGMEM = "Enable flags.";                          \
  static const char REGS_DESCRS_18[] PROGMEM = "If delta tilt less than deadband then stop.";\

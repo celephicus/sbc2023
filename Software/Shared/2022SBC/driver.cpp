@@ -570,6 +570,34 @@ void service_devices_50ms() { /* empty */ }
 
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 
+// IR decoder.
+//
+
+#define IRMP_INPUT_PIN      GPIO_PIN_IR_REC
+#define IRMP_USE_COMPLETE_CALLBACK       1 // Enable callback functionality
+#define NO_LED_FEEDBACK_CODE   // Activate this if you want to suppress LED feedback or if you do not have a LED. This saves 14 bytes code and 2 clock cycles per interrupt.
+
+#define IRMP_SUPPORT_NEC_PROTOCOL 1
+#include <irmp.hpp>
+#pragma GCC diagnostic pop
+
+static IRMP_DATA irmp_data;
+static bool volatile sIRMPDataAvailable = false;
+void handleReceivedIRData() {
+	irmp_get_data(&irmp_data);
+	sIRMPDataAvailable = true;
+}
+static void ir_setup() {
+  irmp_init();
+  irmp_register_complete_callback_function(&handleReceivedIRData);
+}
+static void ir_service() {
+  if (sIRMPDataAvailable) {
+    sIRMPDataAvailable = false;
+	eventPublish(EV_IR_REC, irmp_data.command, irmp_data.address);
+  }
+}
+
 #include "thread.h"
 
 /* This code reads all sensors and writes to the relay, then decides if there is an error condition that should be flagged upwards.
@@ -649,11 +677,13 @@ static void set_lcd_backlight(uint8_t b) {
 }
 static thread_control_t tcb_query_slaves;
 static void setup_devices() {
+	ir_setup();
 	threadInit(&tcb_query_slaves);
 	regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_FAULT|REGS_FLAGS_MASK_RELAY_FAULT, true);
 	driverSetLcdBacklight(0);
 }
 static void service_devices() {
+	ir_service();
 	threadRun(&tcb_query_slaves, thread_query_slaves, NULL);
 }
 void service_devices_50ms() {

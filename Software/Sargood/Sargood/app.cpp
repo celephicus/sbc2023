@@ -36,11 +36,34 @@ enum {
 	RELAY_FOOT_MASK = 0x0c,
 	RELAY_BED_MASK = 0x30,
 	RELAY_TILT_MASK = 0xc0,
+	
+	RELAY_ALL_MASK = 0xff,
 };
 
-static inline uint8_t relay_axis_up(uint8_t axis) { return RELAY_HEAD_UP << (axis*2); }
-static inline uint8_t relay_axis_down(uint8_t axis) { return RELAY_HEAD_DOWN << (axis*2); }
-static inline uint8_t relay_axis_mask(uint8_t axis) { return RELAY_HEAD_MASK << (axis*2); }
+// Abstract relay control to axes.
+enum {
+	AXIS_HEAD = 0,
+	AXIS_FOOT,
+	AXIS_BED,
+	AXIS_TILT,
+};
+enum { 
+	AXIS_DIR_STOP = 0, 
+	AXIS_DIR_DOWN = 2, 
+	AXIS_DIR_UP = 1, 
+};
+
+static void axis_set_drive(uint8_t axis, uint8_t dir) {
+	regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK << (axis*2), dir << (axis*2));
+	eventPublish(EV_DEBUG_RELAY, REGS[REGS_IDX_RELAY_STATE]);
+}
+static void axis_stop_all() {
+	REGS[REGS_IDX_RELAY_STATE] = 0U;
+	eventPublish(EV_DEBUG_RELAY, REGS[REGS_IDX_RELAY_STATE]);
+}
+static uint8_t axis_get_dir(uint8_t axis) {
+	return ((uint8_t)REGS[REGS_IDX_RELAY_STATE] >> (axis*2)) & 3;
+}
 
 static const uint16_t RELAY_RUN_DURATION_MS = 1000U;
 static const uint16_t RELAY_STOP_DURATION_MS = 200U;
@@ -48,13 +71,14 @@ static const uint16_t RELAY_STOP_DURATION_MS = 200U;
 static struct {
 	thread_control_t tcb_cmd;
 	uint8_t cmd_req;
+	uint16_t slew_timer;
 } f_app_ctx;
 
 void appCmdRun(uint8_t cmd) {
 	f_app_ctx.cmd_req = cmd;
 }
 
-// Really place holders, start called when command started, stop may be called multiple times but only has an effect the first time.
+// Really place holders, cmd_start() called when command started, cmd_stop() may be called multiple times but only has an effect the first time.
 static void cmd_start() {
 	REGS[REGS_IDX_CMD_STATUS] = APP_CMD_STATUS_PENDING;
 	eventPublish(EV_COMMAND_START, REGS[REGS_IDX_CMD_ACTIVE]);
@@ -93,7 +117,6 @@ static bool is_preset_valid(uint8_t idx) { // Can we use this preset?
 	return true;
 }
 
-
 static void load_command() {
 	REGS[REGS_IDX_CMD_ACTIVE] = f_app_ctx.cmd_req;
 	f_app_ctx.cmd_req = APP_CMD_IDLE;
@@ -110,7 +133,7 @@ static bool check_stop_command() {
 }
 
 static bool check_slew_timeout() {
-	if (0U == f_slew_timer) {
+	if (0U == f_app_ctx.slew_timer) {
 		cmd_done(APP_CMD_STATUS_SLEW_TIMEOUT);
 		return true;
 	}
@@ -128,26 +151,33 @@ static int8_t thread_cmd(void* arg) {
 			load_command();			// Most likely still idle.
 
 		switch (REGS[REGS_IDX_CMD_ACTIVE]) {
-		case APP_CMD_IDLE:		// Nothing doing...
+		
+		// Nothing doing...
+		case APP_CMD_IDLE:		
 			THREAD_YIELD();
 			break;
 
-		default:			// Bad command...
+		// Bad command...
+		default:			
 			cmd_done(APP_CMD_STATUS_BAD_CMD);
 			THREAD_YIELD();
 			break;
 			
-		case APP_CMD_STOP:		// Stop, a no-op as we are already stopped if idle.
+		// Stop, a no-op as we are already stopped if idle.
+		case APP_CMD_STOP:		
 			cmd_done();
 			THREAD_YIELD();
 			break;
-
-		case APP_CMD_HEAD_UP:	// Move head up...
-			regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_UP);
-			goto do_manual;
-
-		case APP_CMD_HEAD_DOWN:	// Move head down...
-			regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK, RELAY_HEAD_DOWN);
+		
+		// Timed motion commands
+		case APP_CMD_HEAD_UP:	axis_set_drive(AXIS_HEAD, AXIS_DIR_UP);		goto do_manual;
+		case APP_CMD_HEAD_DOWN:	axis_set_drive(AXIS_HEAD, AXIS_DIR_DOWN);	goto do_manual;
+		case APP_CMD_LEG_UP:	axis_set_drive(AXIS_FOOT, AXIS_DIR_UP);		goto do_manual;
+		case APP_CMD_LEG_DOWN:	axis_set_drive(AXIS_FOOT, AXIS_DIR_DOWN);	goto do_manual;
+		case APP_CMD_BED_UP:	axis_set_drive(AXIS_BED, AXIS_DIR_UP);		goto do_manual;
+		case APP_CMD_BED_DOWN:	axis_set_drive(AXIS_BED, AXIS_DIR_DOWN);	goto do_manual;
+		case APP_CMD_TILT_UP:	axis_set_drive(AXIS_TILT, AXIS_DIR_UP);		goto do_manual;
+		case APP_CMD_TILT_DOWN:	axis_set_drive(AXIS_TILT, AXIS_DIR_DOWN);	goto do_manual;
 
 do_manual:	if (!check_relay()) {	// If relay OK...
 				THREAD_START_DELAY();
@@ -159,13 +189,14 @@ do_manual:	if (!check_relay()) {	// If relay OK...
 				}
 			}
 
-			REGS[REGS_IDX_RELAY_STATE] = RELAY_STOP;
+			axis_stop_all();
 			THREAD_START_DELAY();
 			THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(RELAY_STOP_DURATION_MS));
 			cmd_done();
 			THREAD_YIELD();
 			break;
 
+		// Save current position...
 		case APP_CMD_SAVE_POS_1:
 		case APP_CMD_SAVE_POS_2:
 		case APP_CMD_SAVE_POS_3:
@@ -182,11 +213,12 @@ do_manual:	if (!check_relay()) {	// If relay OK...
 			THREAD_YIELD();
 			} break;
 
+		// Restore to saved position...
 		case APP_CMD_RESTORE_POS_1:
 		case APP_CMD_RESTORE_POS_2:
 		case APP_CMD_RESTORE_POS_3:
 		case APP_CMD_RESTORE_POS_4: {
-			regsUpdateMask(REGS_IDX_RELAY_STATE, (RELAY_HEAD_MASK|RELAY_FOOT_MASK), RELAY_STOP);	// Should always be true...
+			axis_stop_all();		// Should always be true...
 			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_RESTORE_POS_1;
 			if (!is_preset_valid(preset_idx)) {				// Invalid preset, abort.
 				cmd_done(APP_CMD_STATUS_PRESET_INVALID);
@@ -194,35 +226,37 @@ do_manual:	if (!check_relay()) {	// If relay OK...
 			}
 
 			// Preset good, start slewing...
-			for (static uint8_t axis_idx = 0; axis_idx < 2; axis_idx += 1) {
+			static uint8_t axis_idx;
+			for (axis_idx = 0; axis_idx < 2; axis_idx += 1) {
+				eventPublish(EV_DEBUG_SLEW_AXIS, axis_idx);
 				if (!driverSlaveIsEnabled(axis_idx))		// Do not do disabled axes.
 					continue;
 					
-				f_slew_timer = REGS[REGS_IDX_SLEW_TIMEOUT]*10U;
+				f_app_ctx.slew_timer = REGS[REGS_IDX_SLEW_TIMEOUT]*10U;
 				while ((!check_sensors()) && (!check_relay()) && (!check_stop_command()) && (!check_slew_timeout())) {
 					// TODO: Verify sensor going offline can't lock up.
 					THREAD_WAIT_UNTIL(avail);		// Wait for new reading.
 				
-					// Get direction to go, or we mightbe there anyways.
+					// Get direction to go, or we might be there anyways.
 					const int16_t* presets = driverPresets(preset_idx);
-					const int16_t delta = presets[axis_idx] - (int16_t)REGS[REGS_IDX_TILT_SENSOR_0+sensor_idx];
-					const int8_t dir =
-					  utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_DEADBAND]);
+					const int16_t delta = presets[axis_idx] - (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx];
+					const int8_t target_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_DEADBAND]);
+					eventPublish(EV_DEBUG_SLEW, delta, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
 
 					// If we are moving in one direction, check for position reached. We can't just check for zero as it might overshoot.
-					if (REGS[REGS_IDX_RELAY_STATE] & relay_axis_down(axis_idx)) {	
-						if (dir >= 0)
+					if (axis_get_dir(axis_idx) == AXIS_DIR_DOWN) {	
+						if (target_dir <= 0)
 							break;
 					}
-					else if (REGS[REGS_IDX_RELAY_STATE] & relay_axis_up(axis_idx)) {		// Or the other...
-						if (dir <= 0)
+					else if (axis_get_dir(axis_idx) == AXIS_DIR_UP) {		// Or the other...
+						if (target_dir >= 0)
 							break;
 					}
 					else {															// If not moving, turn on motors.
-						if (dir < 0)
-							regsUpdateMask(REGS_IDX_RELAY_STATE, relay_axis_mask(axis_idx), relay_axis_down(axis_idx));
-						else if (dir > 0)
-							regsUpdateMask(REGS_IDX_RELAY_STATE, relay_axis_mask(axis_idx), relay_axis_up(axis_idx));
+						if (target_dir > 0)
+							axis_set_drive(axis_idx, AXIS_DIR_DOWN);
+						else if (target_dir < 0)
+							axis_set_drive(axis_idx, AXIS_DIR_UP);
 						else // No slew necessary...
 							break;
 					}
@@ -231,17 +265,17 @@ do_manual:	if (!check_relay()) {	// If relay OK...
 
 				// Stop and let axis motors rundown if they are moving...
 				if (REGS[REGS_IDX_RELAY_STATE] & (RELAY_HEAD_MASK|RELAY_FOOT_MASK)) {
-					regsUpdateMask(REGS_IDX_RELAY_STATE, (RELAY_HEAD_MASK|RELAY_FOOT_MASK), RELAY_STOP);
+					axis_stop_all();
 					THREAD_DELAY(RELAY_STOP_DURATION_MS);
 				}
 			}	// Closes for (...) ...
 
 
-			// This is here in case the command aborts for some reason with the motors going. Itpurposely doesn't check for comms with the relay, just stops.
+			// This is here in case the command aborts for some reason with the motors going. It purposely doesn't check for comms with the relay, just stops.
 			// TODO: Fix duplicated code. 
 			// Stop and let axis motors rundown if they are moving...
 			if (REGS[REGS_IDX_RELAY_STATE] & (RELAY_HEAD_MASK|RELAY_FOOT_MASK)) {
-				regsUpdateMask(REGS_IDX_RELAY_STATE, (RELAY_HEAD_MASK|RELAY_FOOT_MASK), RELAY_STOP);
+				axis_stop_all();
 				THREAD_DELAY(RELAY_STOP_DURATION_MS);
 			}
 
@@ -308,6 +342,51 @@ static const char* get_cmd_status_desc(uint8_t cmd) {
 	}
 }
 
+// SM to handle IR commands.
+typedef struct {
+	EventSmContextBase base;
+	//uint16_t timer_cookie[CFG_TIMER_COUNT_SM_LEDS];
+} SmIrRecContext;
+static SmIrRecContext f_sm_ir_rec_ctx;
+
+// Define states.
+enum { 
+	ST_IR_REC_RUN,  
+};
+
+static int8_t sm_ir_rec(EventSmContextBase* context, t_event ev) {
+	SmIrRecContext* my_context = (SmIrRecContext*)context;        // Downcast to derived class.
+	(void)my_context;
+	switch (context->st) {
+		case ST_IR_REC_RUN:
+		switch(event_id(ev)) {
+			case EV_IR_REC: {
+				uint8_t cmd = APP_CMD_IDLE;
+				switch (event_p8(ev)) {
+					case 0x00: cmd = APP_CMD_STOP; break;
+					case 0x01: cmd = APP_CMD_HEAD_UP; break;
+					case 0x02: cmd = APP_CMD_HEAD_DOWN; break;
+					
+					case 0x10: cmd = APP_CMD_SAVE_POS_1; break;
+					case 0x11: cmd = APP_CMD_SAVE_POS_2; break;
+					case 0x12: cmd = APP_CMD_SAVE_POS_3; break;
+					case 0x13: cmd = APP_CMD_SAVE_POS_4; break;
+					
+					case 0x14: cmd = APP_CMD_RESTORE_POS_1; break;
+					case 0x15: cmd = APP_CMD_RESTORE_POS_2; break;
+					case 0x16: cmd = APP_CMD_RESTORE_POS_3; break;
+					case 0x17: cmd = APP_CMD_RESTORE_POS_4; break;
+				}
+				appCmdRun(cmd);
+			}
+			break;
+		}
+		break;
+	}
+	
+	return EVENT_SM_NO_CHANGE;
+}
+	
 // State machine to handle display. 
 typedef struct {
 	EventSmContextBase base;
@@ -407,6 +486,7 @@ void appInit() {
 	lcdDriverInit();
 	eventInit();
 	eventSmInit(sm_lcd, (EventSmContextBase*)&f_sm_lcd_ctx, 0);
+	eventSmInit(sm_ir_rec, (EventSmContextBase*)&f_sm_ir_rec_ctx, 1);
 }
 
 void appService() {
@@ -414,6 +494,7 @@ void appService() {
 	t_event ev;
 	while (EV_NIL != (ev = eventGet())) {	// Read events until there are no more left.
 		eventSmService(sm_lcd, (EventSmContextBase*)&f_sm_lcd_ctx, ev);
+		eventSmService(sm_ir_rec, (EventSmContextBase*)&f_sm_ir_rec_ctx, ev);
 		(void)ev;
 	}
 	service_trace_log();		// Just dump one trace record as it can take time to print and we want to keep responsive. 
@@ -421,8 +502,8 @@ void appService() {
 void appService10hz() { 
 	lcdDriverService_10Hz(); 
 	eventSmTimerService();
-	if (f_slew_timer > 0)
-		f_slew_timer -= 1;
+	if (f_app_ctx.slew_timer > 0)
+		f_app_ctx.slew_timer -= 1;
 }
 
 #if 0
