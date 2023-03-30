@@ -118,10 +118,10 @@ char myprintf_snprintf(char* buf, unsigned len, const char* fmt, ...) {
  * You can pass them as arguments to functions and call va_arg() on them, but not in two separate functions it seems. 
  * Anyway I had a failure on AVR with a format like "%ld %d", added a test, found the same error on the x86 run test.
  * Then fixed the fault. */
-#define grab_integer() (																\
-  ((flags & FLAG_LONG) && (sizeof(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT) > sizeof(int))) ?	\
-    va_arg(ap, CFG_MYPRINTF_TYPE_SIGNED_LONG_INT) :										\
-	va_arg(ap, int)																		\
+#define grab_integer() (																		\
+  ((flags & FLAG_LONG) && (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) > sizeof(unsigned))) ?	\
+    va_arg(ap, CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) :											\
+	va_arg(ap, unsigned)																		\
   )
 
 void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) {
