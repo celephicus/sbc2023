@@ -267,7 +267,8 @@ static void do_handle_modbus_cb(uint8_t evt, const uint8_t* frame, uint8_t frame
 				uint8_t byte_count = frame[MODBUS_FRAME_IDX_DATA];		// Retrieve byte count from response frame.
 				if (((byte_count & 1) == 0) && (frame_len == (byte_count + 5))) { 	// Generic check for correct response to read multiple regs.
 					if ((byte_count >= 4) && (SBC2022_MODBUS_REGISTER_SENSOR_TILT == address)) { 	// We expect to read _AT_LEAST_ two registers from this address...
-						REGS[REGS_IDX_TILT_SENSOR_0 + sensor_idx] = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 1 + 0]);
+						const int16_t tilt = (int16_t)modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 1 + 0]);
+						REGS[REGS_IDX_TILT_SENSOR_0 + sensor_idx] = (regs_t)(6000 + tilt); // Make positive for easier debugging. 
 						do_set_slave_status(REGS_IDX_SENSOR_STATUS_0 + sensor_idx, modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 1 + 2]));
 					}
 				}

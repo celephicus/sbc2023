@@ -13,6 +13,7 @@
 	DEBUG_SLEW_AXIS	p8: axis idx
 	DEBUG_SLEW		p8: dir, p16: tilt
 	DEBUG_RELAY		p8: relay register
+	DEBUG_CMD		p8: accepted, p16=cmd
 
    >>> End event definitions, begin generated code. */
 
@@ -38,7 +39,8 @@ enum {
     EV_DEBUG_SLEW_AXIS = 17,            // p8: axis idx
     EV_DEBUG_SLEW = 18,                 // p8: dir, p16: tilt
     EV_DEBUG_RELAY = 19,                // p8: relay register
-    COUNT_EV = 20,                      // Total number of events defined.
+    EV_DEBUG_CMD = 20,                  // p8: accepted, p16=cmd
+    COUNT_EV = 21,                      // Total number of events defined.
 };
 
 // Size of trace mask in bytes.
@@ -66,6 +68,7 @@ enum {
  static const char EVENT_NAMES_17[] PROGMEM = "DEBUG_SLEW_AXIS";                        \
  static const char EVENT_NAMES_18[] PROGMEM = "DEBUG_SLEW";                             \
  static const char EVENT_NAMES_19[] PROGMEM = "DEBUG_RELAY";                            \
+ static const char EVENT_NAMES_20[] PROGMEM = "DEBUG_CMD";                              \
                                                                                         \
  static const char* const EVENT_NAMES[] PROGMEM = {                                     \
    EVENT_NAMES_0,                                                                       \
@@ -88,6 +91,7 @@ enum {
    EVENT_NAMES_17,                                                                      \
    EVENT_NAMES_18,                                                                      \
    EVENT_NAMES_19,                                                                      \
+   EVENT_NAMES_20,                                                                      \
  }
 
 // Event Descriptions.
@@ -112,6 +116,7 @@ enum {
  static const char EVENT_DESCS_17[] PROGMEM = "p8: axis idx";                                                                               \
  static const char EVENT_DESCS_18[] PROGMEM = "p8: dir, p16: tilt";                                                                         \
  static const char EVENT_DESCS_19[] PROGMEM = "p8: relay register";                                                                         \
+ static const char EVENT_DESCS_20[] PROGMEM = "p8: accepted, p16=cmd";                                                                      \
                                                                                                                                             \
  static const char* const EVENT_DESCS[] PROGMEM = {                                                                                         \
    EVENT_DESCS_0,                                                                                                                           \
@@ -134,6 +139,7 @@ enum {
    EVENT_DESCS_17,                                                                                                                          \
    EVENT_DESCS_18,                                                                                                                          \
    EVENT_DESCS_19,                                                                                                                          \
+   EVENT_DESCS_20,                                                                                                                          \
  }
 
 // ]]] End generated code.

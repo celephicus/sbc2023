@@ -74,8 +74,12 @@ static struct {
 	uint16_t slew_timer;
 } f_app_ctx;
 
-void appCmdRun(uint8_t cmd) {
-	f_app_ctx.cmd_req = cmd;
+bool appCmdRun(uint8_t cmd) {
+	const bool accept = (APP_CMD_STOP == cmd) || (REGS[REGS_IDX_CMD_ACTIVE] <= 99);
+	eventPublish(EV_DEBUG_CMD, accept, cmd);
+	if (accept)
+		f_app_ctx.cmd_req = cmd;
+	return accept;
 }
 
 // Really place holders, cmd_start() called when command started, cmd_stop() may be called multiple times but only has an effect the first time.
@@ -241,7 +245,7 @@ do_manual:	if (!check_relay()) {	// If relay OK...
 					const int16_t* presets = driverPresets(preset_idx);
 					const int16_t delta = presets[axis_idx] - (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx];
 					const int8_t target_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_DEADBAND]);
-					eventPublish(EV_DEBUG_SLEW, delta, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
+					eventPublish(EV_DEBUG_SLEW, target_dir, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
 
 					// If we are moving in one direction, check for position reached. We can't just check for zero as it might overshoot.
 					if (axis_get_dir(axis_idx) == AXIS_DIR_DOWN) {	
@@ -354,6 +358,28 @@ enum {
 	ST_IR_REC_RUN,  
 };
 
+// IR command table. Must be sorted on command ID.
+typedef struct { uint8_t ir_cmd, app_cmd; } IrCmdDef;
+const static IrCmdDef IR_CMD_DEFS[] PROGMEM = {
+	{ 0x00, APP_CMD_STOP},
+	{ 0x01, APP_CMD_HEAD_UP},
+	{ 0x02, APP_CMD_HEAD_DOWN},
+	
+	{ 0x10, APP_CMD_SAVE_POS_1},
+	{ 0x11, APP_CMD_SAVE_POS_2},
+	{ 0x12, APP_CMD_SAVE_POS_3},
+	{ 0x13, APP_CMD_SAVE_POS_4},
+	
+	{ 0x14, APP_CMD_RESTORE_POS_1},
+	{ 0x15, APP_CMD_RESTORE_POS_2},
+	{ 0x16, APP_CMD_RESTORE_POS_3},
+	{ 0x17, APP_CMD_RESTORE_POS_4},
+};
+int ir_cmds_compare(const void* k, const void* elem) { 
+	const IrCmdDef* ir_cmd_def = (const IrCmdDef*)elem;
+	return (int)(uint8_t)(int)k - (int)pgm_read_byte(&ir_cmd_def->ir_cmd); 
+}
+	
 static int8_t sm_ir_rec(EventSmContextBase* context, t_event ev) {
 	SmIrRecContext* my_context = (SmIrRecContext*)context;        // Downcast to derived class.
 	(void)my_context;
@@ -361,23 +387,9 @@ static int8_t sm_ir_rec(EventSmContextBase* context, t_event ev) {
 		case ST_IR_REC_RUN:
 		switch(event_id(ev)) {
 			case EV_IR_REC: {
-				uint8_t cmd = APP_CMD_IDLE;
-				switch (event_p8(ev)) {
-					case 0x00: cmd = APP_CMD_STOP; break;
-					case 0x01: cmd = APP_CMD_HEAD_UP; break;
-					case 0x02: cmd = APP_CMD_HEAD_DOWN; break;
-					
-					case 0x10: cmd = APP_CMD_SAVE_POS_1; break;
-					case 0x11: cmd = APP_CMD_SAVE_POS_2; break;
-					case 0x12: cmd = APP_CMD_SAVE_POS_3; break;
-					case 0x13: cmd = APP_CMD_SAVE_POS_4; break;
-					
-					case 0x14: cmd = APP_CMD_RESTORE_POS_1; break;
-					case 0x15: cmd = APP_CMD_RESTORE_POS_2; break;
-					case 0x16: cmd = APP_CMD_RESTORE_POS_3; break;
-					case 0x17: cmd = APP_CMD_RESTORE_POS_4; break;
-				}
-				appCmdRun(cmd);
+				const IrCmdDef* ir_cmd_def = (const IrCmdDef*)bsearch((const void*)(int)event_p8(ev), &IR_CMD_DEFS, UTILS_ELEMENT_COUNT(IR_CMD_DEFS), sizeof(IrCmdDef), ir_cmds_compare);
+				if (ir_cmd_def)
+					appCmdRun(pgm_read_byte(&ir_cmd_def->app_cmd));
 			}
 			break;
 		}

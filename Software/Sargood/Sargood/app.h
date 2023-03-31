@@ -8,8 +8,9 @@ void appService10hz();
 /* Perform a command, one of APP_CMD_xxx. If a command is currently running, it will be queued and run when the pending command repeats. The currently running command
  * is available in register APP_CMD_ACTIVE. The command status is in register APP_CMD_STATUS. If a command is running, the status will be APP_CMD_STATUS_PENDING. On completion,
  * the status is either APP_CMD_STATUS_OK or an error code.
+ * Returns false if the command could not be accepted, true otherwise. 
  */
-void appCmdRun(uint8_t cmd);
+bool appCmdRun(uint8_t cmd);
 
 /* Command processor runs a single command at a time, with a single level queue. On accepting a new command, a status is set to PENDING from IDLE.
  * On completion, the status is set to OK or an error code.
