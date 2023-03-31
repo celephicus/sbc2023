@@ -296,7 +296,7 @@ bool service_trace_log() {
 	if (eventTraceRead(&evt)) {
 		const uint8_t id = event_id(evt.event);
 		const char * name = eventGetEventName(id);
-		printf_s(PSTR("Ev: %lu: %S %u(%u,%u)\r\n"), evt.timestamp, name, id, event_p8(evt.event), event_p16(evt.event));
+		printf_s(PSTR("E: %lu: %S %u(%u,%u)\r\n"), evt.timestamp, name, id, event_p8(evt.event), event_p16(evt.event));
 		return true;
 	}
 	return false;
@@ -334,7 +334,7 @@ static const char* get_cmd_status_desc(uint8_t cmd) {
 	case APP_CMD_STATUS_OK:				return PSTR("OK");
 	case APP_CMD_STATUS_PENDING:		return PSTR("Pending");
 	case APP_CMD_STATUS_BAD_CMD:		return PSTR("Unknown");
-	case APP_CMD_STATUS_RELAY_FAIL:		return PSTR("Int. Fail");
+	case APP_CMD_STATUS_RELAY_FAIL:		return PSTR("Relay Fail");
 	case APP_CMD_STATUS_PRESET_INVALID:	return PSTR("Preset Invalid");
 	case APP_CMD_STATUS_SENSOR_FAIL_0:	return PSTR("Head Sensor Bad");
 	case APP_CMD_STATUS_SENSOR_FAIL_1:	return PSTR("Foot Sensor Bad");

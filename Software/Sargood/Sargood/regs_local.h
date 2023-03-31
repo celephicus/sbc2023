@@ -37,11 +37,10 @@ SLAVE_DISABLE [nv hex 0x02] "Disable errors from selected sensors."
 	TILT_1 [1] "Tilt sensor 1."
 ENABLES [nv hex 0x0000] "Enable flags."
 	DUMP_MODBUS_EVENTS [0] "Dump MODBUS event value."
-	DUMP_MODBUS_DATA [1] "Dump MODBUS data."
 	DUMP_REGS [2] "Regs values dump to console."
 	DUMP_REGS_FAST [3] "Dump at 5/s rather than 1/s."
 	DISABLE_BLINKY_LED [15] "Disable setting Blinky Led from fault states."
-SLEW_DEADBAND [20 nv] "If delta tilt less than deadband then stop."
+SLEW_DEADBAND [30 nv] "If delta tilt less than deadband then stop."
 
 >>>  Definition end, declaration start... */
 
@@ -73,7 +72,7 @@ enum {
 #define REGS_START_NV_IDX REGS_IDX_SLEW_TIMEOUT
 
 // Define default values for the NV segment.
-#define REGS_NV_DEFAULT_VALS 10, 2, 0, 20
+#define REGS_NV_DEFAULT_VALS 10, 2, 0, 30
 
 // Define how to format the reg when printing.
 #define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U
@@ -101,7 +100,6 @@ enum {
 // Flags/masks for register ENABLES.
 enum {
     	REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS = (int)0x1,
-    	REGS_ENABLES_MASK_DUMP_MODBUS_DATA = (int)0x2,
     	REGS_ENABLES_MASK_DUMP_REGS = (int)0x4,
     	REGS_ENABLES_MASK_DUMP_REGS_FAST = (int)0x8,
     	REGS_ENABLES_MASK_DISABLE_BLINKY_LED = (int)0x8000,
@@ -214,7 +212,6 @@ enum {
     "\n TILT_1: 1 (Tilt sensor 1.)"                                                     \
     "\nEnables:"                                                                        \
     "\n DUMP_MODBUS_EVENTS: 0 (Dump MODBUS event value.)"                               \
-    "\n DUMP_MODBUS_DATA: 1 (Dump MODBUS data.)"                                        \
     "\n DUMP_REGS: 2 (Regs values dump to console.)"                                    \
     "\n DUMP_REGS_FAST: 3 (Dump at 5/s rather than 1/s.)"                               \
     "\n DISABLE_BLINKY_LED: 15 (Disable setting Blinky Led from fault states.)"         \

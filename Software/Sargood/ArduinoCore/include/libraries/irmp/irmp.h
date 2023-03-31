@@ -13,6 +13,8 @@
 #ifndef _IRMP_H_
 #define _IRMP_H_
 
+#include "irmp_fix.h"
+
 #if !defined(IRMP_USE_AS_LIB)
 #  define IRMPCONFIG_STAGE1_H
 #  include "irmpconfig.h"

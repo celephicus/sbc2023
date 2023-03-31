@@ -115,6 +115,12 @@ void modbusSlaveSend(const uint8_t* frame, uint8_t sz) {
 	modbusSendRaw(f_modbus_ctx.buf_tx.buf, bufferFrameLen(&f_modbus_ctx.buf_tx));
 }
 void modbusMasterSend(const uint8_t* frame, uint8_t sz, uint8_t resp_sz/*=0U*/) {
+	// If we start a new frame _BEFORE_ the last one has received a response but within the timeout period, send a response timeout event.
+	if (timer_is_active(&f_modbus_ctx.start_time)) {				
+		TIMER_STOP_WITH_CB(&f_modbus_ctx.start_time, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT);
+		f_modbus_ctx.cb_resp(MODBUS_CB_EVT_NO_RESP);
+	}
+	
 	(void)resp_sz;
 	modbusSlaveSend(frame, sz);
 	TIMER_START_WITH_CB((uint16_t)millis(), &f_modbus_ctx.start_time, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT);
@@ -181,7 +187,7 @@ void modbusService() {
 	// Master may be waiting for a reply from a slave. On timeout, flag timeout to callback.
 	// This will only be called on RX timeout, which will only happen if at least one character has been received.
 	if (TIMER_IS_TIMEOUT_WITH_CB((uint16_t)millis(), &f_modbus_ctx.start_time, f_modbus_ctx.resp_timeout_millis, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT))
-		f_modbus_ctx.cb_resp(MODBUS_CB_EVT_RESP_TIMEOUT);
+		f_modbus_ctx.cb_resp(MODBUS_CB_EVT_NO_RESP);
 
 	// Service RX timer, timeout with data is a frame.
 	if (TIMER_IS_TIMEOUT_WITH_CB((uint16_t)micros(), &f_modbus_ctx.rx_timestamp_micros, f_modbus_ctx.rx_timeout_micros, MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT)) {

@@ -50,7 +50,7 @@ enum {
 	MODBUS_CB_EVT_REQ_X					= 101,	// Sent by SLAVE, we have a request for another slave ID.
 
 	MODBUS_CB_EVT_RESP_OK				= 200,	// Sent by MASTER, response received with ID & Function Code matching request, with correct CRC.
-	MODBUS_CB_EVT_RESP_TIMEOUT			= 201,	// Sent by MASTER, NO response received.
+	MODBUS_CB_EVT_NO_RESP				= 201,	// Sent by MASTER, NO response received, either timeout or new master request initiated.
 	MODBUS_CB_EVT_RESP_BAD_SLAVE_ID		= 202,	// Sent by MASTER, slave ID in response did not match request, unusual...
 	MODBUS_CB_EVT_RESP_BAD_FUNC_CODE	= 203,	// Sent by MASTER, response Function Code wrong.
 };

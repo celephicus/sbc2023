@@ -38,10 +38,11 @@ static bool console_cmds_user(char* cmd) {
     case /** RLY **/ 0x07a2: REGS[REGS_IDX_RELAYS] = consoleStackPop(); break;
     case /** ?RLY **/ 0xb21d: consolePrint(CFMT_D, REGS[REGS_IDX_RELAYS]); break;
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
-	case /** ?PRESETS **/ 0x6f6c: fori (DRIVER_BED_POS_PRESET_COUNT) {
-		forj (CFG_TILT_SENSOR_COUNT) consolePrint(CFMT_D, driverPresets(i)[j]); consolePrint(CFMT_NL, 0);
+	case /** ?S **/ 0x6889: fori (CFG_TILT_SENSOR_COUNT) consolePrint(CFMT_D, REGS[REGS_IDX_TILT_SENSOR_0 + i]); break; 
+	case /** ?PR **/ 0x7998: fori (DRIVER_BED_POS_PRESET_COUNT) {
+		forj (CFG_TILT_SENSOR_COUNT) consolePrint(CFMT_D, driverPresets(i)[j]); 
 		}  break;
-	case /** PRESET **/ 0x3300: {
+	case /** PR **/ 0x74c7: {
 		const uint8_t idx = consoleStackPop(); if (idx >= DRIVER_BED_POS_PRESET_COUNT) consoleRaise(CONSOLE_RC_ERROR_USER);
 		fori (CFG_TILT_SENSOR_COUNT) driverPresets(idx)[i] = consoleStackPop();
 		} break;
@@ -67,7 +68,7 @@ static bool console_cmds_user(char* cmd) {
 #endif
 
 	// MODBUS
-	case /** M **/ 0xb5e8: regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS|REGS_ENABLES_MASK_DUMP_MODBUS_DATA, true); break;
+	case /** M **/ 0xb5e8: regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS, true); break;
 	case /** ATN **/ 0xb87e: driverSendAtn(); break;
     case /** SL **/ 0x74fa: modbusSetSlaveId(consoleStackPop()); break;
     case /** ?SL **/ 0x79e5: consolePrint(CFMT_D, modbusGetSlaveId()); break;
@@ -132,7 +133,7 @@ static bool console_cmds_user(char* cmd) {
 		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS_FAST, (consoleStackPop() > 1));
 		break;
 	case /** X **/ 0xb5fd:
-		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS|REGS_ENABLES_MASK_DUMP_REGS_FAST|REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS|REGS_ENABLES_MASK_DUMP_MODBUS_DATA, 0);
+		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS|REGS_ENABLES_MASK_DUMP_REGS_FAST|REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS, 0);
 		break; // Shortcut for killing dump.
 
 	// Runtime errors...
@@ -189,7 +190,7 @@ static void service_regs_dump() {
 		if (0 == s_ticker--) {
 			uint32_t timestamp = millis();
 			s_ticker = (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_REGS_FAST) ? 2 : 10; // Dump 5Hz or 1Hz.
-			consolePrint(CFMT_STR_P, (console_cell_t)PSTR("Regs:"));
+			consolePrint(CFMT_STR_P, (console_cell_t)PSTR("R:"));
 			consolePrint(CFMT_U_D|CFMT_M_NO_LEAD, (console_cell_t)&timestamp);
 			fori(REGS_START_NV_IDX)
 				regsPrintValue(i);

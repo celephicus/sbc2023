@@ -248,7 +248,7 @@ static void do_handle_modbus_cb(uint8_t evt, const uint8_t* frame, uint8_t frame
 		 * MODBUS_CB_EVT_RESP_OK on a correct response,
 		 * or one of:
 		 *  MODBUS_CB_EVT_INVALID_CRC MODBUS_CB_EVT_OVERFLOW MODBUS_CB_EVT_INVALID_LEN MODBUS_CB_EVT_INVALID_ID
-		 *  MODBUS_CB_EVT_RESP_TIMEOUT		(most likely)
+		 *  MODBUS_CB_EVT_NO_RESP		(most likely)
 		 *  MODBUS_CB_EVT_RESP_BAD_SLAVE_ID MODBUS_CB_EVT_RESP_BAD_FUNC_CODE (uncommon)
 		 *
 		 * So we must record the status of each slave from these callback codes, which is only the status of this read.
@@ -300,7 +300,7 @@ static void do_handle_modbus_cb(uint8_t evt, const uint8_t* frame, uint8_t frame
 		}
 		break;
 
-		case MODBUS_CB_EVT_RESP_TIMEOUT:	// Most likely...
+		case MODBUS_CB_EVT_NO_RESP:	// Most likely...
 		if (is_sensor_response) {
 			gpioSp4Write(false);
 			do_set_slave_status(REGS_IDX_SENSOR_STATUS_0 + sensor_idx, SBC2022_MODBUS_STATUS_SLAVE_NOT_PRESENT);
@@ -324,15 +324,15 @@ void modbus_cb(uint8_t evt) {
 	// Dump MODBUS...
 	gpioSp0Write(true);
 	if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS) {
-		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("R:"));
+		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("M:"));
+		uint32_t timestamp = millis();
+		consolePrint(CFMT_U_D|CFMT_M_NO_LEAD, (console_cell_t)&timestamp);
 		consolePrint(CFMT_U, evt);
-		if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_DATA) {
-			const uint8_t* p = frame;
-			fori (frame_len)
-				consolePrint(CFMT_X2|CFMT_M_NO_SEP, *p++);
-			if (!resp_ok)
-				consolePrint(CFMT_STR_P, (console_cell_t)PSTR(" OVF"));
-		}
+		const uint8_t* p = frame;
+		fori (frame_len)
+			consolePrint(CFMT_X2|CFMT_M_NO_SEP, *p++);
+		if (!resp_ok)
+			consolePrint(CFMT_STR_P, (console_cell_t)PSTR(" OVF"));
 		consolePrint(CFMT_NL, 0);
 	}
 
@@ -359,8 +359,10 @@ static void modbus_send_buf(const uint8_t* buf, uint8_t sz) {
 	digitalWrite(GPIO_PIN_RS485_TX_EN, LOW);
 }
 
-static const uint32_t MODBUS_BAUDRATE = 9600UL;
-static const uint16_t MODBUS_RESPONSE_TIMEOUT_MILLIS = 30U;
+// Take care to change SLAVE_QUERY_PERIOD to MODBUS_RESPONSE_TIMEOUT_MILLIS + longest TX frame + margin.
+// TODO? Make MODBUS driver send a timeout if a new frame TX interrupts a wait for a previous response. 
+static const uint32_t MODBUS_BAUDRATE = 38400UL;
+static const uint16_t MODBUS_RESPONSE_TIMEOUT_MILLIS = 7U;
 static void modbus_init() {
 	GPIO_SERIAL_RS485.begin(MODBUS_BAUDRATE);
 	digitalWrite(GPIO_PIN_RS485_TX_EN, LOW);
@@ -424,8 +426,6 @@ static void led_service() { utilsSeqService(&f_led_seq); }
 
 #include "SparkFun_ADXL345.h"
 
-const float ADXL_RATE_HZ = 100.0;
-const uint16_t ACCEL_RAW_SAMPLE_RATE_NOMINAL = static_cast<uint16_t>(ADXL_RATE_HZ + 0.5);
 const uint16_t ACCEL_CHECK_PERIOD_MS = 1000;
 const uint16_t ACCEL_RAW_SAMPLE_RATE_TOLERANCE_PERC = 25;
 
@@ -446,19 +446,19 @@ static void clear_accel_accum() {
 	f_accel_data.counts = 0U;
 }
 
-ADXL345 adxl = ADXL345(10);           // USE FOR SPI COMMUNICATION, ADXL345(CS_PIN);
+ADXL345 adxl = ADXL345(GPIO_PIN_SSEL);				// USE FOR SPI COMMUNICATION, ADXL345(CS_PIN);
 static void sensor_accel_init() {
-  adxl.powerOn();                     // Power on the ADXL345
+	adxl.powerOn();									// Power on the ADXL345
 
-  adxl.setRangeSetting(2);           // Give the range settings
-                                      // Accepted values are 2g, 4g, 8g or 16g
-                                      // Higher Values = Wider Measurement Range
-                                      // Lower Values = Greater Sensitivity
+	adxl.setRangeSetting(2);						// Give the range settings
+													// Accepted values are 2g, 4g, 8g or 16g
+													// Higher Values = Wider Measurement Range
+													// Lower Values = Greater Sensitivity
 
-  adxl.setSpiBit(0);                  // Configure the device to be in 4 wire SPI mode when set to '0' or 3 wire SPI mode when set to 1
-                                      // Default: Set to 1
-                                      // SPI pins on the ATMega328: 11, 12 and 13 as reference in SPI Library
- adxl.setRate(ADXL_RATE_HZ);
+	adxl.setSpiBit(0);								// Configure the device to be in 4 wire SPI mode when set to '0' or 3 wire SPI mode when set to 1
+													// Default: Set to 1
+													// SPI pins on the ATMega328: 11, 12 and 13 as reference in SPI Library
+	adxl.setRate((float)REGS[REGS_IDX_ACCEL_DATA_RATE]);
  
 	f_accel_data.restart = true;	// Flag processing as needing a restart
 }
@@ -529,7 +529,7 @@ void service_devices() {
 
 		if (0 != REGS[REGS_IDX_ACCEL_SAMPLE_RATE_TEST])		// Fake sample count for testing.
 			raw_sample_count = REGS[REGS_IDX_ACCEL_SAMPLE_RATE_TEST];
-		const bool fault = !utilsIsInLimit(raw_sample_count, ACCEL_RAW_SAMPLE_RATE_NOMINAL - ACCEL_RAW_SAMPLE_RATE_TOLERANCE_PERC, ACCEL_RAW_SAMPLE_RATE_NOMINAL + ACCEL_RAW_SAMPLE_RATE_TOLERANCE_PERC);
+		const bool fault = !utilsIsInLimit(raw_sample_count, REGS[REGS_IDX_ACCEL_DATA_RATE] - ACCEL_RAW_SAMPLE_RATE_TOLERANCE_PERC, REGS[REGS_IDX_ACCEL_DATA_RATE] + ACCEL_RAW_SAMPLE_RATE_TOLERANCE_PERC);
 		regsWriteMaskFlags(REGS_FLAGS_MASK_ACCEL_FAIL, fault);
 		if (fault) {
 			f_accel_data.restart = true;
@@ -579,8 +579,8 @@ void service_devices_50ms() { /* empty */ }
 #define NO_LED_FEEDBACK_CODE   // Activate this if you want to suppress LED feedback or if you do not have a LED. This saves 14 bytes code and 2 clock cycles per interrupt.
 
 #define IRMP_SUPPORT_NEC_PROTOCOL 1
+
 #include <irmp.hpp>
-#pragma GCC diagnostic pop
 
 static IRMP_DATA irmp_data;
 static bool volatile sIRMPDataAvailable = false;
@@ -595,7 +595,8 @@ static void ir_setup() {
 static void ir_service() {
   if (sIRMPDataAvailable) {
     sIRMPDataAvailable = false;
-	eventPublish(EV_IR_REC, irmp_data.command, irmp_data.address);
+	if (!(irmp_data.flags & IRMP_FLAG_REPETITION))	// Do not publish repeat events, they come too fast.
+		eventPublish(EV_IR_REC, irmp_data.command, irmp_data.address);
   }
 }
 
@@ -605,9 +606,8 @@ static void ir_service() {
  * Any slave can just not reply, or the response can be garbled. Additionally a Sensor can be in error if something goes awry with the accelerometer.
  * MODBUS errors are normally transient, so they are ignored until there are more than a set number in a row.
  * Additionally a garbled response might look like two responses to the master, with the callback being called more than once for a single cycle.
- */
-/* Time for one cycle should be N * SLAVE_QUERY_PERIOD, with SLAVE_QUERY_PERIOD longer than the MODBUS response timeout. */
-static const uint16_t SLAVE_QUERY_PERIOD = 50U;
+ * Time for one cycle should be N * SLAVE_QUERY_PERIOD, with SLAVE_QUERY_PERIOD longer than the MODBUS response timeout. */
+static const uint16_t SLAVE_QUERY_PERIOD = 12U;
 
 static void modbus_query_slave_flag_start() {
 	gpioSp4Write(true);		// Set at start of query, clear in response handler.
