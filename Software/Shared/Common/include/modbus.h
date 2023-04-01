@@ -85,9 +85,7 @@ void modbusSendRaw(const uint8_t* buf, uint8_t sz);
 void modbusSlaveSend(const uint8_t* frame, uint8_t sz);
 
 // Send a correctly framed packet with CRC, and await a response of the specified size, or any size if zero.
-// Giving an explicit size alows the master to get the response more quickly, as it can read that number of charcters from the wire,
-//  rather than waiting for a quiet time to signal end of response frame.
-void modbusMasterSend(const uint8_t* frame, uint8_t sz, uint8_t resp_sz=0U);
+void modbusMasterSend(const uint8_t* frame, uint8_t sz);
 
 void modbusHregWrite(uint8_t id, uint16_t address, uint16_t value);
 

@@ -114,14 +114,13 @@ void modbusSlaveSend(const uint8_t* frame, uint8_t sz) {
 		modbusService();
 	modbusSendRaw(f_modbus_ctx.buf_tx.buf, bufferFrameLen(&f_modbus_ctx.buf_tx));
 }
-void modbusMasterSend(const uint8_t* frame, uint8_t sz, uint8_t resp_sz/*=0U*/) {
+void modbusMasterSend(const uint8_t* frame, uint8_t sz) {
 	// If we start a new frame _BEFORE_ the last one has received a response but within the timeout period, send a response timeout event.
 	if (timer_is_active(&f_modbus_ctx.start_time)) {				
 		TIMER_STOP_WITH_CB(&f_modbus_ctx.start_time, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT);
 		f_modbus_ctx.cb_resp(MODBUS_CB_EVT_NO_RESP);
 	}
 	
-	(void)resp_sz;
 	modbusSlaveSend(frame, sz);
 	TIMER_START_WITH_CB((uint16_t)millis(), &f_modbus_ctx.start_time, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT);
 }
@@ -142,7 +141,7 @@ void modbusHregWrite(uint8_t id, uint16_t address, uint16_t value) {
 		(uint8_t)(value >> 8),				// Value MSB.
 		(uint8_t)(value & 0xff),			// Value LSB.
 	};
-	modbusMasterSend(frame, sizeof(frame), sizeof(frame)+2);
+	modbusMasterSend(frame, sizeof(frame));
 }
 
 bool modbusIsBusy() {

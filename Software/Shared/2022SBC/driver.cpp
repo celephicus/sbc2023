@@ -20,7 +20,6 @@ FILENUM(2);
 
 // Helper for myprintf to write a single character to the serial port.
 static void myprintf_of(char c, void* arg) {
-	(void)arg;
 	GPIO_SERIAL_CONSOLE.write(c);
 }
 
@@ -580,7 +579,10 @@ void service_devices_50ms() { /* empty */ }
 
 #define IRMP_SUPPORT_NEC_PROTOCOL 1
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
 #include <irmp.hpp>
+#pragma GCC diagnostic pop
 
 static IRMP_DATA irmp_data;
 static bool volatile sIRMPDataAvailable = false;
@@ -614,7 +616,6 @@ static void modbus_query_slave_flag_start() {
 	gpioSp6Write(false);		// Clear error indicator, might get set in response handler.
 }
 static int8_t thread_query_slaves(void* arg) {
-	(void)arg;
 	static BufferFrame req;
 
 	THREAD_BEGIN();
@@ -761,8 +762,6 @@ typedef struct {
 static EepromPackage EEMEM f_eeprom_package[2];
 
 static void nv_set_defaults(void* data, const void* defaultarg) {
-    (void)data;
-    (void)defaultarg;
     regsSetDefaultRange(REGS_START_NV_IDX, COUNT_REGS);	// Set default values for NV regs.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 	fori(DRIVER_BED_POS_PRESET_COUNT)
@@ -943,8 +942,6 @@ static const TholdScannerDef SCANDEFS[] PROGMEM = {
 };
 
 static void thold_scanner_cb(uint16_t mask, const void* arg) {
-	(void)mask;
-	(void)arg;
 }
 
 TholdScannerState f_scan_states[UTILS_ELEMENT_COUNT(SCANDEFS)];

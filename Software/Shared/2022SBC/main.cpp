@@ -149,12 +149,12 @@ static bool console_cmds_user(char* cmd) {
 
 	// Arduino system access...
     case /** PIN **/ 0x1012: {
-        uint8_t pin = consoleStackPop();
-        digitalWrite(pin, consoleStackPop());
+        uint8_t pin = (uint8_t)consoleStackPop();
+        digitalWrite(pin, (uint8_t)consoleStackPop());
       } break;
     case /** PMODE **/ 0x48d6: {
-        uint8_t pin = consoleStackPop();
-        pinMode(pin, consoleStackPop());
+        uint8_t pin = (uint8_t)consoleStackPop();
+        pinMode(pin, (uint8_t)consoleStackPop());
       } break;
     case /** ?T **/ 0x688e: consolePrint(CFMT_U, (console_ucell_t)millis()); break;
 
