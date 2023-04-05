@@ -22,10 +22,6 @@
 #include <stdint.h>
 
 #include "myprintf.h"
-/* If we have a project config file include it. */
-#ifdef USE_PROJECT_CONFIG_H
-#include "project_config.h"
-#endif
 
 /* Do you want binary format? Watch out it needs a big buffer. */
 #ifndef CFG_MYPRINTF_WANT_BINARY
@@ -62,14 +58,12 @@ MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT) == sizeof(CFG_M
 
 MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_TYPE_SIGNED_INT) < sizeof(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT));
 
-// Maximum value
-#define MYPRINTF_MAX_UNSIGNED_LONG_INT ((CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)(-1))
-
 /* How many digits required for the maximum value of an unsigned long in your smallest base?  */
 MYPRINTF_STATIC_ASSERT(
  (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) == 2) ||
  (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) == 4) ||
- (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) == 8));
+ (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) == 8) ||
+ (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) == 16));
 #if CFG_MYPRINTF_WANT_BINARY
  #define MYPRINTF_MAX_DIGIT_CHARS (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) * 8)
 #else
@@ -118,10 +112,10 @@ char myprintf_snprintf(char* buf, unsigned len, const char* fmt, ...) {
  * You can pass them as arguments to functions and call va_arg() on them, but not in two separate functions it seems. 
  * Anyway I had a failure on AVR with a format like "%ld %d", added a test, found the same error on the x86 run test.
  * Then fixed the fault. */
-#define grab_integer() (																		\
-  ((flags & FLAG_LONG) && (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) > sizeof(unsigned))) ?	\
-    va_arg(ap, CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) :											\
-	va_arg(ap, unsigned)																		\
+#define grab_integer(myprintf_type_, native_type_) (	\
+  (sizeof(myprintf_type_) > sizeof(native_type_)) ?		\
+    va_arg(ap, myprintf_type_) :						\
+	(myprintf_type_)va_arg(ap, native_type_)			\
   )
 
 void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) {
@@ -190,7 +184,9 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 				str.c = &buf[0];
 				goto p_str;
 			case 'd':
-				num.i = (CFG_MYPRINTF_TYPE_SIGNED_LONG_INT)grab_integer();
+				num.i = (flags & FLAG_LONG) ? 
+				  grab_integer(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT, int) :
+				  grab_integer(CFG_MYPRINTF_TYPE_SIGNED_INT, int);
 				if (num.i < 0) {
 					num.i = -num.i;
 					flags |= FLAG_NEG;
@@ -208,7 +204,9 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 				base = 16;
 				// Fall through...
 			case 'u':
-do_unsigned:	num.u = (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)grab_integer(); // cppcheck-suppress unusedLabelSwitchConfiguration
+do_unsigned:	num.u = (flags & FLAG_LONG) ? 
+				  grab_integer(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT, unsigned) :
+				  grab_integer(CFG_MYPRINTF_TYPE_UNSIGNED_INT, unsigned); // cppcheck-suppress unusedLabelSwitchConfiguration
 				break;
 			case '%': 						/* Literal '%', just print it. */
 				flags = 0;					/* Clear format flag. */

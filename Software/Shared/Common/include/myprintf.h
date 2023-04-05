@@ -39,6 +39,10 @@
 			X	unsigned (possibly long) int in hex with upper case A-F
 */
 
+/* If we have a project config file include it. */
+#ifdef USE_PROJECT_CONFIG_H
+#include "project_config.h"
+#endif
 
 /* Signed int used for `%d' format. */
 #ifndef CFG_MYPRINTF_TYPE_SIGNED_INT
