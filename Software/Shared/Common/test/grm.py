@@ -126,7 +126,7 @@ def add_test_case(test_func, test_args):
 	test_stub_body = f'{test_func}({test_args})'
 	descr = test_stub_body.replace('\\', '\\\\').replace('"', r'\"')
 	add_test(test_stub_name, descr, lineno)
-	test_stubs.append(f'static void {test_stub_name}(void) {{ {test_stub_body}; }}')
+	test_stubs.append((if_condition, f'static void {test_stub_name}(void) {{ {test_stub_body}; }}'))
 	num_tests += 1
 
 # Returns (macro, list-of-args), ('test-func', [test-func, args]), ('line', line)
@@ -169,7 +169,7 @@ def parse_source_line(ln):
 
 for fn in input_files:
 	message(f"Processing input file `{fn}'...", end='')
-	fixture = None
+	fixture, if_condition = None, None
 	num_tests = 0
 	line_proc = None
 	script_globals = {'add_test_case': add_test_case}
@@ -228,6 +228,19 @@ for fn in input_files:
 					exit(f"Macro at `{ln}' needs to be like {macro}(func(args))")
 				test_func, test_args = m.groups()
 				add_test_case(test_func, test_args)
+			elif macro == 'TT_IF':
+				if if_condition is not None:
+					exit(f"Macro {macro} at `{ln}' cannot be nested.")
+				if_condition = raw_args
+				test_run.append(f"#if({if_condition})")
+			elif macro == 'TT_ENDIF':
+				if raw_args and not raw_args.isspace():
+					exit(f"Macro at `{ln}' needs to be like {macro}()")
+				if if_condition is None:
+					exit(f"Macro {macro} at `{ln}' needs to follow TT_IF(...).")
+				if_condition = None
+				test_run.append(f"#endif")
+				
 			else:
 				message(f" Unknown macro {macro}.")
 		elif p == 'test-func':
@@ -242,7 +255,7 @@ for fn in input_files:
 				add_test(test_func, test_func, lineno)
 
 			# Add to list to generate a declaration.
-			test_funcs[test_func] = test_args
+			test_funcs[test_func] = if_condition, test_args
 			num_tests += 1
 		elif p == 'line':		# Not a test file...
 			if line_proc:
@@ -352,12 +365,26 @@ $TEST_CASE_DATA
 */
 '''
 
+def handle_ifs(code):
+	tss = []
+	current_if = None
+	for (if_cond, ts) in code:
+		if if_cond != current_if:
+			if current_if: tss.append(f"#endif")
+			current_if = if_cond
+			if current_if: tss.append(f"#if ({current_if})")
+		tss.append(ts)
+	if current_if: tss.append(f"#endif")
+	return '\n'.join(tss)
+
 rundict['RUNNER_LEADER_STR'] = RUNNER_LEADER_STR
-rundict['TEST_FUNCTION_DECLS'] = '\n'.join([f'void {func}({args});' for func, args in test_funcs.items()])
+rundict['TEST_FUNCTION_DECLS'] = \
+  handle_ifs([(if_cond, f"void {func}({args});") for func, (if_cond, args) in test_funcs.items()])
+
 rundict['FIXTURE_FUNCTION_DECLS'] = '\n'.join([f'void {f}(void);' for f in fixture_funcs.keys()]) if fixture_funcs else '/* None */'
 rundict['COPY_BLOCKS'] = '\n'.join(block_includes)
 rundict['TEST_CASE_DATA'] = '\n'.join(test_case_data)
-rundict['TEST_CASE_DEFS'] = '\n'.join(test_stubs)
+rundict['TEST_CASE_DEFS'] = handle_ifs(test_stubs)
 rundict['TESTS'] = ''.join([f'  {x}\n' for x in test_run])
 
 try:

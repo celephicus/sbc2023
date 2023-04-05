@@ -4,3 +4,5 @@ compile_commands.json
 Makefile
 test.txt
 test.mk
+D*/
+test.batch_build

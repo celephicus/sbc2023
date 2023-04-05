@@ -7,6 +7,8 @@
 #define CFG_EVENT_TIMER_COUNT 2
 
 // For myprintf.
-#define CFG_MYPRINTF_WANT_BINARY 1
+#if MYPRINTF_TEST_BINARY
+ #define CFG_MYPRINTF_WANT_BINARY 1
+#endif
 
 #endif // PROJECT_CONFIG_H__
