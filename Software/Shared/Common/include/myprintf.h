@@ -45,23 +45,23 @@
 #endif
 
 /* Signed int used for `%d' format. */
-#ifndef CFG_MYPRINTF_TYPE_SIGNED_INT
-#define CFG_MYPRINTF_TYPE_SIGNED_INT int16_t
+#ifndef CFG_MYPRINTF_T_INT
+#define CFG_MYPRINTF_T_INT int16_t
 #endif
 
 /* Unsigned int used for `%x', `%x' format. */
-#ifndef CFG_MYPRINTF_TYPE_UNSIGNED_INT
-#define CFG_MYPRINTF_TYPE_UNSIGNED_INT uint16_t
+#ifndef CFG_MYPRINTF_T_UINT
+#define CFG_MYPRINTF_T_UINT uint16_t
 #endif
 
 /* Signed long int used for `%ld' format. */
-#ifndef CFG_MYPRINTF_TYPE_SIGNED_LONG_INT
-#define CFG_MYPRINTF_TYPE_SIGNED_LONG_INT int32_t
+#ifndef CFG_MYPRINTF_T_L_INT
+#define CFG_MYPRINTF_T_L_INT int32_t
 #endif
 
 /* Unsigned int used for `%x', `%x' format. */
-#ifndef CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT
-#define CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT uint32_t
+#ifndef CFG_MYPRINTF_T_L_UINT
+#define CFG_MYPRINTF_T_L_UINT uint32_t
 #endif
 
 /* Function used vy myprintf to write a character to whatever output device is required, arg can be used to keep track of state. */
@@ -73,8 +73,8 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap);
 /* Safer sprintf that will not overwrite its buffer. At most (len-1) characters are written. The function returns true if all chars were were written to the buffer.
 	The buffer is always terminated with a nul even on overflow. */
 
-char myprintf_vsnprintf(char* buf, unsigned len, const char* fmt, va_list ap);
-char myprintf_snprintf(char* buf, unsigned len, const char* fmt, ...);
+char myprintf_vsnprintf(char* buf, size_t len, const char* fmt, va_list ap);
+char myprintf_snprintf(char* buf, size_t len, const char* fmt, ...);
 
 /* Example
 

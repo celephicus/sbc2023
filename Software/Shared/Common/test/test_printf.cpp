@@ -11,13 +11,13 @@ TT_BEGIN_INCLUDE()
 #include "myprintf.h"
 
 // Max/min values
-#define MAX_PRINTF_U ((CFG_MYPRINTF_TYPE_UNSIGNED_INT)-1)
-#define MAX_PRINTF_I ((CFG_MYPRINTF_TYPE_SIGNED_INT)(MAX_PRINTF_U >> 1))
-#define MIN_PRINTF_I (-MAX_PRINTF_I - (CFG_MYPRINTF_TYPE_SIGNED_INT)1)
+#define MAX_PRINTF_U ((CFG_MYPRINTF_T_UINT)-1)
+#define MAX_PRINTF_I ((CFG_MYPRINTF_T_INT)(MAX_PRINTF_U >> 1))
+#define MIN_PRINTF_I (-MAX_PRINTF_I - (CFG_MYPRINTF_T_INT)1)
 
-#define MAX_PRINTF_UL ((CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)-1)
-#define MAX_PRINTF_IL ((CFG_MYPRINTF_TYPE_SIGNED_LONG_INT)(MAX_PRINTF_UL >> 1))
-#define MIN_PRINTF_IL (-MAX_PRINTF_IL - (CFG_MYPRINTF_TYPE_SIGNED_LONG_INT)1)
+#define MAX_PRINTF_UL ((CFG_MYPRINTF_T_L_UINT)-1)
+#define MAX_PRINTF_IL ((CFG_MYPRINTF_T_L_INT)(MAX_PRINTF_UL >> 1))
+#define MIN_PRINTF_IL (-MAX_PRINTF_IL - (CFG_MYPRINTF_T_L_INT)1)
 
 const char* test_myprintf_str_max_u(uint8_t sz);
 const char* test_myprintf_str_max_x(uint8_t sz);
@@ -63,8 +63,30 @@ const char* test_myprintf_str_min_i(uint8_t sz) {
 	return NULL;
 }
 
+// TODO: Incorporate into my Unity
+void UnityMessage_begin(const char* msg, const UNITY_LINE_TYPE line) {
+    // UnityTestResultsBegin(Unity.TestFile, line);
+    UnityPrint("INFO");
+    if (msg != NULL)
+    {
+      UNITY_OUTPUT_CHAR(':');
+      UNITY_OUTPUT_CHAR(' ');
+      UnityPrint(msg);
+    }
+}
+#define UnityMessageBegin(msg_) UnityMessage_begin(msg_, __LINE__)
+#define UnityMessageEnd() UNITY_PRINT_EOL()
+
+// Not a test, just outputs sizes.
+void test_int_sizes() {
+	UnityMessageBegin("myprintf int: "); UnityPrintNumber(sizeof(CFG_MYPRINTF_T_UINT)); UnityMessageEnd();
+	UnityMessageBegin("myprintf long: "); UnityPrintNumber(sizeof(CFG_MYPRINTF_T_L_UINT)); UnityMessageEnd();
+	UnityMessageBegin("native int: "); UnityPrintNumber(sizeof(int)); UnityMessageEnd();
+	UnityMessageBegin("native long: "); UnityPrintNumber(sizeof(long)); UnityMessageEnd();
+}
+
 // Test sprintf does not overwrite buffer.
-void test_myprintf_snsprintf(const char* exp, char rc_exp, int len, const char* fmt) {
+void test_myprintf_snsprintf(const char* exp, char rc_exp, size_t len, const char* fmt) {
 	char buf[5];	// Room for 4 characters.
 	memset(buf, 'x', sizeof(buf));
 	char rc = myprintf_snprintf(&buf[1], len, fmt);
@@ -84,7 +106,7 @@ TT_TEST_CASE(test_myprintf_snsprintf("X", 1, 2, "X"));	// Can write 1 length str
 TT_TEST_CASE(test_myprintf_snsprintf("X", 0, 2, "XZ"));	// But not string length 2.
 
 void test_printf_format_v(const char* expected, const char* fmt, va_list ap) {
-	char outp[100];
+	char outp[257];
 	TEST_ASSERT(myprintf_vsnprintf(outp, sizeof(outp), fmt, ap)); // We expect it not to overflow.
 	TEST_ASSERT_EQUAL_STRING(expected, outp);
 }
@@ -128,23 +150,23 @@ TT_TEST_CASE(test_printf_format("x01x", "x%02dx", 1));
 TT_TEST_CASE(test_printf_format("x1 x", "x%-2dx", 1));
 
 // Integer decimal. Long, copy of above.
-TT_TEST_CASE(test_printf_format("x0x", "x%ldx", (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)0));
-TT_TEST_CASE(test_printf_format("x123x", "x%ldx", (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)123));
-TT_TEST_CASE(test_printf_format("x1x", "x%0ldx", (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)1));
-TT_TEST_CASE(test_printf_format("x1x", "x%1Ldx", (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)1));
-TT_TEST_CASE(test_printf_format("x 1x", "x%2Ldx", (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)1));
-TT_TEST_CASE(test_printf_format("x01x", "x%02Ldx", (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)1));
-TT_TEST_CASE(test_printf_format("x1 x", "x%-2Ldx", (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)1));
+TT_TEST_CASE(test_printf_format("x0x", "x%ldx", (CFG_MYPRINTF_T_L_UINT)0));
+TT_TEST_CASE(test_printf_format("x123x", "x%ldx", (CFG_MYPRINTF_T_L_UINT)123));
+TT_TEST_CASE(test_printf_format("x1x", "x%0ldx", (CFG_MYPRINTF_T_L_UINT)1));
+TT_TEST_CASE(test_printf_format("x1x", "x%1Ldx", (CFG_MYPRINTF_T_L_UINT)1));
+TT_TEST_CASE(test_printf_format("x 1x", "x%2Ldx", (CFG_MYPRINTF_T_L_UINT)1));
+TT_TEST_CASE(test_printf_format("x01x", "x%02Ldx", (CFG_MYPRINTF_T_L_UINT)1));
+TT_TEST_CASE(test_printf_format("x1 x", "x%-2Ldx", (CFG_MYPRINTF_T_L_UINT)1));
 
 // Min/max values.
-TT_TEST_CASE(test_printf_format(test_myprintf_str_max_u(sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_INT)), "%u", MAX_PRINTF_U));
-TT_TEST_CASE(test_printf_format(test_myprintf_str_max_u(sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)), "%lu", MAX_PRINTF_UL));
-TT_TEST_CASE(test_printf_format(test_myprintf_str_max_x(sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_INT)), "%x", MAX_PRINTF_U));
-TT_TEST_CASE(test_printf_format(test_myprintf_str_max_x(sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)), "%lx", MAX_PRINTF_UL));
-TT_TEST_CASE(test_printf_format(test_myprintf_str_max_i(sizeof(CFG_MYPRINTF_TYPE_SIGNED_INT)), "%d", MAX_PRINTF_I));
-TT_TEST_CASE(test_printf_format(test_myprintf_str_min_i(sizeof(CFG_MYPRINTF_TYPE_SIGNED_INT)), "%d", MIN_PRINTF_I));
-TT_TEST_CASE(test_printf_format(test_myprintf_str_max_i(sizeof(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT)), "%ld", MAX_PRINTF_IL));
-TT_TEST_CASE(test_printf_format(test_myprintf_str_min_i(sizeof(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT)), "%ld", MIN_PRINTF_IL));
+TT_TEST_CASE(test_printf_format(test_myprintf_str_max_u(sizeof(CFG_MYPRINTF_T_UINT)), "%u", MAX_PRINTF_U));
+TT_TEST_CASE(test_printf_format(test_myprintf_str_max_u(sizeof(CFG_MYPRINTF_T_L_UINT)), "%lu", MAX_PRINTF_UL));
+TT_TEST_CASE(test_printf_format(test_myprintf_str_max_x(sizeof(CFG_MYPRINTF_T_UINT)), "%x", MAX_PRINTF_U));
+TT_TEST_CASE(test_printf_format(test_myprintf_str_max_x(sizeof(CFG_MYPRINTF_T_L_UINT)), "%lx", MAX_PRINTF_UL));
+TT_TEST_CASE(test_printf_format(test_myprintf_str_max_i(sizeof(CFG_MYPRINTF_T_INT)), "%d", MAX_PRINTF_I));
+TT_TEST_CASE(test_printf_format(test_myprintf_str_min_i(sizeof(CFG_MYPRINTF_T_INT)), "%d", MIN_PRINTF_I));
+TT_TEST_CASE(test_printf_format(test_myprintf_str_max_i(sizeof(CFG_MYPRINTF_T_L_INT)), "%ld", MAX_PRINTF_IL));
+TT_TEST_CASE(test_printf_format(test_myprintf_str_min_i(sizeof(CFG_MYPRINTF_T_L_INT)), "%ld", MIN_PRINTF_IL));
 
 // Hex integer.
 TT_TEST_CASE(test_printf_format("x0x", "x%xx", 0));
@@ -152,19 +174,19 @@ TT_TEST_CASE(test_printf_format("xabcx", "x%xx", 0xABC));
 TT_TEST_CASE(test_printf_format("xABCx", "x%Xx", 0xABC));
 
 // Hex integer. Long, copy of above.
-TT_TEST_CASE(test_printf_format("x0x", "x%Lxx", (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)0));
-TT_TEST_CASE(test_printf_format("xabcx", "x%Lxx", (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)0xABC));
-TT_TEST_CASE(test_printf_format("xABCx", "x%LXx", (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)0xABC));
+TT_TEST_CASE(test_printf_format("x0x", "x%Lxx", (CFG_MYPRINTF_T_L_UINT)0));
+TT_TEST_CASE(test_printf_format("xabcx", "x%Lxx", (CFG_MYPRINTF_T_L_UINT)0xABC));
+TT_TEST_CASE(test_printf_format("xABCx", "x%LXx", (CFG_MYPRINTF_T_L_UINT)0xABC));
 
 // Binary integer.
 TT_IF(MYPRINTF_TEST_BINARY)
 TT_TEST_CASE(test_printf_format("x0x", "x%bx", 0));
 TT_TEST_CASE(test_printf_format("x101x", "x%bx", 5));
-TT_TEST_CASE(test_printf_format(test_myprintf_str_max_b(sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_INT)), "%b", MAX_PRINTF_U));
-TT_TEST_CASE(test_printf_format(test_myprintf_str_max_b(sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)), "%lb", MAX_PRINTF_UL));
+TT_TEST_CASE(test_printf_format(test_myprintf_str_max_b(sizeof(CFG_MYPRINTF_T_UINT)), "%b", MAX_PRINTF_U));
+TT_TEST_CASE(test_printf_format(test_myprintf_str_max_b(sizeof(CFG_MYPRINTF_T_L_UINT)), "%lb", MAX_PRINTF_UL));
 TT_ENDIF()
 
 // Multiple values. The AVR was giving corrupt value following a long value.
 // Assumes a long is at least 32 bits.
-TT_TEST_CASE(test_printf_format("!12345678!f00f!", "!%lx!%x!", (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)0x12345678, 0xf00f));
+TT_TEST_CASE(test_printf_format("!12345678!f00f!", "!%lx!%x!", (CFG_MYPRINTF_T_L_UINT)0x12345678, 0xf00f));
 

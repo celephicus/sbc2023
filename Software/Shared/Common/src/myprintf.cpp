@@ -47,28 +47,33 @@
 #endif
 
 /* Check that we have size of myprintf's int type correct. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnarrowing"
+
 #define MYPRINTF_STATIC_ASSERT(expr_) extern char error_static_assert_fail__[(expr_) ? 1 : -1] __attribute__((unused))
 #define IS_TYPE_SIGNED(T_) (((T_)(-1)) < (T_)0)
-MYPRINTF_STATIC_ASSERT(IS_TYPE_SIGNED(CFG_MYPRINTF_TYPE_SIGNED_INT));
-MYPRINTF_STATIC_ASSERT(!IS_TYPE_SIGNED(CFG_MYPRINTF_TYPE_UNSIGNED_INT));
-MYPRINTF_STATIC_ASSERT(IS_TYPE_SIGNED(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT));
-MYPRINTF_STATIC_ASSERT(!IS_TYPE_SIGNED(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT));
-MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_TYPE_SIGNED_INT) == sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_INT));
-MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT) == sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT));
+MYPRINTF_STATIC_ASSERT(IS_TYPE_SIGNED(CFG_MYPRINTF_T_INT));
+MYPRINTF_STATIC_ASSERT(!IS_TYPE_SIGNED(CFG_MYPRINTF_T_UINT));
+MYPRINTF_STATIC_ASSERT(IS_TYPE_SIGNED(CFG_MYPRINTF_T_L_INT));
+MYPRINTF_STATIC_ASSERT(!IS_TYPE_SIGNED(CFG_MYPRINTF_T_L_UINT));
+MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_T_INT) == sizeof(CFG_MYPRINTF_T_UINT));
+MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_T_L_INT) == sizeof(CFG_MYPRINTF_T_L_UINT));
 
-MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_TYPE_SIGNED_INT) < sizeof(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT));
+MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_T_INT) < sizeof(CFG_MYPRINTF_T_L_INT));
 
 /* How many digits required for the maximum value of an unsigned long in your smallest base?  */
 MYPRINTF_STATIC_ASSERT(
- (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) == 2) ||
- (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) == 4) ||
- (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) == 8) ||
- (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) == 16));
+ (sizeof(CFG_MYPRINTF_T_L_UINT) == 2) ||
+ (sizeof(CFG_MYPRINTF_T_L_UINT) == 4) ||
+ (sizeof(CFG_MYPRINTF_T_L_UINT) == 8) ||
+ (sizeof(CFG_MYPRINTF_T_L_UINT) == 16));
 #if CFG_MYPRINTF_WANT_BINARY
- #define MYPRINTF_MAX_DIGIT_CHARS (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) * 8)
+ #define MYPRINTF_MAX_DIGIT_CHARS (sizeof(CFG_MYPRINTF_T_L_UINT) * 8)
 #else
-  #define MYPRINTF_MAX_DIGIT_CHARS (5 * sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) / 2)
+  #define MYPRINTF_MAX_DIGIT_CHARS (5 * sizeof(CFG_MYPRINTF_T_L_UINT) / 2)
 #endif
+
+#pragma GCC diagnostic pop
 
 // If the preprocessor excludes code snippets these warnings can go off, so disable them.
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
@@ -84,7 +89,7 @@ static void myprintf_snprintf_of(char c, void* arg) {
 	if (s->p < s->end)	/* Will write entire buffer but no more. */
 		*s->p++ = c;
 }
-char myprintf_vsnprintf(char* buf, unsigned len, const char* fmt, va_list ap) {
+char myprintf_vsnprintf(char* buf, size_t len, const char* fmt, va_list ap) {
 	char rc = 0;			// Default is fail.
 	if (len > 0) {			// Require room for at least a nul.
 		struct snprintf_state s = { buf, buf + len };
@@ -100,7 +105,7 @@ char myprintf_vsnprintf(char* buf, unsigned len, const char* fmt, va_list ap) {
 	return rc;
 }
 
-char myprintf_snprintf(char* buf, unsigned len, const char* fmt, ...) {
+char myprintf_snprintf(char* buf, size_t len, const char* fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
 	char rc = myprintf_vsnprintf(buf, len, fmt, ap);
@@ -129,8 +134,8 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 	uint_least8_t flags = 0;		// Various flags.
 
 	union {
-		CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT u;
-		CFG_MYPRINTF_TYPE_SIGNED_LONG_INT i;
+		CFG_MYPRINTF_T_L_UINT u;
+		CFG_MYPRINTF_T_L_INT i;
 	} num;							// Number to print. Always positive.
 
 	/* the following should be enough for 32 bit int */
@@ -185,8 +190,8 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 				goto p_str;
 			case 'd':
 				num.i = (flags & FLAG_LONG) ? 
-				  grab_integer(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT, int) :
-				  grab_integer(CFG_MYPRINTF_TYPE_SIGNED_INT, int);
+				  grab_integer(CFG_MYPRINTF_T_L_INT, int) :
+				  grab_integer(CFG_MYPRINTF_T_INT, int);
 				if (num.i < 0) {
 					num.i = -num.i;
 					flags |= FLAG_NEG;
@@ -205,8 +210,8 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 				// Fall through...
 			case 'u':
 do_unsigned:	num.u = (flags & FLAG_LONG) ? 
-				  grab_integer(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT, unsigned) :
-				  grab_integer(CFG_MYPRINTF_TYPE_UNSIGNED_INT, unsigned); // cppcheck-suppress unusedLabelSwitchConfiguration
+				  grab_integer(CFG_MYPRINTF_T_L_UINT, unsigned) :
+				  grab_integer(CFG_MYPRINTF_T_UINT, unsigned); // cppcheck-suppress unusedLabelSwitchConfiguration
 				break;
 			case '%': 						/* Literal '%', just print it. */
 				flags = 0;					/* Clear format flag. */
@@ -261,8 +266,10 @@ p_str:		// Print string `str' justified in `width' with padding char `pad'.
 			}
 
 			// Print string.
-
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wduplicated-branches"
 			while ('\0' != (c = (flags & FLAG_STR_PGM) ? MYPRINTF_DEREF_PGM_STR_CHAR(str.c) : *str.c)) {
+#pragma GCC diagnostic pop
 				putfunc(c, arg);
 				str.c += 1;
 			}
