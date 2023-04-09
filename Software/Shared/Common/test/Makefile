@@ -1,11 +1,17 @@
-# Name of exe.
-PROJECT = myprintf
+# We either target myprintf alone or all filesby setting to myprintf or all, note lower case. 
+TARGET = all
 
 # Test case files to be run through grm to generate a test runner `main.cpp'. 
-TEST_SRCS = test_printf.cpp
+TEST_SRCS_myprintf = test_printf.cpp
+TEST_SRCS_all = $(wildcard test_*.cpp)
 
 # Other src files.
-OTHER_SRCS = ../src/myprintf.cpp
+OTHER_SRCS_myprintf = ../src/myprintf.cpp
+OTHER_SRCS_all = ../src/myprintf.cpp ../src/event.cpp ../src/modbus.cpp ../src/utils.cpp support_test.cpp
+#console.cpp regs.cpp  sw_scanner.cpp  thread.cpp
+
+TEST_SRCS = $(TEST_SRCS_$(TARGET))
+OTHER_SRCS = $(OTHER_SRCS_$(TARGET))
 
 # Disable built-in rules and variables
 MAKEFLAGS += --no-builtin-rules
@@ -13,7 +19,7 @@ MAKEFLAGS += --no-builtin-variables
 
 # All build output including the binary ends up is this dir.
 BUILD_PREFIX = build
-BUILD_DIR = $(BUILD_PREFIX)$(BUILD)
+BUILD_DIR = $(BUILD_PREFIX)-$(TARGET)$(BUILD)
 
 # Extra options for C & C++
 EXTRAS =
@@ -34,7 +40,7 @@ WARN_FLAGS := -Wall -Wextra -Wno-unused-parameter -Werror -Wsign-conversion \
 CXXFLAGS :=  -g -O0 $(WARN_FLAGS) $(DEFINES) $(EXTRAS)
 CFLAGS   :=  -g -O0 $(WARN_FLAGS) -Wmissing-prototypes $(DEFINES) $(EXTRAS)
 
-TEST_MAIN_SRC = t_$(PROJECT)
+TEST_MAIN_SRC = t_$(TARGET)
 SRCS = $(TEST_MAIN_SRC).cpp $(OTHER_SRCS) $(TEST_SRCS) unity.c 
 
 # Commands
@@ -59,7 +65,8 @@ all : $(EXE)
 verify:
 	@echo "SRCS: " $(SRCS)
 	@echo "OBJS: " $(OBJS)
-
+	@echo $(wildcard test_*.cpp)
+	
 $(EXE) : $(OBJS) 
 	@echo $(OBJS) > $(BUILD_DIR)/obj_files
 	$(LINK) -o $@ @$(BUILD_DIR)/obj_files $(LIB_PATH) $(LIBS) $(LINK_FLAGS)
@@ -69,13 +76,13 @@ $(TEST_MAIN_SRC).cpp : $(TEST_SRCS)
 	./grm.py -v -o $@ $^
 
 clean :
-	$(RM) $(BUILD_DIR) $(PROJECT).cpp
+	$(RM) $(BUILD_DIR) $(TEST_MAIN_SRC).cpp
 
 clean-all :
-	$(RM) $(BUILD_PREFIX)*
+	$(RM) $(BUILD_PREFIX)* t_*.cpp
 	
 $(BUILD_DIR)/%.o : %.cpp
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -MG -MP -MT$@ -MF$(addsuffix .d, $(basename $@)) -MM $<
+	@$(CXX) $(CXXFLAGS) $(INCLUDES) -MG -MP -MT$@ -MF$(addsuffix .d, $(basename $@)) -MM $<
 	$(CXX) -c $< $(CXXFLAGS) -o $@ $(INCLUDES)
 	@$(CXX) $(CXXFLAGS) $(INCLUDES) -E -o $(addsuffix .i, $(basename $@)) $<
 
