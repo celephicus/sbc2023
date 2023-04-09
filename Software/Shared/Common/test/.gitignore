@@ -1,3 +1,8 @@
 .codelite/
 .ctagsd/
+
+# Various build dirs
 build*/
+
+# Various test runner source files made by grm...
+t_*.cpp

@@ -66,7 +66,7 @@ uint16_t utilsChecksumEeprom(const void *data, size_t count) {
 
 bool utilsMultiThreshold(const uint16_t* thresholds, uint8_t count, uint16_t hysteresis, uint8_t* level, uint16_t val) {
     uint8_t i;
-    int8_t new_level = 0;
+    uint8_t new_level = 0;
     bool changed;
 
     for (i = 0; i < count; i += 1) {
@@ -296,7 +296,7 @@ int utilsStrtoui(unsigned* n, const char* str, char** endptr, unsigned base) {
 	while (1) {
 		unsigned old_n;
 
-		unsigned char c = *str++;
+		unsigned char c = (unsigned char)*str++;
 		if (c >= '0' && c <= '9')
 			c -= '0';
 		else if (c >= 'A' && c <= 'Z')

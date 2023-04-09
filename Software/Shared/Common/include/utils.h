@@ -133,21 +133,21 @@ typedef struct {																											\
 	uint8_t* p;																												\
 	bool ovf;																												\
 } Buffer##name_;																											\
-static inline void buffer##name_##Reset(Buffer##name_* q) { q->p = q->buf; q->ovf = false; }								\
-static inline uint_least8_t buffer##name_##Size(const Buffer##name_* q) { (void)q; return (uint_least8_t)(size_);	}		\
-static inline bool buffer##name_##Overflow(const Buffer##name_* q) { return q->ovf; }										\
-static inline uint_least8_t buffer##name_##Len(const Buffer##name_* q) { return (uint_least8_t)(q->p - q->buf); }			\
-static inline uint_least8_t buffer##name_##Free(const Buffer##name_* q) { return (uint_least8_t)(&q->buf[size_] - q->p); }	\
-static inline void buffer##name_##Add(Buffer##name_* q, uint8_t x) { 														\
-	if (buffer##name_##Free(q) >= 1) *q->p++ = x;																			\
-	else q->ovf = true;																										\
+static inline void buffer##name_##Reset(Buffer##name_* q_) { q_->p = q_->buf; q_->ovf = false; }								\
+static inline uint_least8_t buffer##name_##Size(const Buffer##name_* q_) { (void)q_; return (uint_least8_t)(size_);	}		\
+static inline bool buffer##name_##Overflow(const Buffer##name_* q_) { return q_->ovf; }										\
+static inline uint_least8_t buffer##name_##Len(const Buffer##name_* q_) { return (uint_least8_t)(q_->p - q_->buf); }			\
+static inline uint_least8_t buffer##name_##Free(const Buffer##name_* q_) { return (uint_least8_t)(&q_->buf[size_] - q_->p); }	\
+static inline void buffer##name_##Add(Buffer##name_* q_, uint8_t x) { 														\
+	if (buffer##name_##Free(q_) >= 1) *q_->p++ = x;																			\
+	else q_->ovf = true;																										\
 }																															\
-static inline void buffer##name_##AddMem(Buffer##name_* q, const void* m, uint8_t len) { 									\
-	if (len > buffer##name_##Free(q)) { q->ovf = true; len = buffer##name_##Free(q); }										\
-	memcpy(q->p, m, len); q->p += len;																						\
+static inline void buffer##name_##AddMem(Buffer##name_* q_, const void* m, uint8_t len) { 									\
+	if (len > buffer##name_##Free(q_)) { q_->ovf = true; len = buffer##name_##Free(q_); }										\
+	memcpy(q_->p, m, len); q_->p += len;																						\
 }																															\
-static inline void buffer##name_##AddU16(Buffer##name_* q, uint16_t x) { 													\
-	buffer##name_##AddMem(q, (void*)&x, sizeof(uint16_t)); 																	\
+static inline void buffer##name_##AddU16(Buffer##name_* q_, uint16_t x) { 													\
+	buffer##name_##AddMem(q_, (void*)&x, sizeof(uint16_t)); 																	\
 }
 
 // How many elements in an array?

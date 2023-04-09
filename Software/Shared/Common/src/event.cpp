@@ -212,7 +212,7 @@ void eventSmService(EventSmFunc sm, EventSmContextBase* state, t_event ev) {
 	// If state change...
     if (new_state >= 0) {
         (void)sm(state, event_mk(EV_SM_EXIT));      // Exit from current state->
-        eventTraceWrite(EV_DEBUG_SM_STATE_CHANGE, state->id, new_state);
+        eventTraceWrite(EV_DEBUG_SM_STATE_CHANGE, state->id, (uint8_t)new_state);
         state->st = new_state;						// Set new state->
         (void)sm(state, event_mk(EV_SM_ENTRY));  	// Enter new state->
     }

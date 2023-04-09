@@ -75,7 +75,7 @@ static void queue_push_multi(QueuePutFunc put, uint8_t n) {
 		verify_full_empty_len(++expected_len);
 	}
 }
-static void queue_verify_multi(uint8_t n, int8_t start, int8_t inc) {
+static void queue_verify_multi(uint8_t n, uint8_t start, int8_t inc) {
 	uint8_t expected_len = queueQLen(&q);
 	for (uint8_t i = 0; i < (n); ++i) {
 		TEST_ASSERT_EQUAL_UINT8(n-i, queueQLen(&q));
@@ -87,13 +87,13 @@ static void queue_verify_multi(uint8_t n, int8_t start, int8_t inc) {
 	TEST_ASSERT_FALSE(queueQGet(&q, &el));
 }
 
-void testUtilsQueuePut(QueuePutFunc put, uint8_t preload, uint8_t n, int8_t start, int8_t inc) {
+void testUtilsQueuePut(QueuePutFunc put, uint8_t preload, uint8_t n, uint8_t start, int8_t inc) {
 	q.head = q.tail = preload;
 	verify_full_empty_len(0);
 	queue_push_multi(put, n);
 	queue_verify_multi(n, start, inc);
 }
-void testUtilsQueuePutOvf(QueuePutFunc put, uint8_t preload, int8_t start, int8_t inc) {
+void testUtilsQueuePutOvf(QueuePutFunc put, uint8_t preload, uint8_t start, int8_t inc) {
 	q.head = q.tail = preload;
 	verify_full_empty_len(0);
 	queue_push_multi(put, QUEUE_DEPTH);

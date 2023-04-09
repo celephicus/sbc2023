@@ -82,7 +82,7 @@ void testEventQueueNoPublishNil() {
 }
 void testEventQueueOverflow() {
 	publish_multi(CFG_EVENT_QUEUE_SIZE);
-	TEST_ASSERT_FALSE(eventPublish(-1));
+	TEST_ASSERT_FALSE(eventPublish(1));
 	verify_multi(CFG_EVENT_QUEUE_SIZE);
 }
 
