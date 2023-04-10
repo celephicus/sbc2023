@@ -211,7 +211,7 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 			case 'u':
 do_unsigned:	num.u = (flags & FLAG_LONG) ? 
 				  grab_integer(CFG_MYPRINTF_T_L_UINT, unsigned) :
-				  grab_integer(CFG_MYPRINTF_T_UINT, unsigned); // cppcheck-suppress unusedLabelSwitchConfiguration
+				  grab_integer(CFG_MYPRINTF_T_UINT, unsigned); 
 				break;
 			case '%': 						/* Literal '%', just print it. */
 				flags = 0;					/* Clear format flag. */

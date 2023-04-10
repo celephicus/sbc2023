@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#include "project_config.h"
+#include "project_config.h"		// cppcheck-suppress [missingInclude]
 #include "thread.h"
 
 // No point having this as no debug facilities used. 

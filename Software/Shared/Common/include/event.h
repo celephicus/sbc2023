@@ -1,7 +1,7 @@
 #ifndef EVENT_H__
 #define EVENT_H__
 
-#include "event.local.h"
+#include "event.local.h"	// cppcheck-suppress [missingInclude]
 
 // EV_SW_xxx events have these values in p8. 
 // These are not in the switch driver so that clients canuse the events without including the driver header. 

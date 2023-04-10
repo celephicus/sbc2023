@@ -41,7 +41,7 @@
 
 /* If we have a project config file include it. */
 #ifdef USE_PROJECT_CONFIG_H
-#include "project_config.h"
+#include "project_config.h"		// cppcheck-suppress [missingInclude]
 #endif
 
 /* Signed int used for `%d' format. */

@@ -6,7 +6,7 @@ typedef uint16_t regs_t;
 typedef int16_t regs_signed_t;
 static const regs_t REGS_MAXVAL = 65535U;
 
-#include "regs_local.h"
+#include "regs_local.h"		// cppcheck-suppress [missingInclude]
 
 // Access registers as a block of memory somewhere else.
 uint16_t* regsGetRegs();

@@ -24,7 +24,8 @@
  #define _BV(_x) (1U << (_x))
 #endif
 
-#include "project_config.h"		// Need project_config for event queue & trace buffer sizes.
+// Need project_config for event queue & trace buffer sizes.
+#include "project_config.h"	// cppcheck-suppress [missingInclude]
 #include "utils.h"
 #include "event.h"
 
