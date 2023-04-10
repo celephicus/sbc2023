@@ -1,0 +1,10 @@
+if [ "$1" = "" ]; then
+	CHECK=""
+	echo "Checking source..."
+else
+	CHECK="--check-config"
+	echo "Checking cppcheck configuration..."
+fi
+
+# Checks for missing include files that have not been suppressed inline in the source/header file. 
+cppcheck -I../include/ -UTEST --suppress=missingIncludeSystem --inline-suppr --template="{file}:{line}: {severity}: {message}" $CHECK ../src/

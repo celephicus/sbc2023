@@ -6,3 +6,6 @@ build*/
 
 # Various test runner source files made by grm...
 t_*.cpp
+
+# Cppcheck database, speeds up the scan.
+.cppcheck/
