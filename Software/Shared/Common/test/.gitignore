@@ -9,3 +9,6 @@ t_*.cpp
 
 # Cppcheck database, speeds up the scan.
 .cppcheck/
+
+# Coverage results.
+coverage/

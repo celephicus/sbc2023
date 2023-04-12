@@ -128,6 +128,9 @@ TT_TEST_CASE(test_printf_format("x%x", "x%0%x"));
 TT_TEST_CASE(test_printf_format("x%x", "x%03%x"));
 TT_TEST_CASE(test_printf_format("x%x", "x%-3%x"));
 
+// Bad format ignored.
+TT_TEST_CASE(test_printf_format("xx123x", "x%zx%dx", 123));
+
 // Character.
 TT_TEST_CASE(test_printf_format("xzx", "x%cx", 'z'));
 TT_TEST_CASE(test_printf_format("xzx", "x%1cx", 'z'));
@@ -135,19 +138,34 @@ TT_TEST_CASE(test_printf_format("x zx", "x%2cx", 'z'));
 TT_TEST_CASE(test_printf_format("xz x", "x%-2cx", 'z'));
 
 // String
+TT_TEST_CASE(test_printf_format("xx", "x%sx", ""));
 TT_TEST_CASE(test_printf_format("xzx", "x%sx", "z"));
-TT_TEST_CASE(test_printf_format("x(null)x", "x%sx", NULL));
+TT_TEST_CASE(test_printf_format("x x", "x%1sx", ""));
+TT_TEST_CASE(test_printf_format("x x", "x%-1sx", ""));
+TT_TEST_CASE(test_printf_format("x)ovmm*x", "x%sx", NULL)); // `(null)' + 1.
 TT_TEST_CASE(test_printf_format("x  zx", "x%3sx", "z"));
 TT_TEST_CASE(test_printf_format("xz  x", "x%-3sx", "z"));
+
+// String in PGM space. 
+TT_TEST_CASE(test_printf_format("xx", "x%Sx", ""));
+TT_TEST_CASE(test_printf_format("xzx", "x%Sx", "y"));
+TT_TEST_CASE(test_printf_format("x)ovmm*x", "x%Sx", NULL)); // `(null)' + 1.
+TT_TEST_CASE(test_printf_format("x  zx", "x%3Sx", "y"));
+TT_TEST_CASE(test_printf_format("xz  x", "x%-3Sx", "y"));
 
 // Integer decimal.
 TT_TEST_CASE(test_printf_format("x0x", "x%dx", 0));
 TT_TEST_CASE(test_printf_format("x123x", "x%dx", 123));
+TT_TEST_CASE(test_printf_format("x-1x", "x%0dx", -1));
 TT_TEST_CASE(test_printf_format("x1x", "x%0dx", 1));
 TT_TEST_CASE(test_printf_format("x1x", "x%1dx", 1));
 TT_TEST_CASE(test_printf_format("x 1x", "x%2dx", 1));
 TT_TEST_CASE(test_printf_format("x01x", "x%02dx", 1));
-TT_TEST_CASE(test_printf_format("x1 x", "x%-2dx", 1));
+TT_TEST_CASE(test_printf_format("x1  x", "x%-3dx", 1));
+TT_TEST_CASE(test_printf_format("x -1x", "x%3dx", -1));
+TT_TEST_CASE(test_printf_format("x-01x", "x%03dx", -1));
+TT_TEST_CASE(test_printf_format("x-1 x", "x%-3dx", -1));
+TT_TEST_CASE(test_printf_format("x-1 x", "x%-3dx", -1));
 
 // Integer decimal. Long, copy of above.
 TT_TEST_CASE(test_printf_format("x0x", "x%ldx", (CFG_MYPRINTF_T_L_UINT)0));
