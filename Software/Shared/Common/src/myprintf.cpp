@@ -166,30 +166,29 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 
 	for (; '\0' != (c = MYPRINTF_PGM_STR_DEREF_FMT(fmt)); fmt += 1) {	// Iterate over all chars in format.
 		if (flags & FLAG_FORMAT) {
-			if ('-' == c) {			// A '-' for right justification.
-				c = MYPRINTF_PGM_STR_DEREF_FMT(++fmt);
+			switch (c) {								// Now we have format spec.
+			case '-':									// A '-' for right justification.
 				flags |= FLAG_PAD_RIGHT;
-			}
-			else if ('0' == c) {			// A leading zero for zero pad.
-				c = MYPRINTF_PGM_STR_DEREF_FMT(++fmt);
-				padchar = '0';
-			}
-			while ((c >= '0') && (c <= '9')) {	// Read width value.
+				continue;
+			case '0':									// A leading zero for zero pad.
+				if (0 == width) {
+					padchar = '0';
+					continue;
+				}
+				// Fall through...
+			case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8':case '9': // Read width value.
 				width *= 10;
 				width += c - '0';
-				c = MYPRINTF_PGM_STR_DEREF_FMT(++fmt);
-			}
-			if (('l' == c) || ('L' == c)) {			// A 'l' or 'L' for long integer.
-				c = MYPRINTF_PGM_STR_DEREF_FMT(++fmt);
+				continue;
+			case 'l': case 'L':							// A 'l' or 'L' for long integer.
 				flags |= FLAG_LONG;
-			}
+				continue;
 
-			switch (c) {								// Now we have format spec.
 #ifdef MYPRINTF_WANT_PGM_STR
 			case 'S':									// String in program space.
 				flags |= FLAG_STR_PGM;
 #endif // MYPRINTF_WANT_PGM_STR
-				/* FALLTHRU */
+				// Fall through...
 			case 's':									// String in normal memory.
 				str.c = va_arg(ap, const char*);
 				if (NULL == str.c) {					/* Catch null ptr. */
@@ -209,23 +208,23 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 				num.i = (flags & FLAG_LONG) ? 
 				  grab_integer(CFG_MYPRINTF_T_L_INT, int) :
 				  grab_integer(CFG_MYPRINTF_T_INT, int);
-				if (num.i < 0) {	/* Convert to positive, note will not be sign extended as botm union members are same size. */
+				if (num.i < 0) {	/* Convert to positive, note will not be sign extended as both union members are same size. */
 					num.u = (CFG_MYPRINTF_T_L_UINT)-num.i;		
 					flags |= FLAG_NEG;
 				}
 				break;
 #if CFG_MYPRINTF_WANT_BINARY
-			case 'b':
+			case 'b':									/* Optional binary format. */
 				base = 2;
 				goto do_unsigned;
 #endif
-			case 'X':
+			case 'X':									/* Hex (upper case). */
 				flags |= FLAG_UPPER;
 				// Fall through...
-			case 'x':
+			case 'x':									/* Hex (lower case). */
 				base = 16;
 				// Fall through...
-			case 'u':
+			case 'u':									/* Unsigned decimal. */
 do_unsigned:	num.u = (flags & FLAG_LONG) ? 
 				  grab_integer(CFG_MYPRINTF_T_L_UINT, unsigned) :
 				  grab_integer(CFG_MYPRINTF_T_UINT, unsigned); 

@@ -105,6 +105,7 @@ TT_TEST_CASE(test_myprintf_snsprintf("", 1, 2, ""));	// Can write zero length st
 TT_TEST_CASE(test_myprintf_snsprintf("X", 1, 2, "X"));	// Can write 1 length string to buffer length 2.
 TT_TEST_CASE(test_myprintf_snsprintf("X", 0, 2, "XZ"));	// But not string length 2.
 
+// Generic formatting test case.
 void test_printf_format_v(const char* expected, const char* fmt, va_list ap) {
 	char outp[257];
 	TEST_ASSERT(myprintf_vsnprintf(outp, sizeof(outp), fmt, ap)); // We expect it not to overflow.
@@ -128,7 +129,7 @@ TT_TEST_CASE(test_printf_format("x%x", "x%0%x"));
 TT_TEST_CASE(test_printf_format("x%x", "x%03%x"));
 TT_TEST_CASE(test_printf_format("x%x", "x%-3%x"));
 
-// Bad format ignored.
+// Bad format ignored. Not important,just to check that it doesn't catch fire. 
 TT_TEST_CASE(test_printf_format("xx123x", "x%zx%dx", 123));
 
 // Character.
