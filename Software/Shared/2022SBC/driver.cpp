@@ -426,12 +426,20 @@ static void led_service() { utilsSeqService(&f_led_seq); }
 #include "SparkFun_ADXL345.h"
 
 const uint16_t ACCEL_CHECK_PERIOD_MS = 1000;
-const uint16_t ACCEL_RAW_SAMPLE_RATE_TOLERANCE_PERC = 25;
+const uint16_t ACCEL_RAW_SAMPLE_RATE_TOLERANCE_FRACT = 10;		// Range is nominal +/- nominal/fract.
+//const uint8_t ACCEL_MAX_SAMPLES = 1U << (16 - 10);	// Accelerometer provides 10 bit data.
 
-//const uint8_t ACCEL_MAX_SAMPLES = 1; //1U << (16 - 10);	// Accelerometer provides 10 bit data.
+/* Processing pipeline is:
+	Setup device at data rate in register REGS_IDX_ACCEL_DATA_RATE.
+	Accumulate register REGS_IDX_ACCEL_AVG samples.
+	Compute tilt in register ACCEL_TILT_ANGLE
+	Apply low pass filter rate set in register ACCEL_TILT_FILTER_K
+	*/
 static struct {
 	int16_t r[3];   			// Accumulators for 3 axes.
-	uint8_t counts;				// Sample counter.
+	uint8_t accum_sample_counter;				// Sample counter.
+	uint16_t raw_sample_counter;
+	uint16_t accel_data_rate_margin;
 	bool restart;				// Flag to reset processing out of init, fault.
 	bool reset_filter;			// Reset filter as part of processing restart.
 	uint8_t filter_k;			// Tilt filter time constant.
@@ -442,7 +450,15 @@ static struct {
 
 static void clear_accel_accum() {
 	f_accel_data.r[0] = f_accel_data.r[1] = f_accel_data.r[2] = 0;
-	f_accel_data.counts = 0U;
+	f_accel_data.accum_sample_counter = 0U;
+}
+static void tilt_sensor_set_status(bool fault) {
+	regsWriteMaskFlags(REGS_FLAGS_MASK_ACCEL_FAIL, fault);
+	if (fault) {
+		f_accel_data.restart = true;
+		REGS[REGS_IDX_ACCEL_TILT_ANGLE] = REGS[REGS_IDX_ACCEL_TILT_ANGLE_LP] = SBC2022_MODBUS_TILT_FAULT;
+		REGS[REGS_IDX_ACCEL_TILT_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_NOT_WORKING;
+	}
 }
 
 ADXL345 adxl = ADXL345(GPIO_PIN_SSEL);				// USE FOR SPI COMMUNICATION, ADXL345(CS_PIN);
@@ -458,10 +474,10 @@ static void sensor_accel_init() {
 													// Default: Set to 1
 													// SPI pins on the ATMega328: 11, 12 and 13 as reference in SPI Library
 	adxl.setRate((float)REGS[REGS_IDX_ACCEL_DATA_RATE]);
- 
-	f_accel_data.restart = true;	// Flag processing as needing a restart
-}
+ 	f_accel_data.accel_data_rate_margin = REGS[REGS_IDX_ACCEL_DATA_RATE] / ACCEL_RAW_SAMPLE_RATE_TOLERANCE_FRACT;
 
+	tilt_sensor_set_status(true);					// Start off from fault state. 
+}
 
 static void setup_devices() {
 	sensor_accel_init();
@@ -476,13 +492,29 @@ static float tilt(float a, float b, float c, bool quad_correct) {
 	return 2.0 * TILT_FS / M_PI * atan2(a, mean);
 }
 
+static void accel_service_check_motion() {
+	REGS[REGS_IDX_TILT_DELTA] = f_accel_data.last_tilt - (int16_t)REGS[REGS_IDX_ACCEL_TILT_ANGLE_LP];
+	f_accel_data.last_tilt = (int16_t)REGS[REGS_IDX_ACCEL_TILT_ANGLE_LP];
+	switch (utilsWindow((int16_t)REGS[REGS_IDX_TILT_DELTA], -(int16_t)REGS[REGS_IDX_ACCEL_TILT_MOTION_DISC_THRESHOLD], +(int16_t)REGS[REGS_IDX_ACCEL_TILT_MOTION_DISC_THRESHOLD])) {
+		case -1: REGS[REGS_IDX_ACCEL_TILT_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_MOTION_NEG; break;
+		case +1: REGS[REGS_IDX_ACCEL_TILT_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_MOTION_POS; break;
+		default: REGS[REGS_IDX_ACCEL_TILT_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_OK; break;
+	}
+}
+static void accel_service_check_sample_rate() {
+	if (0 != REGS[REGS_IDX_ACCEL_SAMPLE_RATE_TEST])		// Fake sample count for testing.
+		f_accel_data.raw_sample_counter = REGS[REGS_IDX_ACCEL_SAMPLE_RATE_TEST];
+	tilt_sensor_set_status(!utilsIsInLimit(f_accel_data.raw_sample_counter, REGS[REGS_IDX_ACCEL_DATA_RATE] - f_accel_data.accel_data_rate_margin, REGS[REGS_IDX_ACCEL_DATA_RATE] + f_accel_data.accel_data_rate_margin));
+	f_accel_data.raw_sample_counter = 0;
+}
+
 void service_devices() {
-	static uint16_t raw_sample_count;
 	if (adxl.getInterruptSource() & 0x80) {
 		// Acquire raw data and increment sample counter, used for determining if the accelerometer is working.
 		int r[3];
 		adxl.readAccel(r);
-		if (raw_sample_count < 65535) raw_sample_count += 1;
+		if (f_accel_data.raw_sample_counter < 65535) 
+			f_accel_data.raw_sample_counter += 1;
 		fori (3)
 			f_accel_data.r[i] += (int16_t)r[i];
 
@@ -493,7 +525,7 @@ void service_devices() {
 				f_accel_data.reset_filter = true;
 			}
 
-			if (++f_accel_data.counts >= REGS[REGS_IDX_ACCEL_AVG]) {	// Check for time to average accumulated readings.
+			if (++f_accel_data.accum_sample_counter >= REGS[REGS_IDX_ACCEL_AVG]) {	// Check for time to average accumulated readings.
 				gpioSp4Set();
 				REGS[REGS_IDX_ACCEL_SAMPLE_COUNT] += 1;
 				fori (3)
@@ -505,7 +537,7 @@ void service_devices() {
 				int16_t tilt_i16 = (int16_t)(0.5 + tilt_angle);
 				REGS[REGS_IDX_ACCEL_TILT_ANGLE] = (regs_t)utilsFilter(&f_accel_data.tilt_filter_accum, tilt_i16, (uint8_t)REGS[REGS_IDX_ACCEL_TILT_FILTER_K], f_accel_data.reset_filter);
 
-				// Filter tilt value a bit. We reset the filter if the filter constant has changed. This will only happen during manual tuning
+				// Filter tilt value a bit. We do not bother to reset the filter if the filter constant has changed as this will only happen during manual tuning.
 				REGS[REGS_IDX_ACCEL_TILT_ANGLE_LP] = (regs_t)utilsFilter(&f_accel_data.tilt_motion_disc_filter_accum, tilt_i16, (uint8_t)REGS[REGS_IDX_ACCEL_TILT_MOTION_DISC_FILTER_K], f_accel_data.reset_filter);
 				f_accel_data.reset_filter = false;
 
@@ -515,27 +547,10 @@ void service_devices() {
 	}
 
 	// Check that we have the correct sample rate from the accelerometer. We can force a fault for testing the logic.
-	// On fault flag the filter as needing reset, set status reg to bad and set a bad value to the tilt reg.
+	// On fault: flag the filter as needing reset, set status reg to bad and set a bad value to the tilt reg.
 	utilsRunEvery(ACCEL_CHECK_PERIOD_MS) {
-		// Are we moving?
-		REGS[REGS_IDX_TILT_DELTA] = f_accel_data.last_tilt - (int16_t)REGS[REGS_IDX_ACCEL_TILT_ANGLE_LP];
-		f_accel_data.last_tilt = (int16_t)REGS[REGS_IDX_ACCEL_TILT_ANGLE_LP];
-		switch (utilsWindow((int16_t)REGS[REGS_IDX_TILT_DELTA], -(int16_t)REGS[REGS_IDX_ACCEL_TILT_MOTION_DISC_THRESHOLD], +(int16_t)REGS[REGS_IDX_ACCEL_TILT_MOTION_DISC_THRESHOLD])) {
-		case -1: REGS[REGS_IDX_ACCEL_TILT_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_MOTION_NEG; break;
-		case +1: REGS[REGS_IDX_ACCEL_TILT_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_MOTION_POS; break;
-		default: REGS[REGS_IDX_ACCEL_TILT_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_OK; break;
-		}
-
-		if (0 != REGS[REGS_IDX_ACCEL_SAMPLE_RATE_TEST])		// Fake sample count for testing.
-			raw_sample_count = REGS[REGS_IDX_ACCEL_SAMPLE_RATE_TEST];
-		const bool fault = !utilsIsInLimit(raw_sample_count, REGS[REGS_IDX_ACCEL_DATA_RATE] - ACCEL_RAW_SAMPLE_RATE_TOLERANCE_PERC, REGS[REGS_IDX_ACCEL_DATA_RATE] + ACCEL_RAW_SAMPLE_RATE_TOLERANCE_PERC);
-		regsWriteMaskFlags(REGS_FLAGS_MASK_ACCEL_FAIL, fault);
-		if (fault) {
-			f_accel_data.restart = true;
-			REGS[REGS_IDX_ACCEL_TILT_ANGLE] = REGS[REGS_IDX_ACCEL_TILT_ANGLE_LP] = SBC2022_MODBUS_TILT_FAULT;
-			REGS[REGS_IDX_ACCEL_TILT_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_NOT_WORKING;
-		}
-		raw_sample_count = 0;
+		accel_service_check_motion();
+		accel_service_check_sample_rate();
 	}
 }
 
