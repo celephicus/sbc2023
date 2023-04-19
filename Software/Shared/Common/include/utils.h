@@ -255,7 +255,7 @@ T utilsAbs(T x)  {
 
 // Check if a value is within the limit: low <= x <= high. Note considers both lower AND UPPER as within the limit. Not like a Python range. 
 template <typename T>
-T utilsIsInLimit(T x, T low, T high)  {
+bool utilsIsInLimit(T x, T low, T high)  {
 	return (x >= low) && (x <= high);
 }
 
