@@ -1,8 +1,14 @@
 .codelite/
 .ctagsd/
-compile_commands.json
-Makefile
-test.txt
-test.mk
-D*/
-test.batch_build
+
+# Various build dirs
+build*/
+
+# Various test runner source files made by grm...
+t_*.cpp
+
+# Cppcheck database, speeds up the scan.
+.cppcheck/
+
+# Coverage results.
+coverage/

@@ -491,7 +491,7 @@ typedef enum
 
 struct UNITY_STORAGE_T
 {
-	unsigned Verbosity;
+	int Verbosity;
     const char* TestFile;
     const char* CurrentTestName;
 #ifndef UNITY_EXCLUDE_DETAILS

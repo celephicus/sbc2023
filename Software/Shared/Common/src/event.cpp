@@ -24,7 +24,8 @@
  #define _BV(_x) (1U << (_x))
 #endif
 
-#include "project_config.h"		// Need project_config for event queue & trace buffer sizes.
+// Need project_config for event queue & trace buffer sizes.
+#include "project_config.h"	// cppcheck-suppress [missingInclude]
 #include "utils.h"
 #include "event.h"
 
@@ -212,7 +213,7 @@ void eventSmService(EventSmFunc sm, EventSmContextBase* state, t_event ev) {
 	// If state change...
     if (new_state >= 0) {
         (void)sm(state, event_mk(EV_SM_EXIT));      // Exit from current state->
-        eventTraceWrite(EV_DEBUG_SM_STATE_CHANGE, state->id, new_state);
+        eventTraceWrite(EV_DEBUG_SM_STATE_CHANGE, state->id, (uint8_t)new_state);
         state->st = new_state;						// Set new state->
         (void)sm(state, event_mk(EV_SM_ENTRY));  	// Enter new state->
     }

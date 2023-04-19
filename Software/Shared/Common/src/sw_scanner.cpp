@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <stdlib.h>
 
-#include "project_config.h"
+#include "project_config.h"		// cppcheck-suppress [missingInclude]
 #include "utils.h"
 #include "event.h"
 #include "regs.h"

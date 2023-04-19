@@ -22,59 +22,69 @@
 #include <stdint.h>
 
 #include "myprintf.h"
-/* If we have a project config file include it. */
-#ifdef USE_PROJECT_CONFIG_H
-#include "project_config.h"
-#endif
 
 /* Do you want binary format? Watch out it needs a big buffer. */
 #ifndef CFG_MYPRINTF_WANT_BINARY
 #define CFG_MYPRINTF_WANT_BINARY 0
 #endif
 
-/* Customisation for AVR target. */
+/* We need custom strings for the cursed AVR that live in a different address space "PGM", so we need macros to declare and access them. 
+	If active the `%S' format prints a PGM string.
+	Macro MYPRINTF_PGM_STR_DECL used to declare a string, e.g. `const char foo[] MYPRINTF_PGM_STR_DECL = "...";'
+	Macro MYPRINTF_PGM_STR_DEREF_FMT(p) dereferences a const char* pointer FROM THE FORMAT to char.
+	Macro MYPRINTF_WANT_PGM_STR set true if the PGM feature is active.
+
+	Also includes option for testing.
+	Note that arg is evaluated only once so is safe if used as MYPRINTF_PGM_STR_DEREF_FMT(p++).
+*/
+
 #if defined(__AVR__)
-
-/* If MYPRINTF_WANT_PGM_STR defined then this macro used to access characters in PROGMEM. */
-#include <avr/pgmspace.h>
-#define MYPRINTF_DEREF_PGM_STR_CHAR(ptr_) ((char)pgm_read_byte(ptr_))		// For AVR.
-
-/* Define if strings can be in Flash as well as RAM. This enables the `%S' format. */
-#define MYPRINTF_WANT_PGM_STR
-
+ #include <avr/pgmspace.h>
+ #define MYPRINTF_PGM_STR_DEREF_FMT(ptr_) ((char)pgm_read_byte(ptr_))	
+ #define MYPRINTF_PGM_STR_DEREF_PTR(ptr_) ( (flags & FLAG_STR_PGM) ? ((char)pgm_read_byte(ptr_)) : (*(ptr_))
+ #define MYPRINTF_PGM_STR_DECL PROGMEM
+ #define MYPRINTF_WANT_PGM_STR 1
+#elif defined (TEST)
+ #define MYPRINTF_PGM_STR_DEREF_FMT(ptr_) (*(ptr_))
+ static char munge_for_testing(char c, bool f) { return (f && c) ? (c + 1) : c; }
+ #define MYPRINTF_PGM_STR_DEREF_PTR(ptr_) (munge_for_testing(*(ptr_), flags & FLAG_STR_PGM))
+ #define MYPRINTF_PGM_STR_DECL /*empty */
+ #define MYPRINTF_WANT_PGM_STR 0
 #else
-
-#define MYPRINTF_DEREF_PGM_STR_CHAR(ptr_) (*(ptr_))
-#define PROGMEM /*empty */
-#undef MYPRINTF_WANT_PGM_STR
-
+ #define MYPRINTF_PGM_STR_DEREF_FMT(ptr_) (*(ptr_))
+ #define MYPRINTF_PGM_STR_DEREF_PTR(ptr_) (*(ptr_))
+ #define MYPRINTF_PGM_STR_DECL /*empty */
+ #define MYPRINTF_WANT_PGM_STR 0
 #endif
 
 /* Check that we have size of myprintf's int type correct. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnarrowing"
+
 #define MYPRINTF_STATIC_ASSERT(expr_) extern char error_static_assert_fail__[(expr_) ? 1 : -1] __attribute__((unused))
 #define IS_TYPE_SIGNED(T_) (((T_)(-1)) < (T_)0)
-MYPRINTF_STATIC_ASSERT(IS_TYPE_SIGNED(CFG_MYPRINTF_TYPE_SIGNED_INT));
-MYPRINTF_STATIC_ASSERT(!IS_TYPE_SIGNED(CFG_MYPRINTF_TYPE_UNSIGNED_INT));
-MYPRINTF_STATIC_ASSERT(IS_TYPE_SIGNED(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT));
-MYPRINTF_STATIC_ASSERT(!IS_TYPE_SIGNED(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT));
-MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_TYPE_SIGNED_INT) == sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_INT));
-MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT) == sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT));
+MYPRINTF_STATIC_ASSERT(IS_TYPE_SIGNED(CFG_MYPRINTF_T_INT));
+MYPRINTF_STATIC_ASSERT(!IS_TYPE_SIGNED(CFG_MYPRINTF_T_UINT));
+MYPRINTF_STATIC_ASSERT(IS_TYPE_SIGNED(CFG_MYPRINTF_T_L_INT));
+MYPRINTF_STATIC_ASSERT(!IS_TYPE_SIGNED(CFG_MYPRINTF_T_L_UINT));
+MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_T_INT) == sizeof(CFG_MYPRINTF_T_UINT));
+MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_T_L_INT) == sizeof(CFG_MYPRINTF_T_L_UINT));
 
-MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_TYPE_SIGNED_INT) < sizeof(CFG_MYPRINTF_TYPE_SIGNED_LONG_INT));
-
-// Maximum value
-#define MYPRINTF_MAX_UNSIGNED_LONG_INT ((CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)(-1))
+MYPRINTF_STATIC_ASSERT(sizeof(CFG_MYPRINTF_T_INT) < sizeof(CFG_MYPRINTF_T_L_INT));
 
 /* How many digits required for the maximum value of an unsigned long in your smallest base?  */
 MYPRINTF_STATIC_ASSERT(
- (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) == 2) ||
- (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) == 4) ||
- (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) == 8));
+ (sizeof(CFG_MYPRINTF_T_L_UINT) == 2) ||
+ (sizeof(CFG_MYPRINTF_T_L_UINT) == 4) ||
+ (sizeof(CFG_MYPRINTF_T_L_UINT) == 8) ||
+ (sizeof(CFG_MYPRINTF_T_L_UINT) == 16));
 #if CFG_MYPRINTF_WANT_BINARY
- #define MYPRINTF_MAX_DIGIT_CHARS (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) * 8)
+ #define MYPRINTF_MAX_DIGIT_CHARS (sizeof(CFG_MYPRINTF_T_L_UINT) * 8)
 #else
-  #define MYPRINTF_MAX_DIGIT_CHARS (5 * sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) / 2)
+  #define MYPRINTF_MAX_DIGIT_CHARS (5 * sizeof(CFG_MYPRINTF_T_L_UINT) / 2)
 #endif
+
+#pragma GCC diagnostic pop
 
 // If the preprocessor excludes code snippets these warnings can go off, so disable them.
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
@@ -90,7 +100,7 @@ static void myprintf_snprintf_of(char c, void* arg) {
 	if (s->p < s->end)	/* Will write entire buffer but no more. */
 		*s->p++ = c;
 }
-char myprintf_vsnprintf(char* buf, unsigned len, const char* fmt, va_list ap) {
+char myprintf_vsnprintf(char* buf, size_t len, const char* fmt, va_list ap) {
 	char rc = 0;			// Default is fail.
 	if (len > 0) {			// Require room for at least a nul.
 		struct snprintf_state s = { buf, buf + len };
@@ -106,7 +116,7 @@ char myprintf_vsnprintf(char* buf, unsigned len, const char* fmt, va_list ap) {
 	return rc;
 }
 
-char myprintf_snprintf(char* buf, unsigned len, const char* fmt, ...) {
+char myprintf_snprintf(char* buf, size_t len, const char* fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
 	char rc = myprintf_vsnprintf(buf, len, fmt, ap);
@@ -118,10 +128,10 @@ char myprintf_snprintf(char* buf, unsigned len, const char* fmt, ...) {
  * You can pass them as arguments to functions and call va_arg() on them, but not in two separate functions it seems. 
  * Anyway I had a failure on AVR with a format like "%ld %d", added a test, found the same error on the x86 run test.
  * Then fixed the fault. */
-#define grab_integer() (																		\
-  ((flags & FLAG_LONG) && (sizeof(CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) > sizeof(unsigned))) ?	\
-    va_arg(ap, CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT) :											\
-	va_arg(ap, unsigned)																		\
+#define grab_integer(myprintf_type_, native_type_) (	\
+  (sizeof(myprintf_type_) > sizeof(native_type_)) ?		\
+    va_arg(ap, myprintf_type_) :						\
+	(myprintf_type_)va_arg(ap, native_type_)			\
   )
 
 void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) {
@@ -130,13 +140,19 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 	char padchar;					// Holds padding char, either space or '0'.
 
 	enum {
-		FLAG_FORMAT = 1, FLAG_LONG = 2, FLAG_PAD_RIGHT = 4, FLAG_UPPER = 8, FLAG_NEG = 16, FLAG_STR_PGM = 32,
+		FLAG_FORMAT = 1, 	// Parsing format,cleared on specifier char.
+		FLAG_LONG = 2, 		// Integral type is LONG.
+		FLAG_PAD_RIGHT = 4, // LEFT justify, pad to R with spaces. 
+							// Else RIGHT justify, pad to L with spaces or zeroes.
+		FLAG_UPPER = 8, 	// Upper case for hex (X vs x). 
+		FLAG_NEG = 16, 		// Signed value negative.
+		FLAG_STR_PGM = 32,	// String in PGM mamory (AVR only). 
 	};
 	uint_least8_t flags = 0;		// Various flags.
 
 	union {
-		CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT u;
-		CFG_MYPRINTF_TYPE_SIGNED_LONG_INT i;
+		CFG_MYPRINTF_T_L_UINT u;
+		CFG_MYPRINTF_T_L_INT i;
 	} num;							// Number to print. Always positive.
 
 	/* the following should be enough for 32 bit int */
@@ -148,67 +164,70 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 	} str;
 	char c;
 
-	for (; '\0' != (c = MYPRINTF_DEREF_PGM_STR_CHAR(fmt)); fmt += 1) {	// Iterate over all chars in format.
+	for (; '\0' != (c = MYPRINTF_PGM_STR_DEREF_FMT(fmt)); fmt += 1) {	// Iterate over all chars in format.
 		if (flags & FLAG_FORMAT) {
-			if ('-' == c) {			// A '-' for right justification.
-				c = MYPRINTF_DEREF_PGM_STR_CHAR(++fmt);
+			switch (c) {								// Now we have format spec.
+			case '-':									// A '-' for right justification.
 				flags |= FLAG_PAD_RIGHT;
-			}
-			else if ('0' == c) {			// A leading zero for zero pad.
-				c = MYPRINTF_DEREF_PGM_STR_CHAR(++fmt);
-				padchar = '0';
-			}
-			while ((c >= '0') && (c <= '9')) {	// Read width value.
+				continue;
+			case '0':									// A leading zero for zero pad.
+				if (0 == width) {
+					padchar = '0';
+					continue;
+				}
+				// Fall through...
+			case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8':case '9': // Read width value.
 				width *= 10;
 				width += c - '0';
-				c = MYPRINTF_DEREF_PGM_STR_CHAR(++fmt);
-			}
-			if (('l' == c) || ('L' == c)) {			// A 'l' or 'L' for long integer.
-				c = MYPRINTF_DEREF_PGM_STR_CHAR(++fmt);
+				continue;
+			case 'l': case 'L':							// A 'l' or 'L' for long integer.
 				flags |= FLAG_LONG;
-			}
+				continue;
 
-			switch (c) {								// Now we have format spec.
 #ifdef MYPRINTF_WANT_PGM_STR
 			case 'S':									// String in program space.
 				flags |= FLAG_STR_PGM;
-				// Fall through...
 #endif // MYPRINTF_WANT_PGM_STR
-			case 's':
+				// Fall through...
+			case 's':									// String in normal memory.
 				str.c = va_arg(ap, const char*);
 				if (NULL == str.c) {					/* Catch null ptr. */
-					static const char NULL_STR[] PROGMEM = "(null)";
+					static const char NULL_STR[] MYPRINTF_PGM_STR_DECL = "(null)";
 					str.c = NULL_STR;
 #ifdef MYPRINTF_WANT_PGM_STR
-					flags |= FLAG_STR_PGM;				/* Set PROGMEM, this is a no-op for non-AVRs. */
+					flags |= FLAG_STR_PGM;				/* Set PROGMEM for AVR processor. */
 #endif // MYPRINTF_WANT_PGM_STR
 				}
 				goto p_str;
-			case 'c':
+			case 'c':									/* Single character. */
 				buf[0] = (char)va_arg(ap, int);			/* Gcc can give a warning about char promotion when using va_arg(). */
 				buf[1] = '\0';
 				str.c = &buf[0];
 				goto p_str;
-			case 'd':
-				num.i = (CFG_MYPRINTF_TYPE_SIGNED_LONG_INT)grab_integer();
-				if (num.i < 0) {
-					num.i = -num.i;
+			case 'd':									/* Signed decimal. */
+				num.i = (flags & FLAG_LONG) ? 
+				  grab_integer(CFG_MYPRINTF_T_L_INT, int) :
+				  grab_integer(CFG_MYPRINTF_T_INT, int);
+				if (num.i < 0) {	/* Convert to positive, note will not be sign extended as both union members are same size. */
+					num.u = (CFG_MYPRINTF_T_L_UINT)-num.i;		
 					flags |= FLAG_NEG;
 				}
 				break;
 #if CFG_MYPRINTF_WANT_BINARY
-			case 'b':
+			case 'b':									/* Optional binary format. */
 				base = 2;
 				goto do_unsigned;
 #endif
-			case 'X':
+			case 'X':									/* Hex (upper case). */
 				flags |= FLAG_UPPER;
 				// Fall through...
-			case 'x':
+			case 'x':									/* Hex (lower case). */
 				base = 16;
 				// Fall through...
-			case 'u':
-do_unsigned:	num.u = (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)grab_integer(); // cppcheck-suppress unusedLabelSwitchConfiguration
+			case 'u':									/* Unsigned decimal. */
+do_unsigned:	num.u = (flags & FLAG_LONG) ? 
+				  grab_integer(CFG_MYPRINTF_T_L_UINT, unsigned) :
+				  grab_integer(CFG_MYPRINTF_T_UINT, unsigned); 
 				break;
 			case '%': 						/* Literal '%', just print it. */
 				flags = 0;					/* Clear format flag. */
@@ -222,7 +241,7 @@ do_unsigned:	num.u = (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)grab_integer(); // cpp
 			str.m = buf + BUF_LEN - 1;			// Start building number from far end.
 			*str.m = '\0';
 
-			// Print digits LSD first.
+			// Format digits LSD first in selected base.
 			do {
 				const uint_least8_t digit = num.u % base;
 				*--str.m = digit + ((digit < 10) ? '0' : (((flags & FLAG_UPPER) ? 'A' : 'a') - 10));
@@ -239,11 +258,11 @@ do_unsigned:	num.u = (CFG_MYPRINTF_TYPE_UNSIGNED_LONG_INT)grab_integer(); // cpp
 					*--str.m = '-';
 			}
 
-p_str:		// Print string `str' justified in `width' with padding char `pad'.
-			if (width > 0) { 	// Get length of stringonly if required.
+p_str:		/* Print string `str' justified in `width' with padding char `pad'. */
+			if (width > 0) { 	// Get length of string only if required.
 				int len;
 				const char* p = str.c;
-				while ('\0' != (flags & FLAG_STR_PGM) ? MYPRINTF_DEREF_PGM_STR_CHAR(p) : *p)
+				while ('\0' != MYPRINTF_PGM_STR_DEREF_PTR(p))
 					p += 1;
 				len = p - str.c;
 
@@ -263,10 +282,11 @@ p_str:		// Print string `str' justified in `width' with padding char `pad'.
 			}
 
 			// Print string.
-
-			while ('\0' != (c = (flags & FLAG_STR_PGM) ? MYPRINTF_DEREF_PGM_STR_CHAR(str.c) : *str.c)) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wduplicated-branches"
+			while ('\0' != (c = MYPRINTF_PGM_STR_DEREF_PTR(str.c++))) {
+#pragma GCC diagnostic pop
 				putfunc(c, arg);
-				str.c += 1;
 			}
 
 			// Print padding to right.
