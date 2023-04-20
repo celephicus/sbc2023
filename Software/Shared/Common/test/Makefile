@@ -3,15 +3,17 @@ TARGET = all
 
 # Test case files to be run through grm to generate a test runner `main.cpp'. 
 TEST_SRCS_myprintf = test_printf.cpp
-TEST_SRCS_buffer = test_buffer.cpp 
+TEST_SRCS_buffer = test_buffer.cpp  
+TEST_SRCS_utils = test_utils.cpp  
 TEST_SRCS_all = $(wildcard test_*.cpp)
 
 # Other src files.
 OTHER_SRCS_myprintf = ../src/myprintf.cpp
 OTHER_SRCS_buffer = ../src/buffer.cpp
-OTHER_SRCS_all = ../src/buffer.cpp ../src/myprintf.cpp ../src/event.cpp ../src/modbus.cpp \
+OTHER_SRCS_utils = ../src/utils.cpp
+OTHER_SRCS_all = ../src/myprintf.cpp ../src/event.cpp ../src/modbus.cpp \
 				../src/utils.cpp support_test.cpp
-#console.cpp regs.cpp  sw_scanner.cpp  thread.cpp 
+#console.cpp regs.cpp  sw_scanner.cpp  thread.cpp ../src/buffer.cpp 
 
 # Select source files, maybe use use local symbols instead. 
 TEST_SRCS = $(TEST_SRCS_$(TARGET))
@@ -99,6 +101,7 @@ $(BUILD_DIR)/%.o : %.c
 -include $(BUILD_DIR)/*.d
 
 test-quiet : $(EXE)
+	$(RM) $(BUILD_DIR)/*.gcda
 	$(EXE) -f
 	
 # Coverage

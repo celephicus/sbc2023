@@ -9,24 +9,125 @@ TT_BEGIN_INCLUDE()
 #include "utils.h"
 TT_END_INCLUDE()
 
+// Mscale.
+
+// Verify Mscale validity function. 
+void test_utils_mscale_valid_signed(int8_t exp, int8_t min, int8_t max, int8_t inc) {
+	TEST_ASSERT_EQUAL(exp, utilsMscaleValid(min, max, inc));
+}
+void test_utils_mscale_valid_unsigned(uint8_t exp, uint8_t min, uint8_t max, uint8_t inc) {
+	TEST_ASSERT_EQUAL(exp, utilsMscaleValid(min, max, inc));
+}
+/*
+TT_BEGIN_SCRIPT()
+for test_v in '''\
+	true 	0	10  15
+	true	0  	4   5
+	false	0  	10  0 	# Inc = 0
+	false 	10 	0	5	# Min > max.
+	true	10	0	-5	# Min > max, inc < 0.
+	false	10	0	5	# Min > max.	
+  '''.splitlines():
+	test_args = test_v.split()[:4]
+	if test_args:
+		add_test_case('test_utils_mscale_valid_signed', ', '.join(test_args))
+TT_END_SCRIPT()
+*/
+TT_TEST_CASE(test_utils_mscale_valid_unsigned(false, 10, 0, 5));	// Min > max.
+
+void test_utils_mscale_max_signed(int8_t exp, int8_t min, int8_t max, int8_t inc) {
+	TEST_ASSERT(utilsMscaleValid(min, max, inc));
+	TEST_ASSERT_EQUAL_INT8(exp, utilsMscaleMax(min, max, inc));
+}
+TT_TEST_CASE(test_utils_mscale_max_signed(2, 0, 10, 5));
+TT_TEST_CASE(test_utils_mscale_max_signed(2, -10, 0, 5));
+TT_TEST_CASE(test_utils_mscale_max_signed(4, -10, 10, 5));
+
+TT_TEST_CASE(test_utils_mscale_max_signed(2, 0, 11, 5));	// Max is clipped to lowest multiple of inc.
+TT_TEST_CASE(test_utils_mscale_max_signed(2, 0, 14, 5));
+
+TT_TEST_CASE(test_utils_mscale_max_signed(0, 0, 0, 5));		// Zero length range.
+TT_TEST_CASE(test_utils_mscale_max_signed(0, 0, 4, 5));
+
+void test_utils_mscale_max_unsigned(uint8_t exp, uint8_t min, uint8_t max, uint8_t inc) {
+	TEST_ASSERT(utilsMscaleValid(min, max, inc));
+	TEST_ASSERT_EQUAL_UINT8(exp, utilsMscaleMax(min, max, inc));
+}
+TT_TEST_CASE(test_utils_mscale_max_unsigned(2, 0, 10, 5));
+TT_TEST_CASE(test_utils_mscale_max_unsigned(2, 10, 20, 5));
+TT_TEST_CASE(test_utils_mscale_max_unsigned(2, 210, 220, 5));
+
+void test_utils_mscale_signed(int8_t exp, int8_t val, int8_t min, int8_t max, int8_t inc) {
+	TEST_ASSERT(utilsMscaleValid(min, max, inc));
+	TEST_ASSERT_EQUAL_INT8(exp, utilsMscale(val, min, max, inc));
+}
+TT_TEST_CASE(test_utils_mscale_signed(0, 0, 0, 10, 5));
+TT_TEST_CASE(test_utils_mscale_signed(1, 5, 0, 10, 5));
+TT_TEST_CASE(test_utils_mscale_signed(2, 10, 0, 10, 5));
+TT_TEST_CASE(test_utils_mscale_signed(0, -1, 0, 10, 5));
+TT_TEST_CASE(test_utils_mscale_signed(0, -100, 0, 10, 5));
+TT_TEST_CASE(test_utils_mscale_signed(2, 11, 0, 10, 5));
+TT_TEST_CASE(test_utils_mscale_signed(2, 111, 0, 10, 5));
+
+// Reversed range. 
+TT_TEST_CASE(test_utils_mscale_signed(2, -10, 10, 0, -5));
+TT_TEST_CASE(test_utils_mscale_signed(2, 0, 10, 0, -5));
+TT_TEST_CASE(test_utils_mscale_signed(1, 5, 10, 0, -5));
+TT_TEST_CASE(test_utils_mscale_signed(0, 10, 10, 0, -5));
+TT_TEST_CASE(test_utils_mscale_signed(0, 20, 10, 0, -5));
+
+// Between multiples of inc. 
+TT_TEST_CASE(test_utils_mscale_signed(1, -3, -10, 10, 5));		
+TT_TEST_CASE(test_utils_mscale_signed(2, -2, -10, 10, 5));		
+TT_TEST_CASE(test_utils_mscale_signed(0, 2, 0, 10, 5));		
+TT_TEST_CASE(test_utils_mscale_signed(1, 3, 0, 10, 5));		
+TT_TEST_CASE(test_utils_mscale_signed(0, 2, 0, 12, 6));		
+TT_TEST_CASE(test_utils_mscale_signed(1, 3, 0, 12, 6));		
+
+// Between multiples of inc, reversed range. 
+TT_TEST_CASE(test_utils_mscale_signed(2, 2, 10, 0, -5));		
+TT_TEST_CASE(test_utils_mscale_signed(1, 3, 10, 0, -5));		
+
+void test_utils_unmscale_signed(int8_t exp, int8_t val, int8_t min, int8_t max, int8_t inc) {
+	TEST_ASSERT(utilsMscaleValid(min, max, inc));
+	TEST_ASSERT_EQUAL_INT8(exp, utilsUnmscale(val, min, max, inc));
+}
+TT_TEST_CASE(test_utils_unmscale_signed(10, 0, 10, 20, 5));
+TT_TEST_CASE(test_utils_unmscale_signed(15, 1, 10, 20, 5));
+TT_TEST_CASE(test_utils_unmscale_signed(20, 2, 10, 20, 5));
+TT_TEST_CASE(test_utils_unmscale_signed(10, 2, 20, 10, -5));
+TT_TEST_CASE(test_utils_unmscale_signed(15, 1, 20, 10, -5));
+TT_TEST_CASE(test_utils_unmscale_signed(20, 0, 20, 10, -5));
+
 // Endianness conversion.
 void test_utils_endianness() {
-	const uint16_t u16 = 0x1234, u16_r = 0x3412;
-	const uint32_t u32 = 0x12345678, u32_r = 0x78563412;
+	union UU { uint8_t u8[4]; uint16_t u16[2]; uint32_t u32; };
+	UU u16_be = { 0x12, 0x34 };
+	UU u16_le = { 0x34, 0x12 };
+	UU u32_be = { 0x12, 0x34, 0x56, 0x78 };
+	UU u32_le = { 0x78, 0x56, 0x34, 0x12 };
 
-	// These always swap. 
-	TEST_ASSERT_EQUAL_UINT16(u16, utilsU16_bswap(u16_r));
-	TEST_ASSERT_EQUAL_UINT16(u32, utilsU32_bswap(u32_r));
+	const bool LE = (u16_le.u16[0] == 0x1234);
 	
+	// These always swap. 
+	TEST_ASSERT_EQUAL_HEX16(u16_le.u16[0], utilsU16_bswap(u16_be.u16[0]));
+	TEST_ASSERT_EQUAL_HEX32(u32_le.u32, utilsU32_bswap(u32_be.u32));
+	
+	const uint16_t u16 = LE ? u16_le.u16[0] : u16_be.u16[0];
+	const uint32_t u32 = LE ? u32_le.u32 : u32_be.u32;
+
 	// Swap depends on native endiannesss.
-	TEST_ASSERT_EQUAL_UINT16(u16, utilsU16_native_to_le(u16));
-	TEST_ASSERT_EQUAL_UINT16(u16, utilsU16_le_to_native(u16));
-	TEST_ASSERT_EQUAL_UINT32(u32, utilsU32_native_to_le(u32));
-	TEST_ASSERT_EQUAL_UINT32(u32, utilsU32_le_to_native(u32));
-	TEST_ASSERT_EQUAL_UINT16(u16, utilsU16_native_to_be(u16_r));
-	TEST_ASSERT_EQUAL_UINT16(u16, utilsU16_be_to_native(u16_r));
-	TEST_ASSERT_EQUAL_UINT32(u32, utilsU32_native_to_be(u32_r));
-	TEST_ASSERT_EQUAL_UINT32(u32, utilsU32_be_to_native(u32_r));
+	if (LE) {
+		TEST_ASSERT_EQUAL_HEX16(u16_le.u16[0], utilsU16_native_to_le(u16));
+		TEST_ASSERT_EQUAL_HEX16(u16, utilsU16_le_to_native(u16_le.u16[0]));
+		TEST_ASSERT_EQUAL_HEX16(u16_be.u16[0], utilsU16_native_to_be(u16));
+		TEST_ASSERT_EQUAL_HEX16(u16, utilsU16_be_to_native(u16_be.u16[0]));
+
+		TEST_ASSERT_EQUAL_HEX32(u32_le.u32, utilsU32_native_to_le(u32));
+		TEST_ASSERT_EQUAL_HEX32(u32, utilsU32_le_to_native(u32_le.u32));
+		TEST_ASSERT_EQUAL_HEX32(u32_be.u32, utilsU32_native_to_be(u32));
+		TEST_ASSERT_EQUAL_HEX32(u32, utilsU32_be_to_native(u32_be.u32));
+	}
 }
 
 // Test little helpers...
