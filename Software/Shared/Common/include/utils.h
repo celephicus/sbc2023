@@ -3,6 +3,45 @@
 
 extern uint32_t millis();	// Required to use millis() in template
 
+// Is an integer type signed, works for chars as well.
+#define utilsIsTypeSigned(T_) (((T_)(-1)) < (T_)0)
+
+/* Functions to transform between a range of integer values and a quantised version defined by (min, max, inc).
+	I find these useful to map a set of values to a zero based value that can be manipulated by a menu.
+	E.g 0..100 -> (0, 100, 5) 0..20. Conversely -INF..2 -> 0, 3..7 -> 1, ..., 98..+INF -> 30.
+   For want of a better name I call this mscale and unmscale.
+*/
+
+// Validate mscale range.
+template <typename T>
+bool utilsMscaleValid(T min, T max, T inc) { return !((0 == inc) || ((min > max) && (inc > 0))); }
+
+// Return maximum value of mscaled range.
+template <typename T>
+T utilsMscaleMax(T min, T max, T inc) { return (max - min) / inc; }
+
+// Mscale a value.
+template <typename T>
+T utilsMscale(T val, T min, T max, T inc) { 
+	if (min < max) {
+		if (val < min)
+			val = min;
+		else if (val > max)
+			val = max;		
+	}
+	else {
+		if (val < max)
+			val = max;
+		else if (val > min)
+			val = min;		
+	}
+	return (val - min + inc/2) / inc; 
+}
+
+// Mscale a value.
+template <typename T>
+T utilsUnmscale(T val, T min, T max, T inc) { return val * inc + min; }
+
 // I can't believe how often I stuff up using millis() to time a period. So as usual, here's a function to do timeouts.
 template <typename T>
 void utilsStartTimer(T &then) { then = (T)millis(); }
@@ -84,9 +123,6 @@ struct Critical {
 #define STR(s) STRX(s)
 #define STRX(s) #s
 #endif
-
-// Is an integer type signed, works for chars as well.
-#define utilsIsTypeSigned(T_) (((T_)(-1)) < (T_)0)
 
 // The worlds simplest scheduler, run a block every so often up to 32 seconds. Note that it does not recover well if you set delay to zero and then non-zero.
 // Stolen from a discussion on some Arduino forum.
