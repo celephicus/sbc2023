@@ -189,7 +189,7 @@ static void service_regs_dump() {
     if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_REGS) {
 		if (0 == s_ticker--) {
 			uint32_t timestamp = millis();
-			s_ticker = (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_REGS_FAST) ? 2 : 10; // Dump 5Hz or 1Hz.
+			s_ticker = ((REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_REGS_FAST) ? 2 : 10) - 1; // Dump 5Hz or 1Hz.
 			consolePrint(CFMT_STR_P, (console_cell_t)PSTR("R:"));
 			consolePrint(CFMT_U_D|CFMT_M_NO_LEAD, (console_cell_t)&timestamp);
 			fori(REGS_START_NV_IDX)

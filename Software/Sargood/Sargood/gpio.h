@@ -34,6 +34,7 @@ enum {
     // Bus
     GPIO_PIN_RS485_TXD = 16,                       // RS485 TX
     GPIO_PIN_RS485_RXD = 17,                       // RS485 RX
+    GPIO_PIN_ATN_IN = 29,                          // Senses level on ATN line.
     GPIO_PIN_ATN = 31,                             // Pulse high to signal ATN low on bus.
     GPIO_PIN_RS485_TX_EN = 32,                     // Enable RS485 xmitter
 
@@ -171,6 +172,6 @@ static inline void gpioSp7Clear() { PORTK &= ~_BV(7); }
 static inline void gpioSp7Write(bool b) { if (b) PORTK |= _BV(7); else PORTK &= ~_BV(7); }
 
 // List unused pins
-#define GPIO_UNUSED_PINS 3, 5, 6, 7, 8, 9, 10, 11, 12, 20, 21, 28, 29, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 53, A1, A2, A3, A4, A5, A6, A7
+#define GPIO_UNUSED_PINS 3, 5, 6, 7, 8, 9, 10, 11, 12, 20, 21, 28, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 53, A1, A2, A3, A4, A5, A6, A7
 
 #endif   // GPIO_H__

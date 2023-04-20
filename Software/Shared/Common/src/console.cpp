@@ -397,7 +397,7 @@ console_rc_t consoleService() {
 			if (CONSOLE_RC_OK == rc)							// If accept has _NOT_ returned an error (probably overflow)...
 				rc = console_process(f_ctx.inbuf);				// Process input string from input buffer filled by accept and record error code.
 			if (CONSOLE_RC_OK != rc) {							// If all went well then we get an OK status code
-				f_ctx.s->print(F("Error:")); 					// Print error code:(
+				f_ctx.s->print(F("Error: ")); 					// Print error code:(
 				f_ctx.s->print((const __FlashStringHelper *)get_error_desc(rc)); // Print error description.
 				f_ctx.s->print(F(" : "));
 				f_ctx.s->print(rc);								// Print error code as well.

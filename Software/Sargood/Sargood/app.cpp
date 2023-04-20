@@ -398,6 +398,129 @@ static int8_t sm_ir_rec(EventSmContextBase* context, t_event ev) {
 	
 	return EVENT_SM_NO_CHANGE;
 }
+
+// Menu items for display
+//
+
+#include "myprintf.h"
+
+/* Menu items operate internally off a scaled value from zero up to AND including a maximum value. This can be converted between an actual value.
+	All menu items operate on a single regs value, possibly only a single bit.
+	
+	API (first arg is always menu idx)
+		const char* menuItemTitle()
+		uint8_t menuItemMaxValue()
+		bool menuItemIsRollAround()
+
+		int16_t menuItemActualValue(uint8_t)
+
+		uint8_t menuItemReadValue()
+		void menuItemWriteValue(uint8_t)
+		const char* menuItemStrValue(uint8_t)
+*/
+
+// Menu items definition.
+typedef const char* (*menu_formatter)(int16_t);		// Format actual menu item value.
+typedef int16_t (*menu_item_scale)(int16_t);			// Return actual menu item value from zero based "menu units".
+typedef int16_t (*menu_item_unscale)(uint8_t);		// Set a value to the menu item.
+
+typedef struct {
+	PGM_P title;
+	uint8_t regs_idx;	
+	uint16_t regs_mask;					// Mask of set bits or 0 for all. 
+	menu_item_scale scale;
+	menu_item_unscale unscale;
+	uint8_t max_value;	// Maximum values, note that the range of each item is from zero up and including this value.
+	bool rollaround;
+	menu_formatter formatter;
+} MenuItem;
+
+// Helpers for scaling.
+static int16_t menu_scale_xxx(int16_t val, int16_t min, int16_t inc) { return (val - min) / inc; }
+static int16_t menu_unscale_xxx(uint8_t v, int16_t min, int16_t inc) { return (int16_t)v * inc + min; }
+static uint8_t menu_max_mval(int16_t min, int16_t inc, int16_t max) { return (uint8_t)((max - min) / inc); }
+
+// Slew timeout in seconds.
+static const char MENU_ITEM_SLEW_TIMEOUT_TITLE[] PROGMEM = "Motion Timeout";
+static const uint16_t MENU_ITEM_SLEW_TIMEOUT_MIN = 10;
+static const uint16_t MENU_ITEM_SLEW_TIMEOUT_MAX = 60;
+static const uint16_t MENU_ITEM_SLEW_TIMEOUT_INC = 5;
+static int16_t menu_scale_slew_timeout(int16_t val) { return menu_scale_xxx(val, MENU_ITEM_SLEW_TIMEOUT_MIN, MENU_ITEM_SLEW_TIMEOUT_INC); }
+static int16_t menu_unscale_slew_timeout(uint8_t v) { return menu_unscale_xxx(v, MENU_ITEM_SLEW_TIMEOUT_MIN, MENU_ITEM_SLEW_TIMEOUT_INC); }
+
+// Slew deadband in tilt sensor units.
+static const char MENU_ITEM_ANGLE_DEADBAND_TITLE[] PROGMEM = "Position Error";
+static const uint16_t MENU_ITEM_ANGLE_DEADBAND_MIN = 5;
+static const uint16_t MENU_ITEM_ANGLE_DEADBAND_MAX = 100;
+static const uint16_t MENU_ITEM_ANGLE_DEADBAND_INC = 5;
+static int16_t menu_scale_angle_deadband(int16_t val) { return menu_scale_xxx(val, MENU_ITEM_ANGLE_DEADBAND_MIN, MENU_ITEM_ANGLE_DEADBAND_INC); }
+static int16_t menu_unscale_angle_deadband(uint8_t v) { return menu_unscale_xxx(v, MENU_ITEM_ANGLE_DEADBAND_MIN, MENU_ITEM_ANGLE_DEADBAND_INC); }
+
+
+static char f_menu_fmt_buf[15];
+const char* menu_format_number(int16_t v) { myprintf_snprintf(f_menu_fmt_buf, sizeof(f_menu_fmt_buf), "%u", v); return f_menu_fmt_buf; }
+//const char* format_yes_no(uint8_t v) { const char* yn[2] = { "Yes", "No" }; return yn[!v]; }
+//const char* format_beep_options(uint8_t v) { const char* opts[] = { "Silent", "Card scan", "Always" }; return opts[v]; }
+
+static const MenuItem MENU_ITEMS[] PROGMEM = {
+	{
+		MENU_ITEM_SLEW_TIMEOUT_TITLE,
+		REGS_IDX_SLEW_TIMEOUT, 0U,
+		menu_scale_slew_timeout, menu_unscale_slew_timeout,
+		menu_max_mval(MENU_ITEM_SLEW_TIMEOUT_MIN, MENU_ITEM_SLEW_TIMEOUT_INC, MENU_ITEM_SLEW_TIMEOUT_MAX),
+		false,
+		NULL,		// Special case, call unscale and print number.
+	},
+	{
+		MENU_ITEM_ANGLE_DEADBAND_TITLE,
+		REGS_IDX_SLEW_DEADBAND, 0U,
+		menu_scale_angle_deadband, menu_unscale_angle_deadband,
+		menu_max_mval(MENU_ITEM_ANGLE_DEADBAND_MIN, MENU_ITEM_ANGLE_DEADBAND_INC, MENU_ITEM_ANGLE_DEADBAND_MAX),
+		false,
+		NULL,		// Special case, call unscale and print number.
+	},
+};
+
+// API
+PGM_P menuItemTitle(uint8_t midx) { return (PGM_P)pgm_read_word(&MENU_ITEMS[midx].title); }
+uint8_t menuItemMaxValue(uint8_t midx) { return pgm_read_byte(&MENU_ITEMS[midx].max_value); }
+bool menuItemIsRollAround(uint8_t idx) { return (bool)pgm_read_byte(&MENU_ITEMS[idx].rollaround); }
+
+int16_t menuItemActualValue(uint8_t midx, uint8_t mval) {
+	const menu_item_unscale unscaler = (menu_item_unscale)pgm_read_ptr(&MENU_ITEMS[midx].unscale);
+	return unscaler(utilsLimitMax<int8_t>(mval, menuItemMaxValue(midx)));
+}
+
+uint8_t menuItemReadValue(uint8_t midx) { 
+	uint16_t raw_val = REGS[pgm_read_byte(&MENU_ITEMS[midx].regs_idx)]; 
+	uint16_t mask = pgm_read_word(&MENU_ITEMS[midx].regs_mask); 
+	if (mask) {	// Ignore mask if zero, we want all the bits. 
+		raw_val &= mask;
+		while (!(mask&1)) {	// Drop bits until we see a '1' in the LSB of the mask. 
+			raw_val >>= 1;
+			mask >>= 1;
+		}
+	}
+
+	const menu_item_scale scaler = (menu_item_scale)pgm_read_ptr(&MENU_ITEMS[midx].scale);
+	return utilsLimit<int16_t>(scaler(raw_val), 0, (int16_t)menuItemMaxValue(midx));
+}
+bool menuItemWriteValue(uint8_t midx, uint8_t mval) {
+	uint16_t mask = pgm_read_word(&MENU_ITEMS[midx].regs_mask);
+	if (!mask)
+		mask = (uint16_t)(-1);
+	int16_t actual_val = menuItemActualValue(midx, mval);
+	return regsUpdateMask(pgm_read_byte(&MENU_ITEMS[midx].regs_idx), mask, (uint16_t)actual_val);
+}
+
+const char* menuItemStrValue(uint8_t midx, uint8_t mval) { 
+    menu_formatter fmt = (menu_formatter)pgm_read_ptr(&MENU_ITEMS[midx].formatter); 
+	if (!fmt)
+		fmt = menu_format_number;
+	return fmt(menuItemActualValue(midx, mval));
+}
+
+// end menu
 	
 // State machine to handle display. 
 typedef struct {

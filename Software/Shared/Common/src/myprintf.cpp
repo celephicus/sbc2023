@@ -41,7 +41,7 @@
 #if defined(__AVR__)
  #include <avr/pgmspace.h>
  #define MYPRINTF_PGM_STR_DEREF_FMT(ptr_) ((char)pgm_read_byte(ptr_))	
- #define MYPRINTF_PGM_STR_DEREF_PTR(ptr_) ( (flags & FLAG_STR_PGM) ? ((char)pgm_read_byte(ptr_)) : (*(ptr_))
+ #define MYPRINTF_PGM_STR_DEREF_PTR(ptr_) ( (flags & FLAG_STR_PGM) ? ((char)pgm_read_byte(ptr_)) : (*(ptr_)) )
  #define MYPRINTF_PGM_STR_DECL PROGMEM
  #define MYPRINTF_WANT_PGM_STR 1
 #elif defined (TEST)
