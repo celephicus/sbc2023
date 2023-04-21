@@ -138,15 +138,14 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 	uint_least8_t width;			// Holds field width.
 	uint_least8_t base;				// Holds number base.
 	char padchar;					// Holds padding char, either space or '0'.
-
+	char signchar;					// Leading `-' or `+' for signed decimal.
 	enum {
-		FLAG_FORMAT = 1, 	// Parsing format,cleared on specifier char.
+		FLAG_FORMAT = 1, 	// Parsing format, cleared on specifier char.
 		FLAG_LONG = 2, 		// Integral type is LONG.
 		FLAG_PAD_RIGHT = 4, // LEFT justify, pad to R with spaces. 
 							// Else RIGHT justify, pad to L with spaces or zeroes.
 		FLAG_UPPER = 8, 	// Upper case for hex (X vs x). 
-		FLAG_NEG = 16, 		// Signed value negative.
-		FLAG_STR_PGM = 32,	// String in PGM mamory (AVR only). 
+		FLAG_STR_PGM = 128,	// String in PGM mamory (AVR only). 
 	};
 	uint_least8_t flags = 0;		// Various flags.
 
@@ -169,6 +168,9 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 			switch (c) {								// Now we have format spec.
 			case '-':									// A '-' for right justification.
 				flags |= FLAG_PAD_RIGHT;
+				continue;
+			case '+':									// A '+' for leading '+' for non-negative ints.
+				signchar = '+';							/* Print a leading plus, will be overridden if value negative. */
 				continue;
 			case '0':									// A leading zero for zero pad.
 				if (0 == width) {
@@ -210,7 +212,7 @@ void myprintf(myprintf_putchar putfunc, void* arg, const char* fmt, va_list ap) 
 				  grab_integer(CFG_MYPRINTF_T_INT, int);
 				if (num.i < 0) {	/* Convert to positive, note will not be sign extended as both union members are same size. */
 					num.u = (CFG_MYPRINTF_T_L_UINT)-num.i;		
-					flags |= FLAG_NEG;
+					signchar = '-';
 				}
 				break;
 #if CFG_MYPRINTF_WANT_BINARY
@@ -231,6 +233,7 @@ do_unsigned:	num.u = (flags & FLAG_LONG) ?
 				break;
 			case '%': 						/* Literal '%', just print it. */
 				flags = 0;					/* Clear format flag. */
+				signchar = '\0';			/* Set no sign. */
 				goto out;
 			default:										/* Unknown format! */
 				flags = 0;				/* Clear format flag. */
@@ -249,13 +252,13 @@ do_unsigned:	num.u = (flags & FLAG_LONG) ?
 			} while (num.u > 0);
 
 			// Take care of leading '-'.
-			if (flags & FLAG_NEG) {
+			if (signchar) {
 				if ((width > 0) && ('0' == padchar)) {
-					putfunc('-', arg);
+					putfunc(signchar, arg);
 					width -= 1;
 				}
 				else
-					*--str.m = '-';
+					*--str.m = signchar;
 			}
 
 p_str:		/* Print string `str' justified in `width' with padding char `pad'. */
