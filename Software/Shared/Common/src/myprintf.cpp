@@ -233,7 +233,6 @@ do_unsigned:	num.u = (flags & FLAG_LONG) ?
 				break;
 			case '%': 						/* Literal '%', just print it. */
 				flags = 0;					/* Clear format flag. */
-				signchar = '\0';			/* Set no sign. */
 				goto out;
 			default:										/* Unknown format! */
 				flags = 0;				/* Clear format flag. */
@@ -304,6 +303,7 @@ p_str:		/* Print string `str' justified in `width' with padding char `pad'. */
 				flags = FLAG_FORMAT;
 				base = 10;
 				padchar = ' ';
+				signchar = '\0';			/* Set no sign. */
 			}
 			else {
 out:

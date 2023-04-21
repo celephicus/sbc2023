@@ -17,12 +17,12 @@ template <typename T>
 bool utilsMscaleValid(T min, T max, T inc) { return !((0 == inc) || ((min > max) && (inc > 0))); }
 
 // Return maximum value of mscaled range.
-template <typename T>
-T utilsMscaleMax(T min, T max, T inc) { return (max - min) / inc; }
+template <typename T, typename U>
+U utilsMscaleMax(T min, T max, T inc) { return static_cast<U>((max - min) / inc); }
 
 // Mscale a value.
-template <typename T>
-T utilsMscale(T val, T min, T max, T inc) { 
+template <typename T, typename U>
+U utilsMscale(T val, T min, T max, T inc) { 
 	if (min < max) {
 		if (val < min)
 			val = min;
@@ -39,8 +39,8 @@ T utilsMscale(T val, T min, T max, T inc) {
 }
 
 // Mscale a value.
-template <typename T>
-T utilsUnmscale(T val, T min, T max, T inc) { return val * inc + min; }
+template <typename T, typename U>
+T utilsUnmscale(U val, T min, T max, T inc) { return val * inc + min; }
 
 // I can't believe how often I stuff up using millis() to time a period. So as usual, here's a function to do timeouts.
 template <typename T>

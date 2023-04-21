@@ -150,7 +150,7 @@
   <avrgcccpp.compiler.warnings.AllWarnings>True</avrgcccpp.compiler.warnings.AllWarnings>
   <avrgcccpp.compiler.warnings.Undefined>True</avrgcccpp.compiler.warnings.Undefined>
   <avrgcccpp.compiler.warnings.WarningsAsErrors>True</avrgcccpp.compiler.warnings.WarningsAsErrors>
-  <avrgcccpp.compiler.miscellaneous.OtherFlags>-std=gnu++11 -Wextra -Wno-unused-parameter -Wshadow -Wdouble-promotion -fno-common -fstack-usage</avrgcccpp.compiler.miscellaneous.OtherFlags>
+  <avrgcccpp.compiler.miscellaneous.OtherFlags>-std=gnu++11 -Wextra -Wno-unused-parameter -Wno-pragmas -Wshadow -Wdouble-promotion -fno-common -fstack-usage</avrgcccpp.compiler.miscellaneous.OtherFlags>
   <avrgcccpp.linker.libraries.Libraries>
     <ListValues>
       <Value>libm</Value>

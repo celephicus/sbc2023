@@ -423,42 +423,39 @@ static int8_t sm_ir_rec(EventSmContextBase* context, t_event ev) {
 typedef const char* (*menu_formatter)(int16_t);		// Format actual menu item value.
 typedef int16_t (*menu_item_scale)(int16_t);			// Return actual menu item value from zero based "menu units".
 typedef int16_t (*menu_item_unscale)(uint8_t);		// Set a value to the menu item.
-
+typedef uint8_t (*menu_item_max)();
 typedef struct {
 	PGM_P title;
 	uint8_t regs_idx;	
 	uint16_t regs_mask;					// Mask of set bits or 0 for all. 
 	menu_item_scale scale;
 	menu_item_unscale unscale;
-	uint8_t max_value;	// Maximum values, note that the range of each item is from zero up and including this value.
+	menu_item_max max_value;				// Maximum values, note that the range of each item is from zero up and including this value.
 	bool rollaround;
 	menu_formatter formatter;
 } MenuItem;
 
-// Helpers for scaling.
-static int16_t menu_scale_xxx(int16_t val, int16_t min, int16_t inc) { return (val - min) / inc; }
-static int16_t menu_unscale_xxx(uint8_t v, int16_t min, int16_t inc) { return (int16_t)v * inc + min; }
-static uint8_t menu_max_mval(int16_t min, int16_t inc, int16_t max) { return (uint8_t)((max - min) / inc); }
-
 // Slew timeout in seconds.
 static const char MENU_ITEM_SLEW_TIMEOUT_TITLE[] PROGMEM = "Motion Timeout";
-static const uint16_t MENU_ITEM_SLEW_TIMEOUT_MIN = 10;
-static const uint16_t MENU_ITEM_SLEW_TIMEOUT_MAX = 60;
-static const uint16_t MENU_ITEM_SLEW_TIMEOUT_INC = 5;
-static int16_t menu_scale_slew_timeout(int16_t val) { return menu_scale_xxx(val, MENU_ITEM_SLEW_TIMEOUT_MIN, MENU_ITEM_SLEW_TIMEOUT_INC); }
-static int16_t menu_unscale_slew_timeout(uint8_t v) { return menu_unscale_xxx(v, MENU_ITEM_SLEW_TIMEOUT_MIN, MENU_ITEM_SLEW_TIMEOUT_INC); }
+static const int16_t MENU_ITEM_SLEW_TIMEOUT_MIN = 10;
+static const int16_t MENU_ITEM_SLEW_TIMEOUT_MAX = 60;
+static const int16_t MENU_ITEM_SLEW_TIMEOUT_INC = 5;
+static int16_t menu_scale_slew_timeout(int16_t val) { return utilsMscale<int16_t, uint8_t>(val, MENU_ITEM_SLEW_TIMEOUT_MIN, MENU_ITEM_SLEW_TIMEOUT_MAX, MENU_ITEM_SLEW_TIMEOUT_INC); }
+static int16_t menu_unscale_slew_timeout(uint8_t v) { return utilsUnmscale<int16_t, uint8_t>((int16_t)v, MENU_ITEM_SLEW_TIMEOUT_MIN, MENU_ITEM_SLEW_TIMEOUT_MAX, MENU_ITEM_SLEW_TIMEOUT_INC); }
+static uint8_t menu_max_slew_timeout() { return utilsMscaleMax<int16_t, uint8_t>(MENU_ITEM_SLEW_TIMEOUT_MIN, MENU_ITEM_SLEW_TIMEOUT_MAX, MENU_ITEM_SLEW_TIMEOUT_INC); }
+
 
 // Slew deadband in tilt sensor units.
 static const char MENU_ITEM_ANGLE_DEADBAND_TITLE[] PROGMEM = "Position Error";
-static const uint16_t MENU_ITEM_ANGLE_DEADBAND_MIN = 5;
-static const uint16_t MENU_ITEM_ANGLE_DEADBAND_MAX = 100;
-static const uint16_t MENU_ITEM_ANGLE_DEADBAND_INC = 5;
-static int16_t menu_scale_angle_deadband(int16_t val) { return menu_scale_xxx(val, MENU_ITEM_ANGLE_DEADBAND_MIN, MENU_ITEM_ANGLE_DEADBAND_INC); }
-static int16_t menu_unscale_angle_deadband(uint8_t v) { return menu_unscale_xxx(v, MENU_ITEM_ANGLE_DEADBAND_MIN, MENU_ITEM_ANGLE_DEADBAND_INC); }
-
+static const int16_t MENU_ITEM_ANGLE_DEADBAND_MIN = 5;
+static const int16_t MENU_ITEM_ANGLE_DEADBAND_MAX = 100;
+static const int16_t MENU_ITEM_ANGLE_DEADBAND_INC = 5;
+static int16_t menu_scale_angle_deadband(int16_t val) { return utilsMscale<int16_t, uint8_t>(val, MENU_ITEM_ANGLE_DEADBAND_MIN, MENU_ITEM_ANGLE_DEADBAND_MAX, MENU_ITEM_ANGLE_DEADBAND_INC); }
+static int16_t menu_unscale_angle_deadband(uint8_t v) { return utilsUnmscale<int16_t, uint8_t>((int16_t)v, MENU_ITEM_ANGLE_DEADBAND_MIN, MENU_ITEM_ANGLE_DEADBAND_MAX, MENU_ITEM_ANGLE_DEADBAND_INC); }
+static uint8_t menu_max_angle_deadband() { return utilsMscaleMax<int16_t, uint8_t>( MENU_ITEM_ANGLE_DEADBAND_MIN, MENU_ITEM_ANGLE_DEADBAND_MAX, MENU_ITEM_ANGLE_DEADBAND_INC); }
 
 static char f_menu_fmt_buf[15];
-const char* menu_format_number(int16_t v) { myprintf_snprintf(f_menu_fmt_buf, sizeof(f_menu_fmt_buf), "%u", v); return f_menu_fmt_buf; }
+const char* menu_format_number(int16_t v) { myprintf_snprintf(f_menu_fmt_buf, sizeof(f_menu_fmt_buf), PSTR("%u"), v); return f_menu_fmt_buf; }
 //const char* format_yes_no(uint8_t v) { const char* yn[2] = { "Yes", "No" }; return yn[!v]; }
 //const char* format_beep_options(uint8_t v) { const char* opts[] = { "Silent", "Card scan", "Always" }; return opts[v]; }
 
@@ -467,7 +464,7 @@ static const MenuItem MENU_ITEMS[] PROGMEM = {
 		MENU_ITEM_SLEW_TIMEOUT_TITLE,
 		REGS_IDX_SLEW_TIMEOUT, 0U,
 		menu_scale_slew_timeout, menu_unscale_slew_timeout,
-		menu_max_mval(MENU_ITEM_SLEW_TIMEOUT_MIN, MENU_ITEM_SLEW_TIMEOUT_INC, MENU_ITEM_SLEW_TIMEOUT_MAX),
+		menu_max_slew_timeout,
 		false,
 		NULL,		// Special case, call unscale and print number.
 	},
@@ -475,7 +472,7 @@ static const MenuItem MENU_ITEMS[] PROGMEM = {
 		MENU_ITEM_ANGLE_DEADBAND_TITLE,
 		REGS_IDX_SLEW_DEADBAND, 0U,
 		menu_scale_angle_deadband, menu_unscale_angle_deadband,
-		menu_max_mval(MENU_ITEM_ANGLE_DEADBAND_MIN, MENU_ITEM_ANGLE_DEADBAND_INC, MENU_ITEM_ANGLE_DEADBAND_MAX),
+		menu_max_angle_deadband,
 		false,
 		NULL,		// Special case, call unscale and print number.
 	},
@@ -483,7 +480,7 @@ static const MenuItem MENU_ITEMS[] PROGMEM = {
 
 // API
 PGM_P menuItemTitle(uint8_t midx) { return (PGM_P)pgm_read_word(&MENU_ITEMS[midx].title); }
-uint8_t menuItemMaxValue(uint8_t midx) { return pgm_read_byte(&MENU_ITEMS[midx].max_value); }
+uint8_t menuItemMaxValue(uint8_t midx) { return ((menu_item_max)pgm_read_ptr(&MENU_ITEMS[midx].max_value))(); }
 bool menuItemIsRollAround(uint8_t idx) { return (bool)pgm_read_byte(&MENU_ITEMS[idx].rollaround); }
 
 int16_t menuItemActualValue(uint8_t midx, uint8_t mval) {
@@ -507,10 +504,14 @@ uint8_t menuItemReadValue(uint8_t midx) {
 }
 bool menuItemWriteValue(uint8_t midx, uint8_t mval) {
 	uint16_t mask = pgm_read_word(&MENU_ITEMS[midx].regs_mask);
-	if (!mask)
+	uint16_t actual_val = (uint16_t)menuItemActualValue(midx, mval);
+	if (mask) {
+		for (uint16_t t_mask = mask; (t_mask&1); t_mask >>= 1)
+			actual_val <<= 1;
+	}
+	else
 		mask = (uint16_t)(-1);
-	int16_t actual_val = menuItemActualValue(midx, mval);
-	return regsUpdateMask(pgm_read_byte(&MENU_ITEMS[midx].regs_idx), mask, (uint16_t)actual_val);
+	return regsUpdateMask(pgm_read_byte(&MENU_ITEMS[midx].regs_idx), mask, actual_val);
 }
 
 const char* menuItemStrValue(uint8_t midx, uint8_t mval) { 
@@ -526,14 +527,17 @@ const char* menuItemStrValue(uint8_t midx, uint8_t mval) {
 typedef struct {
 	EventSmContextBase base;
 	//uint16_t timer_cookie[CFG_TIMER_COUNT_SM_LEDS];
+	uint8_t menu_item_idx;
+	uint8_t menu_item_value;
 } SmLcdContext;
 static SmLcdContext f_sm_lcd_ctx;
 
 // Timeouts.
-static const uint16_t DISPLAY_CMD_START_DURATION_MS =		1000U;
-static const uint16_t DISPLAY_BANNER_DURATION_MS =			2000U;
-static const uint16_t BACKLIGHT_TIMEOUT_MS =				4000U;
+static const uint16_t DISPLAY_CMD_START_DURATION_MS =		1U*1000U;
+static const uint16_t DISPLAY_BANNER_DURATION_MS =			2U*1000U;
+static const uint16_t BACKLIGHT_TIMEOUT_MS =				4U*1000U;
 static const uint16_t UPDATE_INFO_PERIOD_MS =				500U;
+static const uint16_t MENU_TIMEOUT_MS =						10U*1000U;
 
 // Timers
 enum {
@@ -543,9 +547,12 @@ enum {
 };
 // Define states.
 enum { 
-	ST_INIT, ST_RUN, ST_DEBUG 
+	ST_INIT, ST_RUN, ST_MENU 
 };
-	
+
+//	1234567890123456
+//	
+//	H-12345 F-12345
 static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 	SmLcdContext* my_context = (SmLcdContext*)context;        // Downcast to derived class.
 	(void)my_context;
@@ -602,11 +609,65 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 				//lcdDriverWrite(LCD_DRIVER_ROW_1, 0, PSTR("  TSA MBC 2022"));
 				lcdDriverWrite(LCD_DRIVER_ROW_1, 0, PSTR("R %S"), (regsFlags() & REGS_FLAGS_MASK_RELAY_FAULT) ? PSTR("FAIL") : PSTR("OK"));
 				//lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("    Ready..."));
-				lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("H%6d T%6d"), REGS[REGS_IDX_TILT_SENSOR_0], REGS[REGS_IDX_TILT_SENSOR_1]);
+				lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("H%+-6d T%+-6d"), REGS[REGS_IDX_TILT_SENSOR_0], REGS[REGS_IDX_TILT_SENSOR_1]);
 				eventSmTimerStart(TIMER_UPDATE_INFO, UPDATE_INFO_PERIOD_MS/100U);
 			}
 			break;
+			
+			case EV_SW_TOUCH_MENU:
+			if (event_p8(ev) == EV_P8_SW_LONG_HOLD)
+				return ST_MENU;
+			break;
 		}	// Closes ST_RUN...
+		break;
+		
+		case ST_MENU:
+		switch(event_id(ev)) {
+			case EV_SM_ENTRY:
+			driverSetLcdBacklight(255);
+			my_context->menu_item_idx = 0;
+			eventSmTimerStart(TIMER_MSG, MENU_TIMEOUT_MS/100U);
+			eventSmPostSelf(context);
+			break;
+			
+			case EV_SM_EXIT:
+			driverNvWrite();
+			break;
+			
+			case EV_SM_SELF:
+			my_context->menu_item_value = menuItemReadValue(my_context->menu_item_idx);
+			lcdDriverWrite(LCD_DRIVER_ROW_1, 0, PSTR("%S"), menuItemTitle(my_context->menu_item_idx));
+			eventPublish(EV_UPDATE_MENU);
+			break;
+			
+			case EV_UPDATE_MENU:
+			eventSmTimerStart(TIMER_MSG, MENU_TIMEOUT_MS/100U);
+			lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("%s"), menuItemStrValue(my_context->menu_item_idx,  my_context->menu_item_value));
+			break;
+			
+			case EV_SW_TOUCH_RET:
+			if (event_p8(ev) == EV_P8_SW_CLICK) {
+				menuItemWriteValue(my_context->menu_item_idx, my_context->menu_item_value);
+				utilsBumpU8(&my_context->menu_item_idx, +1, 0U, UTILS_ELEMENT_COUNT(MENU_ITEMS)-1, true);
+				eventSmPostSelf(context);
+			}
+			break;
+			
+			case EV_SW_TOUCH_LEFT: // Fall through... 
+			case EV_SW_TOUCH_RIGHT:
+			if (event_p8(ev) == EV_P8_SW_CLICK) {
+				if (utilsBumpU8(&my_context->menu_item_value, (event_id(ev) == EV_SW_TOUCH_LEFT) ? -1 : +1, 0U, menuItemMaxValue(my_context->menu_item_idx), menuItemIsRollAround(my_context->menu_item_idx)))
+					eventPublish(EV_UPDATE_MENU);
+			}
+			break;
+			
+			case EV_TIMER:
+			if (event_p8(ev) == TIMER_MSG)
+				return ST_RUN;
+			break;
+			
+
+		}
 		break;
 		
 		default:    // Bad state...

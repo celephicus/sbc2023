@@ -9,6 +9,7 @@
 	SW_TOUCH_RIGHT	Touch switch RIGHT
 	SW_TOUCH_MENU	Touch switch MENU
 	SW_TOUCH_RET	Touch switch RET
+	UPDATE_MENU		Update menu item value on LCD.
 	IR_REC			IR command received, p8=cmd, p16=cmd
 	DEBUG_SLEW_AXIS	p8: axis idx
 	DEBUG_SLEW		p8: dir, p16: tilt
@@ -35,12 +36,13 @@ enum {
     EV_SW_TOUCH_RIGHT = 13,             // Touch switch RIGHT
     EV_SW_TOUCH_MENU = 14,              // Touch switch MENU
     EV_SW_TOUCH_RET = 15,               // Touch switch RET
-    EV_IR_REC = 16,                     // IR command received, p8=cmd, p16=cmd
-    EV_DEBUG_SLEW_AXIS = 17,            // p8: axis idx
-    EV_DEBUG_SLEW = 18,                 // p8: dir, p16: tilt
-    EV_DEBUG_RELAY = 19,                // p8: relay register
-    EV_DEBUG_CMD = 20,                  // p8: accepted, p16=cmd
-    COUNT_EV = 21,                      // Total number of events defined.
+    EV_UPDATE_MENU = 16,                // Update menu item value on LCD.
+    EV_IR_REC = 17,                     // IR command received, p8=cmd, p16=cmd
+    EV_DEBUG_SLEW_AXIS = 18,            // p8: axis idx
+    EV_DEBUG_SLEW = 19,                 // p8: dir, p16: tilt
+    EV_DEBUG_RELAY = 20,                // p8: relay register
+    EV_DEBUG_CMD = 21,                  // p8: accepted, p16=cmd
+    COUNT_EV = 22,                      // Total number of events defined.
 };
 
 // Size of trace mask in bytes.
@@ -64,11 +66,12 @@ enum {
  static const char EVENT_NAMES_13[] PROGMEM = "SW_TOUCH_RIGHT";                         \
  static const char EVENT_NAMES_14[] PROGMEM = "SW_TOUCH_MENU";                          \
  static const char EVENT_NAMES_15[] PROGMEM = "SW_TOUCH_RET";                           \
- static const char EVENT_NAMES_16[] PROGMEM = "IR_REC";                                 \
- static const char EVENT_NAMES_17[] PROGMEM = "DEBUG_SLEW_AXIS";                        \
- static const char EVENT_NAMES_18[] PROGMEM = "DEBUG_SLEW";                             \
- static const char EVENT_NAMES_19[] PROGMEM = "DEBUG_RELAY";                            \
- static const char EVENT_NAMES_20[] PROGMEM = "DEBUG_CMD";                              \
+ static const char EVENT_NAMES_16[] PROGMEM = "UPDATE_MENU";                            \
+ static const char EVENT_NAMES_17[] PROGMEM = "IR_REC";                                 \
+ static const char EVENT_NAMES_18[] PROGMEM = "DEBUG_SLEW_AXIS";                        \
+ static const char EVENT_NAMES_19[] PROGMEM = "DEBUG_SLEW";                             \
+ static const char EVENT_NAMES_20[] PROGMEM = "DEBUG_RELAY";                            \
+ static const char EVENT_NAMES_21[] PROGMEM = "DEBUG_CMD";                              \
                                                                                         \
  static const char* const EVENT_NAMES[] PROGMEM = {                                     \
    EVENT_NAMES_0,                                                                       \
@@ -92,6 +95,7 @@ enum {
    EVENT_NAMES_18,                                                                      \
    EVENT_NAMES_19,                                                                      \
    EVENT_NAMES_20,                                                                      \
+   EVENT_NAMES_21,                                                                      \
  }
 
 // Event Descriptions.
@@ -112,11 +116,12 @@ enum {
  static const char EVENT_DESCS_13[] PROGMEM = "Touch switch RIGHT";                                                                         \
  static const char EVENT_DESCS_14[] PROGMEM = "Touch switch MENU";                                                                          \
  static const char EVENT_DESCS_15[] PROGMEM = "Touch switch RET";                                                                           \
- static const char EVENT_DESCS_16[] PROGMEM = "IR command received, p8=cmd, p16=cmd";                                                       \
- static const char EVENT_DESCS_17[] PROGMEM = "p8: axis idx";                                                                               \
- static const char EVENT_DESCS_18[] PROGMEM = "p8: dir, p16: tilt";                                                                         \
- static const char EVENT_DESCS_19[] PROGMEM = "p8: relay register";                                                                         \
- static const char EVENT_DESCS_20[] PROGMEM = "p8: accepted, p16=cmd";                                                                      \
+ static const char EVENT_DESCS_16[] PROGMEM = "Update menu item value on LCD.";                                                             \
+ static const char EVENT_DESCS_17[] PROGMEM = "IR command received, p8=cmd, p16=cmd";                                                       \
+ static const char EVENT_DESCS_18[] PROGMEM = "p8: axis idx";                                                                               \
+ static const char EVENT_DESCS_19[] PROGMEM = "p8: dir, p16: tilt";                                                                         \
+ static const char EVENT_DESCS_20[] PROGMEM = "p8: relay register";                                                                         \
+ static const char EVENT_DESCS_21[] PROGMEM = "p8: accepted, p16=cmd";                                                                      \
                                                                                                                                             \
  static const char* const EVENT_DESCS[] PROGMEM = {                                                                                         \
    EVENT_DESCS_0,                                                                                                                           \
@@ -140,6 +145,7 @@ enum {
    EVENT_DESCS_18,                                                                                                                          \
    EVENT_DESCS_19,                                                                                                                          \
    EVENT_DESCS_20,                                                                                                                          \
+   EVENT_DESCS_21,                                                                                                                          \
  }
 
 // ]]] End generated code.
