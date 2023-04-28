@@ -28,14 +28,14 @@ enum {
 	APP_CMD_STOP = 2,
 
 	// Timed motion of a single axis. Error code RELAY_FAIL.
-	APP_CMD_HEAD_UP = 101,
-	APP_CMD_HEAD_DOWN = 102,
-	APP_CMD_LEG_UP = 103,
-	APP_CMD_LEG_DOWN = 104,
-	APP_CMD_BED_UP = 105,
-	APP_CMD_BED_DOWN = 106,
-	APP_CMD_TILT_UP = 107,
-	APP_CMD_TILT_DOWN = 108,
+	APP_CMD_HEAD_UP = 10,
+	APP_CMD_HEAD_DOWN = 11,
+	APP_CMD_LEG_UP = 12,
+	APP_CMD_LEG_DOWN = 13,
+	APP_CMD_BED_UP = 14,
+	APP_CMD_BED_DOWN = 15,
+	APP_CMD_TILT_UP = 16,
+	APP_CMD_TILT_DOWN = 17,
 
 	// Save current position as a preset. Error codes SENSOR_FAIL_x.
 	APP_CMD_SAVE_POS_1 = 100,
