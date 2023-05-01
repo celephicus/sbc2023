@@ -49,10 +49,10 @@ const char* test_myprintf_str_max_b(uint8_t sz) {
 	return NULL;
 }
 const char* test_myprintf_str_max_i(uint8_t sz) {
-	if (sz == 2) return "32767";
-	if (sz == 4) return "2147483647";
-	if (sz == 8) return "9223372036854775807"; 
-	if (sz == 16) return "170141183460469231731687303715884105727"; 
+	if (sz == 2) return "+32767";
+	if (sz == 4) return "+2147483647";
+	if (sz == 8) return "+9223372036854775807"; 
+	if (sz == 16) return "+170141183460469231731687303715884105727"; 
 	return NULL;
 }
 const char* test_myprintf_str_min_i(uint8_t sz) {
@@ -155,37 +155,39 @@ TT_TEST_CASE(test_printf_format("x  zx", "x%3Sx", "y"));
 TT_TEST_CASE(test_printf_format("xz  x", "x%-3Sx", "y"));
 
 // Integer decimal.
-TT_TEST_CASE(test_printf_format("x0x", "x%dx", 0));
-TT_TEST_CASE(test_printf_format("x123x", "x%dx", 123));
-TT_TEST_CASE(test_printf_format("x-1x", "x%0dx", -1));
-TT_TEST_CASE(test_printf_format("x1x", "x%0dx", 1));
-TT_TEST_CASE(test_printf_format("x1x", "x%1dx", 1));
-TT_TEST_CASE(test_printf_format("x 1x", "x%2dx", 1));
-TT_TEST_CASE(test_printf_format("x01x", "x%02dx", 1));
-TT_TEST_CASE(test_printf_format("x1  x", "x%-3dx", 1));
-TT_TEST_CASE(test_printf_format("x -1x", "x%3dx", -1));
-TT_TEST_CASE(test_printf_format("x-01x", "x%03dx", -1));
-TT_TEST_CASE(test_printf_format("x-1 x", "x%-3dx", -1));
-TT_TEST_CASE(test_printf_format("x-1 x", "x%-3dx", -1));
-
-// Integer decimal. Long, copy of above.
-TT_TEST_CASE(test_printf_format("x0x", "x%ldx", (CFG_MYPRINTF_T_L_UINT)0));
-TT_TEST_CASE(test_printf_format("x123x", "x%ldx", (CFG_MYPRINTF_T_L_UINT)123));
-TT_TEST_CASE(test_printf_format("x1x", "x%0ldx", (CFG_MYPRINTF_T_L_UINT)1));
-TT_TEST_CASE(test_printf_format("x1x", "x%1Ldx", (CFG_MYPRINTF_T_L_UINT)1));
-TT_TEST_CASE(test_printf_format("x 1x", "x%2Ldx", (CFG_MYPRINTF_T_L_UINT)1));
-TT_TEST_CASE(test_printf_format("x01x", "x%02Ldx", (CFG_MYPRINTF_T_L_UINT)1));
-TT_TEST_CASE(test_printf_format("x1 x", "x%-2Ldx", (CFG_MYPRINTF_T_L_UINT)1));
+/*
+TT_BEGIN_SCRIPT()
+for ln in '''\
+"x0x" "x%dx" 0
+"x123x" "x%dx" 123
+"x-1x" "x%0dx" -1
+"x1x" "x%0dx" 1
+"x1x" "x%1dx" 1
+"x_1x" "x%2dx" 1
+"x01x" "x%02dx" 1
+"x1__x" "x%-3dx" 1
+"x_-1x" "x%3dx" -1
+"x-01x" "x%03dx" -1
+"x-1_x" "x%-3dx" -1
+"x-1_x" "x%-3dx" -1'''.splitlines():
+	args = ln.split()
+	args[0] = args[0].replace('_', ' ')
+	add_test_case('test_printf_format', ', '.join(args))
+	add_test_case('test_printf_format', ', '.join((args[0], args[1][:-3]+'L'+args[1][-3:], '(CFG_MYPRINTF_T_L_UINT)'+args[2])))
+TT_END_SCRIPT()
+*/
 
 // Min/max values.
 TT_TEST_CASE(test_printf_format(test_myprintf_str_max_u(sizeof(CFG_MYPRINTF_T_UINT)), "%u", MAX_PRINTF_U));
 TT_TEST_CASE(test_printf_format(test_myprintf_str_max_u(sizeof(CFG_MYPRINTF_T_L_UINT)), "%lu", MAX_PRINTF_UL));
 TT_TEST_CASE(test_printf_format(test_myprintf_str_max_x(sizeof(CFG_MYPRINTF_T_UINT)), "%x", MAX_PRINTF_U));
 TT_TEST_CASE(test_printf_format(test_myprintf_str_max_x(sizeof(CFG_MYPRINTF_T_L_UINT)), "%lx", MAX_PRINTF_UL));
-TT_TEST_CASE(test_printf_format(test_myprintf_str_max_i(sizeof(CFG_MYPRINTF_T_INT)), "%d", MAX_PRINTF_I));
+TT_TEST_CASE(test_printf_format(test_myprintf_str_max_i(sizeof(CFG_MYPRINTF_T_INT)) + 1, "%d", MAX_PRINTF_I));
+TT_TEST_CASE(test_printf_format(test_myprintf_str_max_i(sizeof(CFG_MYPRINTF_T_INT)), "%+d", MAX_PRINTF_I));
 TT_TEST_CASE(test_printf_format(test_myprintf_str_min_i(sizeof(CFG_MYPRINTF_T_INT)), "%d", MIN_PRINTF_I));
-TT_TEST_CASE(test_printf_format(test_myprintf_str_max_i(sizeof(CFG_MYPRINTF_T_L_INT)), "%ld", MAX_PRINTF_IL));
-TT_TEST_CASE(test_printf_format(test_myprintf_str_min_i(sizeof(CFG_MYPRINTF_T_L_INT)), "%ld", MIN_PRINTF_IL));
+TT_TEST_CASE(test_printf_format(test_myprintf_str_max_i(sizeof(CFG_MYPRINTF_T_L_INT)) + 1, "%ld", MAX_PRINTF_IL));
+TT_TEST_CASE(test_printf_format(test_myprintf_str_max_i(sizeof(CFG_MYPRINTF_T_L_INT)), "%+ld", MAX_PRINTF_IL));
+TT_TEST_CASE(test_printf_format(test_myprintf_str_min_i(sizeof(CFG_MYPRINTF_T_L_INT)), "%ld", MIN_PRINTF_IL)); 
 
 // Hex integer.
 TT_TEST_CASE(test_printf_format("x0x", "x%xx", 0));

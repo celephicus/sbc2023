@@ -13,10 +13,10 @@ TT_END_INCLUDE()
 
 // Verify Mscale validity function. 
 void test_utils_mscale_valid_signed(int8_t exp, int8_t min, int8_t max, int8_t inc) {
-	TEST_ASSERT_EQUAL(exp, utilsMscaleValid(min, max, inc));
+	TEST_ASSERT_EQUAL(exp, utilsMscaleValid<int8_t>(min, max, inc));
 }
 void test_utils_mscale_valid_unsigned(uint8_t exp, uint8_t min, uint8_t max, uint8_t inc) {
-	TEST_ASSERT_EQUAL(exp, utilsMscaleValid(min, max, inc));
+	TEST_ASSERT_EQUAL(exp, utilsMscaleValid<uint8_t>(min, max, inc));
 }
 /*
 TT_BEGIN_SCRIPT()
@@ -36,8 +36,8 @@ TT_END_SCRIPT()
 TT_TEST_CASE(test_utils_mscale_valid_unsigned(false, 10, 0, 5));	// Min > max.
 
 void test_utils_mscale_max_signed(int8_t exp, int8_t min, int8_t max, int8_t inc) {
-	TEST_ASSERT(utilsMscaleValid(min, max, inc));
-	TEST_ASSERT_EQUAL_INT8(exp, utilsMscaleMax(min, max, inc));
+	TEST_ASSERT(utilsMscaleValid<int8_t>(min, max, inc));
+ 	TEST_ASSERT_EQUAL_UINT8(exp, (utilsMscaleMax<int8_t, uint8_t>)(min, max, inc));
 }
 TT_TEST_CASE(test_utils_mscale_max_signed(2, 0, 10, 5));
 TT_TEST_CASE(test_utils_mscale_max_signed(2, -10, 0, 5));
@@ -50,16 +50,16 @@ TT_TEST_CASE(test_utils_mscale_max_signed(0, 0, 0, 5));		// Zero length range.
 TT_TEST_CASE(test_utils_mscale_max_signed(0, 0, 4, 5));
 
 void test_utils_mscale_max_unsigned(uint8_t exp, uint8_t min, uint8_t max, uint8_t inc) {
-	TEST_ASSERT(utilsMscaleValid(min, max, inc));
-	TEST_ASSERT_EQUAL_UINT8(exp, utilsMscaleMax(min, max, inc));
+	TEST_ASSERT(utilsMscaleValid<uint8_t>(min, max, inc));
+	TEST_ASSERT_EQUAL_UINT8(exp, ( utilsMscaleMax<uint8_t, uint8_t>)(min, max, inc));
 }
 TT_TEST_CASE(test_utils_mscale_max_unsigned(2, 0, 10, 5));
 TT_TEST_CASE(test_utils_mscale_max_unsigned(2, 10, 20, 5));
 TT_TEST_CASE(test_utils_mscale_max_unsigned(2, 210, 220, 5));
 
 void test_utils_mscale_signed(int8_t exp, int8_t val, int8_t min, int8_t max, int8_t inc) {
-	TEST_ASSERT(utilsMscaleValid(min, max, inc));
-	TEST_ASSERT_EQUAL_INT8(exp, utilsMscale(val, min, max, inc));
+	TEST_ASSERT((utilsMscaleValid<int8_t>)(min, max, inc));
+	TEST_ASSERT_EQUAL_INT8(exp, (utilsMscale<int8_t, uint8_t>)(val, min, max, inc));
 }
 TT_TEST_CASE(test_utils_mscale_signed(0, 0, 0, 10, 5));
 TT_TEST_CASE(test_utils_mscale_signed(1, 5, 0, 10, 5));
@@ -88,9 +88,9 @@ TT_TEST_CASE(test_utils_mscale_signed(1, 3, 0, 12, 6));
 TT_TEST_CASE(test_utils_mscale_signed(2, 2, 10, 0, -5));		
 TT_TEST_CASE(test_utils_mscale_signed(1, 3, 10, 0, -5));		
 
-void test_utils_unmscale_signed(int8_t exp, int8_t val, int8_t min, int8_t max, int8_t inc) {
-	TEST_ASSERT(utilsMscaleValid(min, max, inc));
-	TEST_ASSERT_EQUAL_INT8(exp, utilsUnmscale(val, min, max, inc));
+void test_utils_unmscale_signed(int8_t exp, uint8_t val, int8_t min, int8_t max, int8_t inc) {
+	TEST_ASSERT(utilsMscaleValid<int8_t>(min, max, inc));
+	TEST_ASSERT_EQUAL_INT8(exp, (utilsUnmscale<int8_t, uint8_t>)(val, min, max, inc));
 }
 TT_TEST_CASE(test_utils_unmscale_signed(10, 0, 10, 20, 5));
 TT_TEST_CASE(test_utils_unmscale_signed(15, 1, 10, 20, 5));
