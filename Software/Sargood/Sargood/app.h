@@ -59,12 +59,14 @@ enum {
 	APP_CMD_STATUS_RELAY_FAIL = 4,		// Relay module offline, cannot command motors.
 	APP_CMD_STATUS_PRESET_INVALID = 5,	// Preset in NV was invalid.
 	APP_CMD_STATUS_SLEW_TIMEOUT = 6,	// Timeout on slew to position. 
+	APP_CMD_STATUS_NOT_AWAKE = 7,		// Controller has not been woken up.
+	APP_CMD_STATUS_SAVE_PRESET_FAIL,	// Save preset needs to be repeated 3 times before it will work.
+	
+	APP_CMD_STATUS_SENSOR_FAIL_0 = 100,	// Tilt sensor 0 offline or failed.
+	APP_CMD_STATUS_SENSOR_FAIL_1 = 101,	// Tilt sensor 1 offline or failed.
 
-	APP_CMD_STATUS_SENSOR_FAIL_0 = 10,	// Tilt sensor 0 offline or failed.
-	APP_CMD_STATUS_SENSOR_FAIL_1 = 11,	// Tilt sensor 1 offline or failed.
-
-	APP_CMD_STATUS_NO_MOTION_0 = 20,	// No motion detected on sensor 0.
-	APP_CMD_STATUS_NO_MOTION_1 = 21,	// No motion detected on sensor 1.
+	APP_CMD_STATUS_NO_MOTION_0 = 110,	// No motion detected on sensor 0.
+	APP_CMD_STATUS_NO_MOTION_1 = 111,	// No motion detected on sensor 1.
 };
 
 #endif	// APP_H__

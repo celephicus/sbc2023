@@ -69,12 +69,35 @@ static uint8_t axis_get_dir(uint8_t axis) {
 static const uint16_t RELAY_RUN_DURATION_MS = 1000U;
 // TODO: Change to 200ms for production. 
 static const uint16_t RELAY_STOP_DURATION_MS = 1000U;
+static const uint16_t WAKEUP_TIMEOUT_SECS = 10U;
+static const uint16_t PRESET_SAVE_TIMEOUT_SECS = 5U;
 
+enum {
+	APP_TIMER_SLEW,
+	APP_TIMER_WAKEUP,
+	APP_TIMER_SAVE,
+	N_APP_TIMER
+};
 static struct {
 	thread_control_t tcb_cmd;
 	uint8_t cmd_req;
-	uint16_t slew_timer;
+	uint16_t timers[N_APP_TIMER];
+	uint8_t save_preset_attempts;
 } f_app_ctx;
+static bool app_timer_is_active(uint8_t idx) { return f_app_ctx.timers[idx] > 0; }
+static uint8_t app_timer_service() {
+	uint8_t timeouts = 0U;
+	fori (N_APP_TIMER) {
+		timeouts <<= 1;
+		if (app_timer_is_active(i)) {
+			f_app_ctx.timers[i] -= 1;
+			if (!app_timer_is_active(i))
+				timeouts |= 1U;
+		}
+	}
+	return timeouts;
+}
+static void app_timer_start(uint8_t idx, uint16_t ticks) { f_app_ctx.timers[idx] = ticks; }
 
 bool appCmdRun(uint8_t cmd) {
 	const bool accept = (APP_CMD_STOP == cmd) || (REGS[REGS_IDX_CMD_ACTIVE] <= 99);
@@ -139,8 +162,15 @@ static bool check_stop_command() {
 }
 
 static bool check_slew_timeout() {
-	if (0U == f_app_ctx.slew_timer) {
+	if (!app_timer_is_active(APP_TIMER_SLEW)) {
 		cmd_done(APP_CMD_STATUS_SLEW_TIMEOUT);
+		return true;
+	}
+	return false;
+}
+static bool check_not_awake() {
+	if (!app_timer_is_active(APP_TIMER_WAKEUP)) {
+		cmd_done(APP_CMD_STATUS_NOT_AWAKE);
 		return true;
 	}
 	return false;
@@ -181,6 +211,14 @@ static int8_t thread_cmd(void* arg) {
 			THREAD_YIELD();
 			break;
 		
+		// Wakeup command.
+		case APP_CMD_WAKEUP:		
+			app_timer_start(APP_TIMER_WAKEUP, WAKEUP_TIMEOUT_SECS*10U);
+			eventPublish(EV_WAKEUP, 1);
+			cmd_done();
+			THREAD_YIELD();
+			break;
+			
 		// Timed motion commands
 		case APP_CMD_HEAD_UP:	axis_set_drive(AXIS_HEAD, AXIS_DIR_UP);		goto do_manual;
 		case APP_CMD_HEAD_DOWN:	axis_set_drive(AXIS_HEAD, AXIS_DIR_DOWN);	goto do_manual;
@@ -191,7 +229,12 @@ static int8_t thread_cmd(void* arg) {
 		case APP_CMD_TILT_UP:	axis_set_drive(AXIS_TILT, AXIS_DIR_UP);		goto do_manual;
 		case APP_CMD_TILT_DOWN:	axis_set_drive(AXIS_TILT, AXIS_DIR_DOWN);	goto do_manual;
 
-do_manual:	if (!check_relay()) {	// If relay OK...
+do_manual:	if (check_not_awake()) {
+				axis_stop_all();
+				break; 
+			}
+				
+			if (!check_relay()) {	// If relay OK...
 				THREAD_START_DELAY();
 				THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(RELAY_RUN_DURATION_MS) || check_stop_command());
 				if (REGS[REGS_IDX_CMD_ACTIVE] == f_app_ctx.cmd_req) {	// If repeat of previous, restart timing. If not then active register will either have new command or idle.
@@ -213,15 +256,29 @@ do_manual:	if (!check_relay()) {	// If relay OK...
 		case APP_CMD_SAVE_POS_2:
 		case APP_CMD_SAVE_POS_3:
 		case APP_CMD_SAVE_POS_4: {
-			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_SAVE_POS_1;
-			if (!check_sensors()) {		// All _enabled_ sensors OK.
-				fori (CFG_TILT_SENSOR_COUNT) // Read sensor value or force it to invalid is not enabled.
-					driverPresets(preset_idx)[i] = driverSlaveIsEnabled(i) ?  REGS[REGS_IDX_TILT_SENSOR_0 + i] : SBC2022_MODBUS_TILT_FAULT;
+			if (check_not_awake())
+				break; 
+			
+			// Logic is first save command starts timer, sets count to 1, but returns fail. Subsequent commands increment count if no timeout, does action when count == 3.
+			if (!app_timer_is_active(APP_TIMER_SAVE)) {
+				app_timer_start(APP_TIMER_SAVE, PRESET_SAVE_TIMEOUT_SECS*10U);
+				f_app_ctx.save_preset_attempts = 1;
+				cmd_done(APP_CMD_STATUS_SAVE_PRESET_FAIL);
 			}
-			else
-				driverPresetSetInvalid(preset_idx);
-			// driverNvWrite();
-			cmd_done();
+			else if (++f_app_ctx.save_preset_attempts < 3) {
+				cmd_done(APP_CMD_STATUS_SAVE_PRESET_FAIL);
+			}
+			else {
+				preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_SAVE_POS_1;
+				if (!check_sensors()) {		// All _enabled_ sensors OK.
+					fori (CFG_TILT_SENSOR_COUNT) // Read sensor value or force it to invalid is not enabled.
+						driverPresets(preset_idx)[i] = driverSlaveIsEnabled(i) ?  REGS[REGS_IDX_TILT_SENSOR_0 + i] : SBC2022_MODBUS_TILT_FAULT;
+				}
+				else
+					driverPresetSetInvalid(preset_idx);
+				// driverNvWrite();
+				cmd_done();
+			}
 			THREAD_YIELD();
 			} break;
 
@@ -230,6 +287,9 @@ do_manual:	if (!check_relay()) {	// If relay OK...
 		case APP_CMD_RESTORE_POS_2:
 		case APP_CMD_RESTORE_POS_3:
 		case APP_CMD_RESTORE_POS_4: {
+			if (check_not_awake())
+				break; 
+				
 			axis_stop_all();		// Should always be true...
 			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_RESTORE_POS_1;
 			if (!is_preset_valid(preset_idx)) {				// Invalid preset, abort.
@@ -245,7 +305,7 @@ do_manual:	if (!check_relay()) {	// If relay OK...
 				if (!driverSlaveIsEnabled(axis_idx))		// Do not do disabled axes.
 					continue;
 					
-				f_app_ctx.slew_timer = REGS[REGS_IDX_SLEW_TIMEOUT]*10U;
+				app_timer_start(APP_TIMER_SLEW, REGS[REGS_IDX_SLEW_TIMEOUT]*10U);
 				while ((!check_sensors()) && (!check_relay()) && (!check_stop_command()) && (!check_slew_timeout())) {
 					// TODO: Verify sensor going offline can't lock up.
 					THREAD_WAIT_UNTIL(avail);		// Wait for new reading.
@@ -320,6 +380,7 @@ bool service_trace_log() {
 static const char* get_cmd_desc(uint8_t cmd) {
 	switch(cmd) {
 	case APP_CMD_STOP:			return PSTR("Stop");
+	case APP_CMD_WAKEUP:		return PSTR("Wakeup");
 	
 	case APP_CMD_HEAD_UP:		return PSTR("Head Up");
 	case APP_CMD_LEG_UP:		return PSTR("Leg Up");
@@ -376,7 +437,8 @@ enum {
 // IR command table. Must be sorted on command ID.
 typedef struct { uint8_t ir_cmd, app_cmd; } IrCmdDef;
 const static IrCmdDef IR_CMD_DEFS[] PROGMEM = {
-	{ 0x00, APP_CMD_STOP},
+	{ 0x00, APP_CMD_WAKEUP},
+	{ 0x01, APP_CMD_STOP},
 		
 	{ 0x04, APP_CMD_HEAD_UP},
 	{ 0x05, APP_CMD_HEAD_DOWN},
@@ -754,6 +816,8 @@ void appService() {
 
 void appService10hz() { 
 	eventSmTimerService();
-	if (f_app_ctx.slew_timer > 0)
-		f_app_ctx.slew_timer -= 1;
+	
+	const uint8_t app_timer_timeouts = app_timer_service();
+	if (app_timer_timeouts && _BV(APP_TIMER_WAKEUP))	
+		eventPublish(EV_WAKEUP, 0);
 }
