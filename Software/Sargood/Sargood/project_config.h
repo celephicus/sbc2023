@@ -38,10 +38,10 @@ enum {
 #define CFG_VER_MINOR 0
 
 // Build number incremented with each build by cfg-set-build.py script.
-#define CFG_BUILD_NUMBER 582
+#define CFG_BUILD_NUMBER 694
 
 // Timestamp in ISO8601 format set by cfg-set-build.py script.
-#define CFG_BUILD_TIMESTAMP "20230421T153626"
+#define CFG_BUILD_TIMESTAMP "20230501T133441"
 
 // Do not edit below this line......
 
@@ -63,23 +63,8 @@ enum {
 
 #if 0
 
-// Extra help text for console.
-#define CFG_WANT_VERBOSE_CONSOLE 0
-
 // No trace.
 #define CFG_WANT_DEBUG_TRACE 0
-
-// runEvery()
-typedef uint16_t RUN_EVERY_TIME_T;
-#define RUN_EVERY_GET_TIME() ((RUN_EVERY_TIME_T)millis())
-
-// Timers
-enum {
-	TIMER_SM_SUPERVISOR = 0,
-};
-
-// For lc2.h
-#define CFG_LC2_USE_SWITCH 0
 
 // Timers
 // TODO: Update to new standard (see FLW).

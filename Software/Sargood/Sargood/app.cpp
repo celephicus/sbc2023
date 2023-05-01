@@ -4,7 +4,7 @@
 #include "utils.h"
 #include "gpio.h"
 #include "regs.h"
-#include "lcd_driver.h"
+#include "AsyncLiquidCrystal.h"
 #include "event.h"
 #include "driver.h"
 #include "sbc2022_modbus.h"
@@ -47,9 +47,10 @@ enum {
 	AXIS_BED,
 	AXIS_TILT,
 };
+#pragma message "FIX RELAY CODE!!"
 enum { 
 	AXIS_DIR_STOP = 0, 
-	AXIS_DIR_DOWN = 2, 
+	AXIS_DIR_DOWN = 3,	// TODO: change to 2 for release.
 	AXIS_DIR_UP = 1, 
 };
 
@@ -66,7 +67,8 @@ static uint8_t axis_get_dir(uint8_t axis) {
 }
 
 static const uint16_t RELAY_RUN_DURATION_MS = 1000U;
-static const uint16_t RELAY_STOP_DURATION_MS = 200U;
+// TODO: Change to 200ms for production. 
+static const uint16_t RELAY_STOP_DURATION_MS = 1000U;
 
 static struct {
 	thread_control_t tcb_cmd;
@@ -148,7 +150,13 @@ static int8_t thread_cmd(void* arg) {
 	static uint8_t preset_idx;
 
 	const bool avail = driverSensorUpdateAvailable();	// Check for new sensor data every time thread is run.
-
+	if (avail && (regsFlags() & REGS_FLAGS_MASK_SENSOR_DUMP_ENABLE)) {
+		fori(2) {
+			if (driverSlaveIsEnabled(i))	
+				eventPublish(EV_SENSOR_UPDATE, i, REGS[REGS_IDX_TILT_SENSOR_0 + i]);
+		}		
+	}
+	
 	THREAD_BEGIN();
 	while (1) {
 		if (APP_CMD_IDLE == REGS[REGS_IDX_CMD_ACTIVE]) 		// If idle, load new command.
@@ -231,8 +239,9 @@ do_manual:	if (!check_relay()) {	// If relay OK...
 
 			// Preset good, start slewing...
 			static uint8_t axis_idx;
+			regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_DUMP_ENABLE, true);
 			for (axis_idx = 0; axis_idx < 2; axis_idx += 1) {
-				eventPublish(EV_DEBUG_SLEW_AXIS, axis_idx);
+				eventPublish(EV_DEBUG_SLEW_AXIS, axis_idx, driverPresets(preset_idx)[axis_idx]);
 				if (!driverSlaveIsEnabled(axis_idx))		// Do not do disabled axes.
 					continue;
 					
@@ -245,22 +254,22 @@ do_manual:	if (!check_relay()) {	// If relay OK...
 					const int16_t* presets = driverPresets(preset_idx);
 					const int16_t delta = presets[axis_idx] - (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx];
 					const int8_t target_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_DEADBAND]);
-					eventPublish(EV_DEBUG_SLEW, target_dir, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
+					//eventPublish(EV_DEBUG_SLEW, target_dir, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
 
 					// If we are moving in one direction, check for position reached. We can't just check for zero as it might overshoot.
-					if (axis_get_dir(axis_idx) == AXIS_DIR_DOWN) {	
+					if (axis_get_dir(axis_idx) == AXIS_DIR_UP) {	
 						if (target_dir <= 0)
 							break;
 					}
-					else if (axis_get_dir(axis_idx) == AXIS_DIR_UP) {		// Or the other...
+					else if (axis_get_dir(axis_idx) == AXIS_DIR_DOWN) {		// Or the other...
 						if (target_dir >= 0)
 							break;
 					}
 					else {															// If not moving, turn on motors.
 						if (target_dir > 0)
-							axis_set_drive(axis_idx, AXIS_DIR_DOWN);
-						else if (target_dir < 0)
 							axis_set_drive(axis_idx, AXIS_DIR_UP);
+						else if (target_dir < 0)
+							axis_set_drive(axis_idx, AXIS_DIR_DOWN);
 						else // No slew necessary...
 							break;
 					}
@@ -270,9 +279,14 @@ do_manual:	if (!check_relay()) {	// If relay OK...
 				// Stop and let axis motors rundown if they are moving...
 				if (REGS[REGS_IDX_RELAY_STATE] & (RELAY_HEAD_MASK|RELAY_FOOT_MASK)) {
 					axis_stop_all();
-					THREAD_DELAY(RELAY_STOP_DURATION_MS);
+					THREAD_START_DELAY();															
+					do {
+						THREAD_WAIT_UNTIL(avail);
+						//eventPublish(EV_DEBUG_SLEW, 0, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
+						THREAD_YIELD();
+					} while (!THREAD_IS_DELAY_DONE(RELAY_STOP_DURATION_MS));
 				}
-			}	// Closes for (...) ...
+			}	// Closes for (axis_idx...) ...
 
 
 			// This is here in case the command aborts for some reason with the motors going. It purposely doesn't check for comms with the relay, just stops.
@@ -283,6 +297,7 @@ do_manual:	if (!check_relay()) {	// If relay OK...
 				THREAD_DELAY(RELAY_STOP_DURATION_MS);
 			}
 
+			regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_DUMP_ENABLE, false);
 			cmd_done();
 			THREAD_YIELD();
 			} break;
@@ -362,8 +377,11 @@ enum {
 typedef struct { uint8_t ir_cmd, app_cmd; } IrCmdDef;
 const static IrCmdDef IR_CMD_DEFS[] PROGMEM = {
 	{ 0x00, APP_CMD_STOP},
-	{ 0x01, APP_CMD_HEAD_UP},
-	{ 0x02, APP_CMD_HEAD_DOWN},
+		
+	{ 0x04, APP_CMD_HEAD_UP},
+	{ 0x05, APP_CMD_HEAD_DOWN},
+	{ 0x06, APP_CMD_LEG_UP},
+	{ 0x07, APP_CMD_LEG_DOWN},
 	
 	{ 0x10, APP_CMD_SAVE_POS_1},
 	{ 0x11, APP_CMD_SAVE_POS_2},
@@ -550,6 +568,43 @@ enum {
 	ST_INIT, ST_RUN, ST_MENU 
 };
 
+// LCD
+//
+AsyncLiquidCrystal f_lcd(GPIO_PIN_LCD_RS, GPIO_PIN_LCD_E, GPIO_PIN_LCD_D4, GPIO_PIN_LCD_D5, GPIO_PIN_LCD_D6, GPIO_PIN_LCD_D7);
+static void lcd_init() {
+	f_lcd.begin(GPIO_LCD_NUM_COLS, GPIO_LCD_NUM_ROWS);
+}
+#if 0
+static void lcd_printf(uint8_t row, const char* fmt, ...){
+	va_list ap;
+	char buf[20];
+	va_start(ap, fmt);
+	myprintf_vsnprintf(buf, sizeof(buf), fmt, ap);  // Don't overwrite buffer, note max length includes nul terminator.
+	f_lcd.setCursor(0, row);
+	f_lcd.print(buf);
+}
+#else
+static void lcd_printf_of(char c, void* arg) {
+	*(uint8_t*)arg += 1;
+	f_lcd.write(c);
+}
+void lcd_printf(uint8_t row, PGM_P fmt, ...) {
+	f_lcd.setCursor(0, row);
+	va_list ap;
+	va_start(ap, fmt);
+	uint8_t cc = 0;
+	myprintf(lcd_printf_of, &cc, fmt, ap);
+	while (cc++ < GPIO_LCD_NUM_COLS)
+		f_lcd.write(' ');
+	va_end(ap);
+}
+#endif
+static void lcd_service() {
+	f_lcd.processQueue();
+}
+static void lcd_flush() {
+	f_lcd.flush();
+}
 //	1234567890123456
 //	
 //	H-12345 F-12345
@@ -560,8 +615,9 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 		case ST_INIT:
 		switch(event_id(ev)) {
 			case EV_SM_ENTRY:
-			lcdDriverWrite(LCD_DRIVER_ROW_1, 0, PSTR("  TSA MBC 2022"));
-			lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("V" CFG_VER_STR " build " CFG_BUILD_NUMBER_STR));
+			lcd_printf(0, PSTR("  TSA MBC 2022"));
+			lcd_flush();
+			lcd_printf(1, PSTR("V" CFG_VER_STR " build " CFG_BUILD_NUMBER_STR));
 			driverSetLcdBacklight(255);
 			eventSmTimerStart(TIMER_MSG, DISPLAY_BANNER_DURATION_MS/100U);
 			break;
@@ -586,15 +642,15 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 			break;
 
 			case EV_COMMAND_START:
-			lcdDriverWrite(LCD_DRIVER_ROW_1, 0, PSTR("CMD %S"), get_cmd_desc(event_p8(ev)));
-			lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("Running"));
+			lcd_printf(0, PSTR("CMD %S"), get_cmd_desc(event_p8(ev)));
+			lcd_printf(1, PSTR("Running"));
 			eventSmTimerStop(TIMER_BL);
 			eventSmTimerStop(TIMER_UPDATE_INFO);
 			driverSetLcdBacklight(255);
 			break;
 			
 			case EV_COMMAND_DONE:
-			lcdDriverWrite(LCD_DRIVER_ROW_2, 0, get_cmd_status_desc(event_p16(ev)));
+			lcd_printf(1, get_cmd_status_desc(event_p16(ev)));
 			eventSmTimerStart(TIMER_MSG, DISPLAY_CMD_START_DURATION_MS/100U);
 			eventSmTimerStart(TIMER_BL, BACKLIGHT_TIMEOUT_MS/100U);
 			driverSetLcdBacklight(255);
@@ -606,10 +662,9 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 			if (event_p8(ev) == TIMER_BL)
 				driverSetLcdBacklight(0);
 			if (event_p8(ev) == TIMER_UPDATE_INFO) {
-				//lcdDriverWrite(LCD_DRIVER_ROW_1, 0, PSTR("  TSA MBC 2022"));
-				lcdDriverWrite(LCD_DRIVER_ROW_1, 0, PSTR("R %S"), (regsFlags() & REGS_FLAGS_MASK_RELAY_FAULT) ? PSTR("FAIL") : PSTR("OK"));
+				lcd_printf(0, PSTR("R %S"), (regsFlags() & REGS_FLAGS_MASK_RELAY_FAULT) ? PSTR("FAIL") : PSTR("OK"));
 				//lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("    Ready..."));
-				lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("H%+-6d T%+-6d"), REGS[REGS_IDX_TILT_SENSOR_0], REGS[REGS_IDX_TILT_SENSOR_1]);
+				lcd_printf(1, PSTR("H%+-6d T%+-6d"), REGS[REGS_IDX_TILT_SENSOR_0], REGS[REGS_IDX_TILT_SENSOR_1]);
 				eventSmTimerStart(TIMER_UPDATE_INFO, UPDATE_INFO_PERIOD_MS/100U);
 			}
 			break;
@@ -636,13 +691,13 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 			
 			case EV_SM_SELF:
 			my_context->menu_item_value = menuItemReadValue(my_context->menu_item_idx);
-			lcdDriverWrite(LCD_DRIVER_ROW_1, 0, PSTR("%S"), menuItemTitle(my_context->menu_item_idx));
+			lcd_printf(0, PSTR("%S"), menuItemTitle(my_context->menu_item_idx));
 			eventPublish(EV_UPDATE_MENU);
 			break;
 			
 			case EV_UPDATE_MENU:
 			eventSmTimerStart(TIMER_MSG, MENU_TIMEOUT_MS/100U);
-			lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("%s"), menuItemStrValue(my_context->menu_item_idx,  my_context->menu_item_value));
+			lcd_printf(1, PSTR("%s"), menuItemStrValue(my_context->menu_item_idx,  my_context->menu_item_value));
 			break;
 			
 			case EV_SW_TOUCH_RET:
@@ -679,8 +734,8 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 
 void appInit() {
 	threadInit(&f_app_ctx.tcb_cmd);
-	lcdDriverInit();
 	eventInit();
+	lcd_init();
 	eventSmInit(sm_lcd, (EventSmContextBase*)&f_sm_lcd_ctx, 0);
 	eventSmInit(sm_ir_rec, (EventSmContextBase*)&f_sm_ir_rec_ctx, 1);
 }
@@ -688,57 +743,17 @@ void appInit() {
 void appService() {
 	threadRun(&f_app_ctx.tcb_cmd, thread_cmd, NULL);
 	t_event ev;
+
 	while (EV_NIL != (ev = eventGet())) {	// Read events until there are no more left.
 		eventSmService(sm_lcd, (EventSmContextBase*)&f_sm_lcd_ctx, ev);
 		eventSmService(sm_ir_rec, (EventSmContextBase*)&f_sm_ir_rec_ctx, ev);
-		(void)ev;
 	}
 	service_trace_log();		// Just dump one trace record as it can take time to print and we want to keep responsive. 
+	lcd_service();
 }
+
 void appService10hz() { 
-	lcdDriverService_10Hz(); 
 	eventSmTimerService();
 	if (f_app_ctx.slew_timer > 0)
 		f_app_ctx.slew_timer -= 1;
 }
-
-#if 0
-#include <Arduino.h>
-
-#include "project_config.h"
-#include "debug.h"
-FILENUM(8);
-
-#include "types.h"
-#include "event.h"
-#include "driver.h"
-#include "regs.h"
-#include "sm_leds.h"
-#include "debug.h"
-
-// Timeouts etc.
-static const uint16_t ALERT_BEEP_DURATION_MS =			1000;
-static const uint16_t BUTTON_BEEP_DURATION_MS =			50;
-
-
-
-// Assign timers.
-enum {
-	TIMER_0 = CFG_TIMER_SM_LEDS,
-	TIMER_DELAY = TIMER_0,
-	NEXT_TIMER
-};
-STATIC_ASSERT((NEXT_TIMER - TIMER_0) <= CFG_TIMER_COUNT_SM_LEDS);
-
-
-
-int8_t sm_leds(EventSmContextBase* context, event_t* ev);
-
-
-#define start_timer(tid_, timeout_) my_context->timer_cookie[(tid_) - TIMER_0] = eventTimerStart((tid_), (timeout_))
-#define case_timer(tid_) \
-case EVENT_MK_TIMER_EVENT_ID(tid_): \
-if (event_get_param16(*ev) != my_context->timer_cookie[(tid_) - TIMER_0])  \
-break;
-
-#endif

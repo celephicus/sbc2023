@@ -39,20 +39,20 @@ enum {
 	MODBUS_FRAME_IDX_DATA,
 };
 
-// Event IDs sent as callback from driver. Codes from 0xx are generic, 1xx are slave only, 2xx are master.
+// Event IDs sent as callback from driver. Note sorted by generic, slave or master. And IDs assigned to align with 4 bit boundaries for use with a mask.
 enum {
-	MODBUS_CB_EVT_INVALID_CRC			= 1,	// Request/response CRC incorrect.
-	MODBUS_CB_EVT_OVERFLOW				= 2,	// Request/response overflowed internal buffer.
-	MODBUS_CB_EVT_INVALID_LEN			= 3,	// Request/response length too small.
-	MODBUS_CB_EVT_INVALID_ID			= 4,	// Request/response slave ID invalid.
+	MODBUS_CB_EVT_MS_INVALID_CRC = 0,			// MASTER/SLAVE, request/response CRC incorrect.
+	MODBUS_CB_EVT_MS_OVERFLOW = 1,				// MASTER/SLAVE, request/response overflowed internal buffer.
+	MODBUS_CB_EVT_MS_INVALID_LEN = 2,			// MASTER/SLAVE, request/response length too small.
+	MODBUS_CB_EVT_MS_INVALID_ID = 3,			// MASTER/SLAVE, request/response slave ID invalid.
 
-	MODBUS_CB_EVT_REQ_OK				= 100,	// Sent by SLAVE, request received with our slave ID and correct CRC.
-	MODBUS_CB_EVT_REQ_X					= 101,	// Sent by SLAVE, we have a request for another slave ID.
+	MODBUS_CB_EVT_S_REQ_OK = 4,					// SLAVE, request received with our slave ID and correct CRC.
+	MODBUS_CB_EVT_S_REQ_X = 5,					// SLAVE, we have a request for another slave ID.
 
-	MODBUS_CB_EVT_RESP_OK				= 200,	// Sent by MASTER, response received with ID & Function Code matching request, with correct CRC.
-	MODBUS_CB_EVT_NO_RESP				= 201,	// Sent by MASTER, NO response received, either timeout or new master request initiated.
-	MODBUS_CB_EVT_RESP_BAD_SLAVE_ID		= 202,	// Sent by MASTER, slave ID in response did not match request, unusual...
-	MODBUS_CB_EVT_RESP_BAD_FUNC_CODE	= 203,	// Sent by MASTER, response Function Code wrong.
+	MODBUS_CB_EVT_M_RESP_OK = 8,				// MASTER, response received with ID & Function Code matching request, with correct CRC.
+	MODBUS_CB_EVT_M_NO_RESP = 9,				// MASTER, NO response received, either timeout or new master request initiated.
+	MODBUS_CB_EVT_M_RESP_BAD_SLAVE_ID = 10,		// MASTER, slave ID in response did not match request, unusual...
+	MODBUS_CB_EVT_M_RESP_BAD_FUNC_CODE = 11,	// MASTER, response Function Code wrong.
 };
 
 // Get response, len set to length of buffer, returns false if overflow. On return len is set to number of bytes copied.

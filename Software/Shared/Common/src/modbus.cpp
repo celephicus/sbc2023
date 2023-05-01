@@ -7,6 +7,8 @@
 
 #include "modbus.h"
 
+#include "gpio.h"
+
 /* Customisation for AVR target. */
 #if defined(__AVR__)
  #include <avr/pgmspace.h>
@@ -44,7 +46,8 @@ static struct {
 	modbusSendBufFunc send;					// Function to send a buffer.
 	modbusReceiveCharFunc recv;				// Function to receive a char. 
 	uint8_t slave_id;						// Slave ID/address.
-
+	uint16_t char_micros;					// Character time in us (1E6 / baud).
+	
 	// Host callbacks...
 	modbus_response_cb cb_resp;				// Callback to host.
 	modbus_timing_debug_cb debug_timing_cb;	// Callback function for debugging timing.
@@ -91,7 +94,8 @@ void modbusInit(modbusSendBufFunc send, modbusReceiveCharFunc recv, uint16_t res
 	f_modbus_ctx.cb_resp = cb;
 	TIMER_STOP_WITH_CB(&f_modbus_ctx.start_time, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT);
 	TIMER_STOP_WITH_CB(&f_modbus_ctx.rx_timestamp_micros, MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT);
-	f_modbus_ctx.rx_timeout_micros = utilsLimitMin((uint16_t)(15UL * 1000UL*1000UL / baud), (uint16_t)750U);	// Timeout 1.5 character times minimum 750us.
+	f_modbus_ctx.char_micros = (uint16_t)(1000UL*1000UL*10UL / baud);	// 10 bit times for one character. 
+	f_modbus_ctx.rx_timeout_micros = utilsLimitMin<uint16_t>(15U * f_modbus_ctx.char_micros / 10U, 750U);	// Timeout 1.5 character times minimum 750us.
 	f_modbus_ctx.resp_timeout_millis = response_timeout;
 }
 void modbusSetSlaveId(uint8_t id) { f_modbus_ctx.slave_id = id; }
@@ -110,15 +114,18 @@ void modbusSlaveSend(const uint8_t* frame, uint8_t sz) {
 	
 	// CRC is added in LITTLE ENDIAN!! 
 	bufferFrameAddU16(&f_modbus_ctx.buf_tx, utilsU16_native_to_le(modbusCrc(f_modbus_ctx.buf_tx.buf, bufferFrameLen(&f_modbus_ctx.buf_tx))));
-	while (modbusIsBusy())	// If we are still transmitting or waiting a response then keep doing it.
+	while (modbusIsBusy()) {	// If we are still transmitting or waiting a response then keep doing it.
+gpioSp4Set();			
 		modbusService();
+gpioSp4Clear();
+	}
 	modbusSendRaw(f_modbus_ctx.buf_tx.buf, bufferFrameLen(&f_modbus_ctx.buf_tx));
 }
 void modbusMasterSend(const uint8_t* frame, uint8_t sz) {
 	// If we start a new frame _BEFORE_ the last one has received a response but within the timeout period, send a response timeout event.
 	if (timer_is_active(&f_modbus_ctx.start_time)) {				
 		TIMER_STOP_WITH_CB(&f_modbus_ctx.start_time, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT);
-		f_modbus_ctx.cb_resp(MODBUS_CB_EVT_NO_RESP);
+		f_modbus_ctx.cb_resp(MODBUS_CB_EVT_M_NO_RESP);
 	}
 	
 	modbusSlaveSend(frame, sz);
@@ -151,17 +158,17 @@ bool modbusIsBusy() {
 // Generic frame checker, checks a few things in the frame.
 uint8_t modbusVerifyFrameValid(const BufferFrame* f) {
 	if (bufferFrameOverflow(f))			// If buffer overflow then just exit...
-		return MODBUS_CB_EVT_INVALID_LEN;
+		return MODBUS_CB_EVT_MS_INVALID_LEN;
 
 	const uint8_t frame_len = bufferFrameLen(f);
 	if (frame_len < 5)							// Frame too small.
-		return MODBUS_CB_EVT_INVALID_LEN;
+		return MODBUS_CB_EVT_MS_INVALID_LEN;
 	if (!is_id_legal(f->buf[MODBUS_FRAME_IDX_SLAVE_ID]))
-		return MODBUS_CB_EVT_INVALID_ID;
+		return MODBUS_CB_EVT_MS_INVALID_ID;
 	
 	// Bad CRC. Note CRC is LITTLE ENDIAN on the wire!
 	if (utilsU16_le_to_native(*(const uint16_t*)(&f->buf[frame_len - 2])) != modbusCrc(f->buf, frame_len - 2)) 
-		return MODBUS_CB_EVT_INVALID_CRC;		
+		return MODBUS_CB_EVT_MS_INVALID_CRC;		
 	return 0;
 }
 
@@ -186,7 +193,7 @@ void modbusService() {
 	// Master may be waiting for a reply from a slave. On timeout, flag timeout to callback.
 	// This will only be called on RX timeout, which will only happen if at least one character has been received.
 	if (TIMER_IS_TIMEOUT_WITH_CB((uint16_t)millis(), &f_modbus_ctx.start_time, f_modbus_ctx.resp_timeout_millis, MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT))
-		f_modbus_ctx.cb_resp(MODBUS_CB_EVT_NO_RESP);
+		f_modbus_ctx.cb_resp(MODBUS_CB_EVT_M_NO_RESP);
 
 	// Service RX timer, timeout with data is a frame.
 	if (TIMER_IS_TIMEOUT_WITH_CB((uint16_t)micros(), &f_modbus_ctx.rx_timestamp_micros, f_modbus_ctx.rx_timeout_micros, MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT)) {
@@ -199,20 +206,20 @@ void modbusService() {
 					f_modbus_ctx.cb_resp(rx_frame_valid);
 				else { 	// Do further checks as we know what the response should contain...
 					if (f_modbus_ctx.buf_rx.buf[MODBUS_FRAME_IDX_SLAVE_ID] != f_modbus_ctx.buf_tx.buf[MODBUS_FRAME_IDX_SLAVE_ID])	// Wrong slave id.
-						f_modbus_ctx.cb_resp(MODBUS_CB_EVT_RESP_BAD_SLAVE_ID);
+						f_modbus_ctx.cb_resp(MODBUS_CB_EVT_M_RESP_BAD_SLAVE_ID);
 					else if (f_modbus_ctx.buf_rx.buf[MODBUS_FRAME_IDX_FUNCTION] != f_modbus_ctx.buf_tx.buf[MODBUS_FRAME_IDX_FUNCTION])	// Wrong Function code.
-						f_modbus_ctx.cb_resp(MODBUS_CB_EVT_RESP_BAD_FUNC_CODE);
+						f_modbus_ctx.cb_resp(MODBUS_CB_EVT_M_RESP_BAD_FUNC_CODE);
 					else
-						f_modbus_ctx.cb_resp(MODBUS_CB_EVT_RESP_OK);	// We got a valid response!
+						f_modbus_ctx.cb_resp(MODBUS_CB_EVT_M_RESP_OK);	// We got a valid response!
 				}
 			}
 			else {						// Master NOT waiting, must be a request from someone, so flag it.
 				if (0U != rx_frame_valid)		// Some basic error in the frame...
 					f_modbus_ctx.cb_resp(rx_frame_valid);
 				else if (modbusGetSlaveId() != f_modbus_ctx.buf_rx.buf[MODBUS_FRAME_IDX_SLAVE_ID])	// Not for us...
-					f_modbus_ctx.cb_resp(MODBUS_CB_EVT_REQ_X);
+					f_modbus_ctx.cb_resp(MODBUS_CB_EVT_S_REQ_X);
 				else
-					f_modbus_ctx.cb_resp(MODBUS_CB_EVT_REQ_OK);	// We got a valid request!
+					f_modbus_ctx.cb_resp(MODBUS_CB_EVT_S_REQ_OK);	// We got a valid request!
 			}
 		}
 		timing_debug(MODBUS_TIMING_DEBUG_EVENT_RX_FRAME, false);

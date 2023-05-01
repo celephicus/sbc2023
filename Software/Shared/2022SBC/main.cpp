@@ -13,7 +13,6 @@
 FILENUM(1);
 
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
-#include "lcd_driver.h"
 #include "event.h"
 #include "app.h"
 #endif
@@ -46,11 +45,13 @@ static bool console_cmds_user(char* cmd) {
 		const uint8_t idx = consoleStackPop(); if (idx >= DRIVER_BED_POS_PRESET_COUNT) consoleRaise(CONSOLE_RC_ERROR_USER);
 		fori (CFG_TILT_SENSOR_COUNT) driverPresets(idx)[i] = consoleStackPop();
 		} break;
+#if 0		
 	case /** LCD **/ 0xdcce: {
 		const char* msg = (const char*)consoleStackPop();
 		const uint8_t timeout = (uint8_t)consoleStackPop();
 		lcdDriverWrite(consoleStackPop(), timeout, PSTR("%s"), msg);
 		} break;
+#endif		
 	case /** BL **/ 0x728b: driverSetLcdBacklight(consoleStackPop()); break;
 	// Events & trace...
 	case /** EVENT **/ 0x8a29: eventPublish(consoleStackPop()); break;

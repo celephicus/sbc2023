@@ -11,6 +11,17 @@
 #include "sbc2022_modbus.h"
 FILENUM(2);
 
+// Various states can be sent out to the spare output pins for debugging on a CRO.
+#define CRO_DEBUG_SENSOR_RESPONSE_BAD(_s) gpioSp5Write(_s)
+#define CRO_DEBUG_SENSOR_RESPONSE_UNEXPECTED(_s) gpioSp5Write(_s)
+#define CRO_DEBUG_RELAY_RESPONSE_BAD(_s)
+#define CRO_DEBUG_RELAY_RESPONSE_UNEXPECTED(_s)
+#define CRO_DEBUG_SENSOR_RESPONSE_NONE(_s)
+#define CRO_DEBUG_RELAY_RESPONSE_NONE(_s)
+#define CRO_DEBUG_MODBUS_EVENT_UNKNOWN(_s)
+#define CRO_DEBUG_MODBUS_SCHED_START(_s) gpioSp7Write(_s)
+#define CRO_DEBUG_MODBUS_HANDLER(_s) gpioSp3Write(_s)
+
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 
 #include "sw_scanner.h"
@@ -135,7 +146,7 @@ static uint8_t write_holding_register(uint16_t address, uint16_t value) {
 
 static void do_handle_modbus_cb(uint8_t evt, const uint8_t* frame, uint8_t frame_len) {
 	switch (evt) {
-		case MODBUS_CB_EVT_REQ_OK: 					// Slaves only respond if we get a request. This will have our slave ID.
+		case MODBUS_CB_EVT_S_REQ_OK: 					// Slaves only respond if we get a request. This will have our slave ID.
 		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
 			case MODBUS_FC_WRITE_SINGLE_REGISTER: {	// REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
 				if (8 == frame_len) {
@@ -181,50 +192,47 @@ enum { SLAVE_IDX_SENSOR_0 = 0, SLAVE_IDX_RELAY = CFG_TILT_SENSOR_COUNT, };
  * The MODBUS callback handler will set the corresponding bit in this flag register, and set the appropriate status for the sensor & relay,
  * and the tilt value for the sensor. */
 static struct {
-	uint8_t status_set;
 	uint8_t error_counts[CFG_TILT_SENSOR_COUNT + 1];
 	bool schedule_done;
 } f_slave_status;
 
-static const uint8_t MAX_MODBUS_ERRORS = 2;		// Allow this many consecutive errors before flagging.
-
-static void slave_update_start() { f_slave_status.status_set = 0U; }
-static void slave_status_set(uint8_t slave_idx) { f_slave_status.status_set |= _BV(slave_idx); }
-static bool slave_is_status_set(uint8_t slave_idx) { return f_slave_status.status_set & _BV(slave_idx); }
 static void slave_clear_errors(uint8_t slave_idx) { f_slave_status.error_counts[slave_idx] = 0U; }
 static void slave_record_error(uint8_t slave_idx) { if (f_slave_status.error_counts[slave_idx] < 100) f_slave_status.error_counts[slave_idx] += 1;	}
-static bool slave_too_many_errors(uint8_t slave_idx) { return f_slave_status.error_counts[slave_idx] > MAX_MODBUS_ERRORS; }
+static bool slave_too_many_errors(uint8_t slave_idx) { return f_slave_status.error_counts[slave_idx] > REGS[REGS_IDX_MAX_SLAVE_ERRORS]; }
 
 static void set_schedule_done() { f_slave_status.schedule_done = true; }
 bool driverSensorUpdateAvailable() { const bool f = f_slave_status.schedule_done; f_slave_status.schedule_done = false; return f; }
 
 // Set status for any slave.
-static void do_set_slave_status(uint8_t status_reg_idx, regs_t status) {
+static bool do_set_slave_status(uint8_t status_reg_idx, regs_t status) {
 	const uint8_t slave_idx = do_get_slave_idx(status_reg_idx);
 
-	gpioSp6Write(true);							// Debug response received.
-
-	if (!slave_is_status_set(slave_idx)) {				// Only process status once per slave per update cycle.
-		slave_status_set(slave_idx);
-
-		if (status >= SBC2022_MODBUS_STATUS_SLAVE_OK) {		// Happy days, no error, clear counter and pass on status.
-			slave_clear_errors(slave_idx);
+	if (status >= SBC2022_MODBUS_STATUS_SLAVE_OK) {		// Happy days, no error, clear counter and pass on status.
+		slave_clear_errors(slave_idx);
+		REGS[status_reg_idx] = status;
+	}
+	else {													// Error!			
+		// Record all errors for debugging, but only for enabled sensors. 
+		if (REGS_IDX_RELAY_STATUS == status_reg_idx)
+			REGS[REGS_IDX_RELAY_FAULTS] += 1U;
+		else if (driverSlaveIsEnabled(slave_idx))		// Only count errors if a slave is enabled. 
+			REGS[REGS_IDX_SENSOR_0_FAULTS + slave_idx] += 1U;
+				
+		// Flag error if count > max.
+		slave_record_error(slave_idx);
+		if (slave_too_many_errors(slave_idx)) {
 			REGS[status_reg_idx] = status;
-		}
-		else {													// Error, add to count, record all errors for debugging, flag error if count > max.
-			if (driverSlaveIsEnabled(slave_idx))		// Only count errors if a slave is enabled. 
-				REGS[(REGS_IDX_RELAY_STATUS != status_reg_idx) ? REGS_IDX_SENSOR_FAULT_COUNTER : REGS_IDX_RELAY_FAULT_COUNTER] += 1U;
-			slave_record_error(slave_idx);
-			if (slave_too_many_errors(slave_idx)) {
-				REGS[status_reg_idx] = status;
-				if (REGS_IDX_RELAY_STATUS != status_reg_idx)	// Write sensor bad value for sensors only.
-					REGS[REGS_IDX_TILT_SENSOR_0 + slave_idx] = SBC2022_MODBUS_TILT_FAULT;
-			}
+			if (REGS_IDX_RELAY_STATUS != status_reg_idx)	// Write sensor bad value for sensors only.
+				REGS[REGS_IDX_TILT_SENSOR_0 + slave_idx] = SBC2022_MODBUS_TILT_FAULT;
 		}
 	}
+	return true;
 }
 
-bool driverSlaveIsEnabled(uint8_t slave_idx) { return !(REGS[REGS_IDX_SLAVE_DISABLE] & (REGS_SLAVE_DISABLE_MASK_TILT_0 << slave_idx)); }
+// Change to driverSensorIsEnabled(). 
+bool driverSlaveIsEnabled(uint8_t slave_idx) { 
+	return !(REGS[REGS_IDX_ENABLES] & (REGS_ENABLES_MASK_SENSOR_DISABLE_0 << slave_idx)); 
+}
 
 int8_t driverGetFaultySensor() {
 	fori (CFG_TILT_SENSOR_COUNT) {
@@ -239,10 +247,10 @@ static void do_handle_modbus_cb(uint8_t evt, const uint8_t* frame, uint8_t frame
 	const uint8_t sensor_idx = slave_id - SBC2022_MODBUS_SLAVE_ID_SENSOR_0;				// Only applies to sensors.
 	const bool is_sensor_response = sensor_idx < SBC2022_MODBUS_SLAVE_COUNT_SENSOR;
 	const bool is_relay_response = SBC2022_MODBUS_SLAVE_ID_RELAY == slave_id;
-
+	bool status_set = false;
+	
 	switch (evt) {
-
-		case MODBUS_CB_EVT_RESP_OK:			// Good response...
+		case MODBUS_CB_EVT_M_RESP_OK:			// Good response...
 		/* Possible of callbacks are:
 		 * MODBUS_CB_EVT_RESP_OK on a correct response,
 		 * or one of:
@@ -259,7 +267,6 @@ static void do_handle_modbus_cb(uint8_t evt, const uint8_t* frame, uint8_t frame
 
 		// Handle response from Sensors.
 		if (is_sensor_response) {	// Check if Sensor slave ID...
-			gpioSp4Write(false);
 
 			if (MODBUS_FC_READ_HOLDING_REGISTERS == frame[MODBUS_FRAME_IDX_FUNCTION]) { // REQ: [ID FC=3 addr:16 count:16(max 125)] RESP: [ID FC=3 byte-count value-0:16, ...]
 				uint16_t address = modbusGetU16(&modbusPeekRequestData()[MODBUS_FRAME_IDX_DATA]); // Get register address from request frame.
@@ -268,49 +275,58 @@ static void do_handle_modbus_cb(uint8_t evt, const uint8_t* frame, uint8_t frame
 					if ((byte_count >= 4) && (SBC2022_MODBUS_REGISTER_SENSOR_TILT == address)) { 	// We expect to read _AT_LEAST_ two registers from this address...
 						const int16_t tilt = (int16_t)modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 1 + 0]);
 						REGS[REGS_IDX_TILT_SENSOR_0 + sensor_idx] = (regs_t)(tilt); 
-						do_set_slave_status(REGS_IDX_SENSOR_STATUS_0 + sensor_idx, modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 1 + 2]));
+						status_set = do_set_slave_status(REGS_IDX_SENSOR_STATUS_0 + sensor_idx, modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 1 + 2]));
 					}
 				}
 			}
-			do_set_slave_status(REGS_IDX_SENSOR_STATUS_0+sensor_idx, SBC2022_MODBUS_STATUS_SLAVE_BAD_RESPONSE); // Ignored if status already set.
+			if (!status_set) {
+				status_set = do_set_slave_status(REGS_IDX_SENSOR_STATUS_0+sensor_idx, SBC2022_MODBUS_STATUS_SLAVE_BAD_RESPONSE);
+				CRO_DEBUG_SENSOR_RESPONSE_UNEXPECTED(true);		
+			}
 		}
 
 		else if (is_relay_response) {
-			gpioSp4Write(false);
 			if ((8 == frame_len) && (MODBUS_FC_WRITE_SINGLE_REGISTER == frame[MODBUS_FRAME_IDX_FUNCTION])) { // REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
 				uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
-				if (SBC2022_MODBUS_REGISTER_RELAY == address)
-					do_set_slave_status(REGS_IDX_RELAY_STATUS, SBC2022_MODBUS_STATUS_SLAVE_OK);
+				if (SBC2022_MODBUS_REGISTER_RELAY == address) 
+					status_set = do_set_slave_status(REGS_IDX_RELAY_STATUS, SBC2022_MODBUS_STATUS_SLAVE_OK);
 			}
-			do_set_slave_status(REGS_IDX_RELAY_STATUS, SBC2022_MODBUS_STATUS_SLAVE_BAD_RESPONSE);
+			if (!status_set) {
+				status_set = do_set_slave_status(REGS_IDX_RELAY_STATUS, SBC2022_MODBUS_STATUS_SLAVE_BAD_RESPONSE);
+				CRO_DEBUG_RELAY_RESPONSE_UNEXPECTED(true);
+			}
 		}
 		break;
 
-		case MODBUS_CB_EVT_OVERFLOW: 		// Buffer overflow...
-		case MODBUS_CB_EVT_INVALID_CRC: case MODBUS_CB_EVT_INVALID_LEN: case MODBUS_CB_EVT_INVALID_ID: 	// Mangled response.
-		case MODBUS_CB_EVT_RESP_BAD_SLAVE_ID: case MODBUS_CB_EVT_RESP_BAD_FUNC_CODE:	// Unusual...
+		case MODBUS_CB_EVT_MS_OVERFLOW: 		// Buffer overflow...
+		case MODBUS_CB_EVT_MS_INVALID_CRC: case MODBUS_CB_EVT_MS_INVALID_LEN: case MODBUS_CB_EVT_MS_INVALID_ID: 	// Mangled response.
+		case MODBUS_CB_EVT_M_RESP_BAD_SLAVE_ID: case MODBUS_CB_EVT_M_RESP_BAD_FUNC_CODE:	// Unusual...
 		if (is_sensor_response) {
-			gpioSp4Write(false);
-			do_set_slave_status(REGS_IDX_SENSOR_STATUS_0+sensor_idx, SBC2022_MODBUS_STATUS_SLAVE_BAD_RESPONSE);
+			status_set = do_set_slave_status(REGS_IDX_SENSOR_STATUS_0+sensor_idx, SBC2022_MODBUS_STATUS_SLAVE_BAD_RESPONSE);
+			CRO_DEBUG_SENSOR_RESPONSE_BAD(true);		
 		}
 		else if (is_relay_response) {
-			gpioSp4Write(false);
-			do_set_slave_status(REGS_IDX_RELAY_STATUS, SBC2022_MODBUS_STATUS_SLAVE_BAD_RESPONSE);
+			status_set = do_set_slave_status(REGS_IDX_RELAY_STATUS, SBC2022_MODBUS_STATUS_SLAVE_BAD_RESPONSE);
+			CRO_DEBUG_RELAY_RESPONSE_BAD(true);		
 		}
 		break;
 
-		case MODBUS_CB_EVT_NO_RESP:	// Most likely...
+		case MODBUS_CB_EVT_M_NO_RESP:	// Most likely...
 		if (is_sensor_response) {
-			gpioSp4Write(false);
-			do_set_slave_status(REGS_IDX_SENSOR_STATUS_0 + sensor_idx, SBC2022_MODBUS_STATUS_SLAVE_NOT_PRESENT);
+			status_set = do_set_slave_status(REGS_IDX_SENSOR_STATUS_0 + sensor_idx, SBC2022_MODBUS_STATUS_SLAVE_NOT_PRESENT);
+			CRO_DEBUG_SENSOR_RESPONSE_NONE(true);
 		}
 		else if (is_relay_response) {
-			gpioSp4Write(false);
-			do_set_slave_status(REGS_IDX_RELAY_STATUS, SBC2022_MODBUS_STATUS_SLAVE_NOT_PRESENT);
+			status_set = do_set_slave_status(REGS_IDX_RELAY_STATUS, SBC2022_MODBUS_STATUS_SLAVE_NOT_PRESENT);
+			CRO_DEBUG_RELAY_RESPONSE_NONE(true);
 		}
 		break;
 
 	}	// Closes `switch (evt) {'.
+	
+	if (!status_set) {
+		CRO_DEBUG_MODBUS_EVENT_UNKNOWN(true);
+	}
 }
 
 #endif
@@ -319,14 +335,28 @@ void modbus_cb(uint8_t evt) {
 	uint8_t frame[MODBUS_MAX_RESP_SIZE];
 	uint8_t frame_len = MODBUS_MAX_RESP_SIZE;	// Must call modbusGetResponse() with buffer length set.
 	const bool resp_ok = modbusGetResponse(&frame_len, frame);
-
+	const bool master = (modbusGetSlaveId() == 0);
+	const uint8_t req_slave_id = modbusPeekRequestData()[MODBUS_FRAME_IDX_SLAVE_ID]; // Only valid if we are master. 
+	
 	// Dump MODBUS...
-	gpioSp0Write(true);
-	if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS) {
+	if (
+	  (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS) &&		// Master enable.
+	  (REGS[REGS_IDX_MODBUS_DUMP_EVENT_MASK] & _BV(evt)) &&						// event matches mask.
+	  ( 
+	    (!master) ||															// Either NOT master or...
+	    (0 == REGS[REGS_IDX_MODBUS_DUMP_SLAVE_ID]) ||							// Slave ID to dump is set to zero, so all, or...
+		(req_slave_id == REGS[REGS_IDX_MODBUS_DUMP_SLAVE_ID])					// Slave ID in request matches.
+	  )
+	) {
 		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("M:"));
 		uint32_t timestamp = millis();
 		consolePrint(CFMT_U_D|CFMT_M_NO_LEAD, (console_cell_t)&timestamp);
-		consolePrint(CFMT_U, evt);
+		if (master) {								// For master print request ID as well. 
+			consolePrint(CFMT_C|CFMT_M_NO_SEP, '(');
+			consolePrint(CFMT_D|CFMT_M_NO_SEP, req_slave_id);
+			consolePrint(CFMT_C, ')');
+		}
+		consolePrint(CFMT_D, evt);
 		const uint8_t* p = frame;
 		fori (frame_len)
 			consolePrint(CFMT_X2|CFMT_M_NO_SEP, *p++);
@@ -335,8 +365,9 @@ void modbus_cb(uint8_t evt) {
 		consolePrint(CFMT_NL, 0);
 	}
 
+	CRO_DEBUG_MODBUS_HANDLER(true);					// Debug that we are in handler.
 	do_handle_modbus_cb(evt, frame, frame_len);
-	gpioSp0Write(0);
+	CRO_DEBUG_MODBUS_HANDLER(false);
 }
 
 // Stuff for debugging MODBUS timing.
@@ -530,7 +561,6 @@ void service_devices() {
 			}
 
 			if ((uint16_t)(f_accel_data.raw_sample_counter - f_accel_data.accum_samples_prev) >= REGS[REGS_IDX_ACCEL_AVG]) {	// Check for time to average accumulated readings.
-				gpioSp4Set();
 				REGS[REGS_IDX_ACCEL_SAMPLE_COUNT] += 1;
 				fori (3)
 					REGS[REGS_IDX_ACCEL_X + i] = (regs_t)f_accel_data.r[i];
@@ -545,8 +575,6 @@ void service_devices() {
 				// Filter tilt value a bit. We do not bother to reset the filter if the filter constant has changed as this will only happen during manual tuning.
 				REGS[REGS_IDX_ACCEL_TILT_ANGLE_LP] = (regs_t)utilsFilter(&f_accel_data.tilt_motion_disc_filter_accum, tilt_i16, (uint8_t)REGS[REGS_IDX_ACCEL_TILT_MOTION_DISC_FILTER_K], f_accel_data.reset_filter);
 				f_accel_data.reset_filter = false;
-
-				gpioSp4Clear();
 			}
 		}
 	}
@@ -637,9 +665,16 @@ static void ir_service() {
 static const uint16_t SLAVE_QUERY_PERIOD = 12U;
 
 static void modbus_query_slave_flag_start() {
-	gpioSp4Write(true);		// Set at start of query, clear in response handler.
-	gpioSp6Write(false);		// Clear error indicator, might get set in response handler.
+	// Clear any set debug outputs.
+	CRO_DEBUG_SENSOR_RESPONSE_BAD(false);
+	CRO_DEBUG_SENSOR_RESPONSE_UNEXPECTED(false);
+	CRO_DEBUG_RELAY_RESPONSE_BAD(false);
+	CRO_DEBUG_RELAY_RESPONSE_UNEXPECTED(false);
+	CRO_DEBUG_SENSOR_RESPONSE_NONE(false);
+	CRO_DEBUG_RELAY_RESPONSE_NONE(false);
+	CRO_DEBUG_MODBUS_EVENT_UNKNOWN(false);
 }
+
 static int8_t thread_query_slaves(void* arg) {
 	static BufferFrame req;
 
@@ -647,9 +682,7 @@ static int8_t thread_query_slaves(void* arg) {
 	while (1) {
 		static uint8_t sidx;
 
-		gpioSp5Write(true);		// Trigger on rising edge for start of query schedule.
-
-		slave_update_start();
+		CRO_DEBUG_MODBUS_SCHED_START(true);			// Trigger on rising edge for start of query schedule.
 
 		// Write to relay module...
 		modbus_query_slave_flag_start();
@@ -661,9 +694,10 @@ static int8_t thread_query_slaves(void* arg) {
 		bufferFrameAddU16(&req, utilsU16_native_to_be(REGS[REGS_IDX_RELAY_STATE]));
 		THREAD_WAIT_UNTIL(!modbusIsBusy());
 		modbusMasterSend(req.buf, bufferFrameLen(&req));
+
 		THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(SLAVE_QUERY_PERIOD));
 
-		gpioSp5Write(false);			// Width is length of 1 part of schedule.
+		CRO_DEBUG_MODBUS_SCHED_START(false);		// Width is length of 1 part of schedule.
 
 		// Read from all slaves...
 		for (sidx = 0; sidx < CFG_TILT_SENSOR_COUNT; sidx += 1) {
@@ -681,7 +715,7 @@ static int8_t thread_query_slaves(void* arg) {
 		}
 
 		// Should have all responses or timeouts by now so check all used and enabled slaves for fault state.
-		// TODO: check for all bits in update register set.
+		// TODO: assert all bits in update register set.
 		regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_FAULT, driverGetFaultySensor() >= 0);
 		regsWriteMaskFlags(REGS_FLAGS_MASK_RELAY_FAULT, slave_too_many_errors(SLAVE_IDX_RELAY));
 
@@ -748,7 +782,6 @@ static void switches_service() { /* empty */ }
 #endif
 
 // Spare GPIO, used for debugging at present. Other spare GPIO setup in modbus_init().
-// At present all hardware versions have the same set of spare GPIO, but this might change, which will require a compile time test on CFG_BUILD in this function. 
 static void setup_spare_gpio() {
 	gpioSp3SetModeOutput();
 	gpioSp4SetModeOutput();
