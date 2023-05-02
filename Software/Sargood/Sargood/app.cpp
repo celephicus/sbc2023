@@ -80,6 +80,7 @@ enum {
 };
 static struct {
 	thread_control_t tcb_cmd;
+	thread_control_t tcb_rs232_cmd;
 	uint8_t cmd_req;
 	uint16_t timers[N_APP_TIMER];
 	uint8_t save_preset_attempts;
@@ -366,6 +367,62 @@ do_manual:	if (check_not_awake()) {
 	THREAD_END();
 }
 
+static bool timer_is_active(const uint16_t* then) {	// Check if timer is running, might be useful to check if a timer is still running.
+	return (*then != (uint16_t)0U);
+}
+static void timer_start(uint16_t now, uint16_t* then) { 	// Start timer, note extends period by 1 if necessary to make timere flag as active.
+	*then = now;
+	if (!timer_is_active(then))
+	*then = (uint16_t)-1;
+}
+static void timer_stop(uint16_t* then) { 	// Stop timer, it is now inactive and timer_is_timeout() will never return true;
+	*then = (uint16_t)0U;
+}
+static bool timer_is_timeout(uint16_t now, uint16_t* then, uint16_t duration) { // Check for timeout and return true if so, then timer will be inactive.
+	if (
+	  timer_is_active(then) &&	// No timeout unless set.
+	  (now - *then > duration)
+	) {
+		timer_stop(then);
+		return true;
+	}
+	return false;
+}
+
+static const uint16_t RS232_CMD_TIMEOUT_MILLIS = 1000U;
+
+static int8_t thread_rs232_cmd(void* arg) {
+	(void)arg;
+	static uint8_t cmd[4];
+	static uint8_t nchs;
+	static uint16_t then;
+	
+	int ch = GPIO_SERIAL_RS232.read();
+	bool timeout = timer_is_timeout((uint16_t)millis(), &then, RS232_CMD_TIMEOUT_MILLIS);
+	
+	THREAD_BEGIN();
+	
+	GPIO_SERIAL_RS232.begin(9600);	
+	GPIO_SERIAL_RS232.print('*');
+	
+	while (1) {
+		THREAD_WAIT_UNTIL((ch >= 0) || timeout);	// Need select(...) call. 
+		if (ch >= 0) {
+			timer_start((uint16_t)millis(), &then);
+			if (nchs < sizeof(cmd)) 
+				cmd[nchs++] = ch;
+		}
+		if (timeout) {
+			const bool ok = ((3 == nchs) && (0U == (uint8_t)(cmd[0]+cmd[1]+cmd[2])));
+			nchs = 0U;
+			eventPublish(EV_REMOTE_CMD, ok, utilsU16_be_to_native(*(uint16_t*)&cmd));
+			memset(cmd, 0, sizeof(cmd));
+		}
+		THREAD_YIELD();
+	}	// Closes `while (1) '...
+	THREAD_END();
+}
+
 bool service_trace_log() {
 	EventTraceItem evt;
 	if (eventTraceRead(&evt)) {
@@ -435,7 +492,7 @@ enum {
 };
 
 // IR command table. Must be sorted on command ID.
-typedef struct { uint8_t ir_cmd, app_cmd; } IrCmdDef;
+typedef struct { uint16_t ir_cmd; uint8_t app_cmd; } IrCmdDef;
 const static IrCmdDef IR_CMD_DEFS[] PROGMEM = {
 	{ 0x00, APP_CMD_WAKEUP},
 	{ 0x01, APP_CMD_STOP},
@@ -455,9 +512,27 @@ const static IrCmdDef IR_CMD_DEFS[] PROGMEM = {
 	{ 0x16, APP_CMD_RESTORE_POS_3},
 	{ 0x17, APP_CMD_RESTORE_POS_4},
 };
+const static IrCmdDef REMOTE_CMD_DEFS[] PROGMEM = {
+	{ 0x3000, APP_CMD_WAKEUP},
+	{ 0x3001, APP_CMD_HEAD_UP},
+	{ 0x3002, APP_CMD_HEAD_DOWN},
+	{ 0x3003, APP_CMD_LEG_UP},
+	{ 0x3004, APP_CMD_LEG_DOWN},
+	{ 0x3009, APP_CMD_STOP},
+		
+	{ 0x3011, APP_CMD_RESTORE_POS_1},
+	{ 0x3012, APP_CMD_RESTORE_POS_2},
+	{ 0x3013, APP_CMD_RESTORE_POS_3},
+	{ 0x3014, APP_CMD_RESTORE_POS_4},
+
+	{ 0x3111, APP_CMD_SAVE_POS_1},
+	{ 0x3112, APP_CMD_SAVE_POS_2},
+	{ 0x3113, APP_CMD_SAVE_POS_3},
+	{ 0x3114, APP_CMD_SAVE_POS_4},
+};
 int ir_cmds_compare(const void* k, const void* elem) { 
 	const IrCmdDef* ir_cmd_def = (const IrCmdDef*)elem;
-	return (int)(uint8_t)(int)k - (int)pgm_read_byte(&ir_cmd_def->ir_cmd); 
+	return (int)(uint16_t)(int)k - (int)pgm_read_word(&ir_cmd_def->ir_cmd); 
 }
 	
 static int8_t sm_ir_rec(EventSmContextBase* context, t_event ev) {
@@ -468,6 +543,11 @@ static int8_t sm_ir_rec(EventSmContextBase* context, t_event ev) {
 		switch(event_id(ev)) {
 			case EV_IR_REC: {
 				const IrCmdDef* ir_cmd_def = (const IrCmdDef*)bsearch((const void*)(int)event_p8(ev), &IR_CMD_DEFS, UTILS_ELEMENT_COUNT(IR_CMD_DEFS), sizeof(IrCmdDef), ir_cmds_compare);
+				if (ir_cmd_def)
+					appCmdRun(pgm_read_byte(&ir_cmd_def->app_cmd));
+			}
+			case EV_REMOTE_CMD: {
+				const IrCmdDef* ir_cmd_def = (const IrCmdDef*)bsearch((const void*)(int)event_p16(ev), &REMOTE_CMD_DEFS, UTILS_ELEMENT_COUNT(REMOTE_CMD_DEFS), sizeof(IrCmdDef), ir_cmds_compare);
 				if (ir_cmd_def)
 					appCmdRun(pgm_read_byte(&ir_cmd_def->app_cmd));
 			}
@@ -795,6 +875,7 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 }
 
 void appInit() {
+	threadInit(&f_app_ctx.tcb_rs232_cmd);
 	threadInit(&f_app_ctx.tcb_cmd);
 	eventInit();
 	lcd_init();
@@ -803,6 +884,7 @@ void appInit() {
 }
 
 void appService() {
+	threadRun(&f_app_ctx.tcb_rs232_cmd, thread_rs232_cmd, NULL);
 	threadRun(&f_app_ctx.tcb_cmd, thread_cmd, NULL);
 	t_event ev;
 
