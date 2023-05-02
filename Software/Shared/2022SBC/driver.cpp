@@ -799,6 +799,7 @@ typedef struct {
 	regs_t regs[COUNT_REGS];		// Must be first item in struct.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 	int16_t pos_presets[DRIVER_BED_POS_PRESET_COUNT * CFG_TILT_SENSOR_COUNT];
+	int16_t axis_limits[CFG_TILT_SENSOR_COUNT][2]; // low-0, high-0, low-1, high-1, ...
 	uint8_t trace_mask[EVENT_TRACE_MASK_SIZE];
 #endif
 } NvData;
@@ -824,6 +825,9 @@ static void nv_set_defaults(void* data, const void* defaultarg) {
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 	fori(DRIVER_BED_POS_PRESET_COUNT)
 		driverPresetSetInvalid(i);
+	fori (CFG_TILT_SENSOR_COUNT) 
+		driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_LOWER] = driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_UPPER] = SBC2022_MODBUS_TILT_FAULT;
+			
 #endif
 }
 
@@ -854,6 +858,7 @@ void driverPresetSetInvalid(uint8_t idx) {
 	fori(CFG_TILT_SENSOR_COUNT)
 		driverPresets(idx)[i] = SBC2022_MODBUS_TILT_FAULT;
 }
+int16_t* driverAxisLimits(uint8_t axis_idx) { return l_nv_data.axis_limits[axis_idx]; }
 #endif
 
 static uint8_t nv_init() {

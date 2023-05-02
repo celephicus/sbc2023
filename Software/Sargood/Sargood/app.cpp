@@ -65,11 +65,17 @@ static void axis_stop_all() {
 static uint8_t axis_get_dir(uint8_t axis) {
 	return ((uint8_t)REGS[REGS_IDX_RELAY_STATE] >> (axis*2)) & 3;
 }
-
+static int8_t axis_get_active() {
+	if ((uint8_t)REGS[REGS_IDX_RELAY_STATE] & RELAY_HEAD_MASK) return AXIS_HEAD;
+	if ((uint8_t)REGS[REGS_IDX_RELAY_STATE] & RELAY_FOOT_MASK) return AXIS_FOOT;
+	if ((uint8_t)REGS[REGS_IDX_RELAY_STATE] & RELAY_BED_MASK) return AXIS_BED;
+	if ((uint8_t)REGS[REGS_IDX_RELAY_STATE] & RELAY_TILT_MASK) return AXIS_TILT;
+	return -1;
+}
 static const uint16_t RELAY_RUN_DURATION_MS = 1000U;
 // TODO: Change to 200ms for production. 
 static const uint16_t RELAY_STOP_DURATION_MS = 1000U;
-static const uint16_t WAKEUP_TIMEOUT_SECS = 10U;
+static const uint16_t WAKEUP_TIMEOUT_SECS = 60U;
 static const uint16_t PRESET_SAVE_TIMEOUT_SECS = 5U;
 
 enum {
@@ -176,6 +182,12 @@ static bool check_not_awake() {
 	}
 	return false;
 }
+void do_save_axis_limit(uint8_t axis_idx, uint8_t limit_idx) { 
+	if (SBC2022_MODBUS_TILT_FAULT != (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx])
+		driverAxisLimits(axis_idx)[limit_idx] = (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]; 
+	cmd_done();
+}
+
 static int8_t thread_cmd(void* arg) {
 	(void)arg;
 	static uint8_t preset_idx;
@@ -234,23 +246,48 @@ do_manual:	if (check_not_awake()) {
 				axis_stop_all();
 				break; 
 			}
-				
-			if (!check_relay()) {	// If relay OK...
-				THREAD_START_DELAY();
-				THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(RELAY_RUN_DURATION_MS) || check_stop_command());
-				if (REGS[REGS_IDX_CMD_ACTIVE] == f_app_ctx.cmd_req) {	// If repeat of previous, restart timing. If not then active register will either have new command or idle.
-					cmd_done();
-					load_command();
-					goto do_manual;
+
+			THREAD_START_DELAY();
+			while ((!check_relay()) && (!THREAD_IS_DELAY_DONE(RELAY_RUN_DURATION_MS)) && (!check_stop_command())) {
+				int8_t axis = axis_get_active();
+				if (axis < 0) 
+					goto jog_done;
+				if (axis_get_dir(axis) == AXIS_DIR_UP) { // Pitch increasing...
+					int16_t upper_limit = driverAxisLimits(axis)[DRIVER_AXIS_LIMIT_IDX_UPPER];
+					if ((SBC2022_MODBUS_TILT_FAULT != upper_limit) && ((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis] > (upper_limit - (int16_t)REGS[REGS_IDX_SLEW_DEADBAND]))) {
+						cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
+						goto jog_done;
+					}
 				}
+				else {
+					int16_t lower_limit = driverAxisLimits(axis)[DRIVER_AXIS_LIMIT_IDX_LOWER];
+					if ((SBC2022_MODBUS_TILT_FAULT != lower_limit) && ((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis] < (lower_limit + (int16_t)REGS[REGS_IDX_SLEW_DEADBAND]))) {
+						cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
+						goto jog_done;
+					}
+				}
+				THREAD_WAIT_UNTIL(avail);		// Wait for new reading.
+				
+				THREAD_YIELD();
+			}
+			if (REGS[REGS_IDX_CMD_ACTIVE] == f_app_ctx.cmd_req) {	// If repeat of previous, restart timing. If not then active register will either have new command or idle.
+				cmd_done();
+				load_command();
+				goto do_manual;
 			}
 
-			axis_stop_all();
+jog_done:	axis_stop_all();
 			THREAD_START_DELAY();
 			THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(RELAY_STOP_DURATION_MS));
 			cmd_done();
 			THREAD_YIELD();
 			break;
+
+		// Save current position as axis limit.
+		case APP_CMD_SAVE_LIMIT_HEAD_LOWER: do_save_axis_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_LOWER); THREAD_YIELD();	break;
+		case APP_CMD_SAVE_LIMIT_HEAD_UPPER: do_save_axis_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_UPPER); THREAD_YIELD();	break;
+		case APP_CMD_SAVE_LIMIT_FOOT_LOWER: do_save_axis_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_LOWER); THREAD_YIELD();	break;
+		case APP_CMD_SAVE_LIMIT_FOOT_UPPER: do_save_axis_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_UPPER); THREAD_YIELD();	break;
 
 		// Save current position...
 		case APP_CMD_SAVE_POS_1:

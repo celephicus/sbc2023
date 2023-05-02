@@ -15,6 +15,9 @@ uint8_t* eventGetTraceMask();
 #define DRIVER_BED_POS_PRESET_COUNT 4
 int16_t* driverPresets(uint8_t idx);
 void driverPresetSetInvalid(uint8_t idx);
+enum { DRIVER_AXIS_LIMIT_IDX_LOWER, DRIVER_AXIS_LIMIT_IDX_UPPER };
+int16_t* driverAxisLimits(uint8_t axis_idx);
+
 bool driverSensorUpdateAvailable();
 
 // Return index of first faulty _AND_ enabled sensor, else -1.
