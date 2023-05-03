@@ -74,7 +74,7 @@ static int8_t axis_get_active() {
 }
 static const uint16_t RELAY_RUN_DURATION_MS = 1000U;
 // TODO: Change to 200ms for production. 
-static const uint16_t RELAY_STOP_DURATION_MS = 1000U;
+static const uint16_t RELAY_STOP_DURATION_MS = 200U;
 static const uint16_t WAKEUP_TIMEOUT_SECS = 60U;
 static const uint16_t PRESET_SAVE_TIMEOUT_SECS = 5U;
 
@@ -176,16 +176,21 @@ static bool check_slew_timeout() {
 	return false;
 }
 static bool check_not_awake() {
-	if (!app_timer_is_active(APP_TIMER_WAKEUP)) {
+	if (!(regsFlags() & REGS_FLAGS_MASK_AWAKE)) {
 		cmd_done(APP_CMD_STATUS_NOT_AWAKE);
 		return true;
 	}
 	return false;
 }
 void do_save_axis_limit(uint8_t axis_idx, uint8_t limit_idx) { 
-	if (SBC2022_MODBUS_TILT_FAULT != (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx])
-		driverAxisLimits(axis_idx)[limit_idx] = (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]; 
-	cmd_done();
+	const int16_t tilt = (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx];
+	if (SBC2022_MODBUS_TILT_FAULT != tilt) {
+		driverAxisLimits(axis_idx)[limit_idx] = tilt; 
+		driverNvWrite();
+		cmd_done();
+	}
+	else
+		cmd_done(APP_CMD_STATUS_SENSOR_FAIL_0);
 }
 
 static int8_t thread_cmd(void* arg) {
@@ -223,10 +228,11 @@ static int8_t thread_cmd(void* arg) {
 			cmd_done();
 			THREAD_YIELD();
 			break;
-		
+			
 		// Wakeup command.
 		case APP_CMD_WAKEUP:		
 			app_timer_start(APP_TIMER_WAKEUP, WAKEUP_TIMEOUT_SECS*10U);
+			regsWriteMaskFlags(REGS_FLAGS_MASK_AWAKE, true);
 			eventPublish(EV_WAKEUP, 1);
 			cmd_done();
 			THREAD_YIELD();
@@ -282,7 +288,17 @@ jog_done:	axis_stop_all();
 			cmd_done();
 			THREAD_YIELD();
 			break;
-
+		
+		// Clear all limits.
+		case APP_CMD_CLEAR_LIMITS:		
+			if (!check_not_awake()) {
+				driverAxisLimitsClear();
+				driverNvWrite();
+				cmd_done();
+			}
+			THREAD_YIELD();
+			break;
+		
 		// Save current position as axis limit.
 		case APP_CMD_SAVE_LIMIT_HEAD_LOWER: do_save_axis_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_LOWER); THREAD_YIELD();	break;
 		case APP_CMD_SAVE_LIMIT_HEAD_UPPER: do_save_axis_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_UPPER); THREAD_YIELD();	break;
@@ -312,9 +328,9 @@ jog_done:	axis_stop_all();
 					fori (CFG_TILT_SENSOR_COUNT) // Read sensor value or force it to invalid is not enabled.
 						driverPresets(preset_idx)[i] = driverSlaveIsEnabled(i) ?  REGS[REGS_IDX_TILT_SENSOR_0 + i] : SBC2022_MODBUS_TILT_FAULT;
 				}
-				else
-					driverPresetSetInvalid(preset_idx);
-				// driverNvWrite();
+				else 
+					driverPresetClear(preset_idx);
+				driverNvWrite();
 				cmd_done();
 			}
 			THREAD_YIELD();
@@ -404,6 +420,9 @@ jog_done:	axis_stop_all();
 	THREAD_END();
 }
 
+// RS232 Remote Command
+//
+
 static bool timer_is_active(const uint16_t* then) {	// Check if timer is running, might be useful to check if a timer is still running.
 	return (*then != (uint16_t)0U);
 }
@@ -426,11 +445,12 @@ static bool timer_is_timeout(uint16_t now, uint16_t* then, uint16_t duration) { 
 	return false;
 }
 
-static const uint16_t RS232_CMD_TIMEOUT_MILLIS = 1000U;
+static constexpr uint16_t RS232_CMD_TIMEOUT_MILLIS = 100U;
+static constexpr uint8_t  RS232_CMD_CHAR_COUNT = 4;
 
 static int8_t thread_rs232_cmd(void* arg) {
 	(void)arg;
-	static uint8_t cmd[4];
+	static uint8_t cmd[RS232_CMD_CHAR_COUNT + 1];		// One extra to flag overflow.
 	static uint8_t nchs;
 	static uint16_t then;
 	
@@ -446,13 +466,18 @@ static int8_t thread_rs232_cmd(void* arg) {
 		THREAD_WAIT_UNTIL((ch >= 0) || timeout);	// Need select(...) call. 
 		if (ch >= 0) {
 			timer_start((uint16_t)millis(), &then);
+			eventPublish(EV_REMOTE_DATA, (uint8_t)ch);
 			if (nchs < sizeof(cmd)) 
 				cmd[nchs++] = ch;
 		}
 		if (timeout) {
-			const bool ok = ((3 == nchs) && (0U == (uint8_t)(cmd[0]+cmd[1]+cmd[2])));
+			if (RS232_CMD_CHAR_COUNT == nchs) {
+				uint8_t cs = 0U;
+				fori (RS232_CMD_CHAR_COUNT - 1) cs += cmd[i];
+				if (cmd[RS232_CMD_CHAR_COUNT - 1] == cs)
+					eventPublish(EV_REMOTE_CMD, cmd[2], utilsU16_be_to_native(*(uint16_t*)&cmd[0]));
+			}
 			nchs = 0U;
-			eventPublish(EV_REMOTE_CMD, ok, utilsU16_be_to_native(*(uint16_t*)&cmd));
 			memset(cmd, 0, sizeof(cmd));
 		}
 		THREAD_YIELD();
@@ -485,6 +510,12 @@ static const char* get_cmd_desc(uint8_t cmd) {
 	case APP_CMD_BED_DOWN:		return PSTR("Bed Down");
 	case APP_CMD_TILT_DOWN:		return PSTR("Tilt Down");
 	
+	case APP_CMD_CLEAR_LIMITS:  return PSTR("Clear Limits");
+	case APP_CMD_SAVE_LIMIT_HEAD_LOWER:	return PSTR("Head Limit Low");
+	case APP_CMD_SAVE_LIMIT_HEAD_UPPER:	return PSTR("Head Limit Up");
+	case APP_CMD_SAVE_LIMIT_FOOT_LOWER:	return PSTR("Foot Limit Low");
+	case APP_CMD_SAVE_LIMIT_FOOT_UPPER: return PSTR("Foot Limit Up");
+
 	case APP_CMD_SAVE_POS_1:	return PSTR("Save Pos 1");
 	case APP_CMD_SAVE_POS_2:	return PSTR("Save Pos 2");
 	case APP_CMD_SAVE_POS_3:	return PSTR("Save Pos 3");
@@ -501,18 +532,21 @@ static const char* get_cmd_desc(uint8_t cmd) {
 
 static const char* get_cmd_status_desc(uint8_t cmd) {
 	switch(cmd) {
-	case APP_CMD_STATUS_OK:				return PSTR("OK");
-	case APP_CMD_STATUS_PENDING:		return PSTR("Pending");
-	case APP_CMD_STATUS_BAD_CMD:		return PSTR("Unknown");
-	case APP_CMD_STATUS_RELAY_FAIL:		return PSTR("Relay Fail");
-	case APP_CMD_STATUS_PRESET_INVALID:	return PSTR("Preset Invalid");
-	case APP_CMD_STATUS_SENSOR_FAIL_0:	return PSTR("Head Sensor Bad");
-	case APP_CMD_STATUS_SENSOR_FAIL_1:	return PSTR("Foot Sensor Bad");
-	case APP_CMD_STATUS_NO_MOTION_0:	return PSTR("Head No Motion");
-	case APP_CMD_STATUS_NO_MOTION_1:	return PSTR("Foot No Motion");
-	case APP_CMD_STATUS_SLEW_TIMEOUT:	return PSTR("Timeout");
-
-	default: return PSTR("Unknown Status");
+	case APP_CMD_STATUS_OK:					return PSTR("OK");
+	case APP_CMD_STATUS_NOT_AWAKE:			return PSTR("Not awake");
+	case APP_CMD_STATUS_PENDING:			return PSTR("Pending");
+	case APP_CMD_STATUS_BAD_CMD:			return PSTR("Unknown");
+	case APP_CMD_STATUS_RELAY_FAIL:			return PSTR("Relay Fail");
+	case APP_CMD_STATUS_PRESET_INVALID:		return PSTR("Preset Invalid");
+	case APP_CMD_STATUS_SENSOR_FAIL_0:		return PSTR("Head Sensor Bad");
+	case APP_CMD_STATUS_SENSOR_FAIL_1:		return PSTR("Foot Sensor Bad");
+	case APP_CMD_STATUS_NO_MOTION_0:		return PSTR("Head No Motion");
+	case APP_CMD_STATUS_NO_MOTION_1:		return PSTR("Foot No Motion");
+	case APP_CMD_STATUS_SLEW_TIMEOUT:		return PSTR("Move Timeout");
+	case APP_CMD_STATUS_SAVE_PRESET_FAIL:	return PSTR("Save Fail");
+	case APP_CMD_STATUS_MOTION_LIMIT:		return PSTR("Move Limit");
+	
+	default:								return PSTR("Unknown Status");
 	}
 }
 
@@ -528,50 +562,56 @@ enum {
 	ST_IR_REC_RUN,  
 };
 
-// IR command table. Must be sorted on command ID.
-typedef struct { uint16_t ir_cmd; uint8_t app_cmd; } IrCmdDef;
+// Command table to map IR/RS232 codes to AP_CMD_xxx codes. Must be sorted on command ID. 
+typedef struct { 
+	uint8_t ir_cmd; 
+	uint8_t app_cmd;
+} IrCmdDef;
 const static IrCmdDef IR_CMD_DEFS[] PROGMEM = {
-	{ 0x00, APP_CMD_WAKEUP},
-	{ 0x01, APP_CMD_STOP},
-		
-	{ 0x04, APP_CMD_HEAD_UP},
-	{ 0x05, APP_CMD_HEAD_DOWN},
-	{ 0x06, APP_CMD_LEG_UP},
-	{ 0x07, APP_CMD_LEG_DOWN},
+	{ 0x00, APP_CMD_WAKEUP },
+	{ 0x01, APP_CMD_STOP },
+	{ 0x02, APP_CMD_CLEAR_LIMITS },
 	
-	{ 0x10, APP_CMD_SAVE_POS_1},
-	{ 0x11, APP_CMD_SAVE_POS_2},
-	{ 0x12, APP_CMD_SAVE_POS_3},
-	{ 0x13, APP_CMD_SAVE_POS_4},
-	
-	{ 0x14, APP_CMD_RESTORE_POS_1},
-	{ 0x15, APP_CMD_RESTORE_POS_2},
-	{ 0x16, APP_CMD_RESTORE_POS_3},
-	{ 0x17, APP_CMD_RESTORE_POS_4},
-};
-const static IrCmdDef REMOTE_CMD_DEFS[] PROGMEM = {
-	{ 0x3000, APP_CMD_WAKEUP},
-	{ 0x3001, APP_CMD_HEAD_UP},
-	{ 0x3002, APP_CMD_HEAD_DOWN},
-	{ 0x3003, APP_CMD_LEG_UP},
-	{ 0x3004, APP_CMD_LEG_DOWN},
-	{ 0x3009, APP_CMD_STOP},
-		
-	{ 0x3011, APP_CMD_RESTORE_POS_1},
-	{ 0x3012, APP_CMD_RESTORE_POS_2},
-	{ 0x3013, APP_CMD_RESTORE_POS_3},
-	{ 0x3014, APP_CMD_RESTORE_POS_4},
+	{ 0x04, APP_CMD_HEAD_UP },
+	{ 0x05, APP_CMD_HEAD_DOWN },
+	{ 0x06, APP_CMD_LEG_UP },
+	{ 0x07, APP_CMD_LEG_DOWN },
+	{ 0x08, APP_CMD_BED_UP },
+	{ 0x09, APP_CMD_BED_DOWN },
+	{ 0x0a, APP_CMD_TILT_UP },
+	{ 0x0b, APP_CMD_TILT_DOWN },
 
-	{ 0x3111, APP_CMD_SAVE_POS_1},
-	{ 0x3112, APP_CMD_SAVE_POS_2},
-	{ 0x3113, APP_CMD_SAVE_POS_3},
-	{ 0x3114, APP_CMD_SAVE_POS_4},
+	{ 0x0c, APP_CMD_SAVE_LIMIT_HEAD_LOWER },
+	{ 0x0d, APP_CMD_SAVE_LIMIT_HEAD_UPPER },
+	{ 0x0e, APP_CMD_SAVE_LIMIT_FOOT_LOWER },
+	{ 0x0f, APP_CMD_SAVE_LIMIT_FOOT_UPPER },
+	
+	{ 0x10, APP_CMD_SAVE_POS_1 },
+	{ 0x11, APP_CMD_SAVE_POS_2 },
+	{ 0x12, APP_CMD_SAVE_POS_3 },
+	{ 0x13, APP_CMD_SAVE_POS_4 },
+	
+	{ 0x14, APP_CMD_RESTORE_POS_1 },
+	{ 0x15, APP_CMD_RESTORE_POS_2 },
+	{ 0x16, APP_CMD_RESTORE_POS_3 },
+	{ 0x17, APP_CMD_RESTORE_POS_4 },
 };
+
+// For now use same command table for remote.
+#define REMOTE_CMD_DEFS IR_CMD_DEFS
+
+// My test IR remote uses this address. 
+static constexpr uint16_t IR_CODE_ADDRESS = 0xef00;
+
 int ir_cmds_compare(const void* k, const void* elem) { 
 	const IrCmdDef* ir_cmd_def = (const IrCmdDef*)elem;
-	return (int)(uint16_t)(int)k - (int)pgm_read_word(&ir_cmd_def->ir_cmd); 
+	return (int)k - (int)pgm_read_byte(&ir_cmd_def->ir_cmd); 
 }
-	
+uint8_t search_cmd(uint8_t code, const IrCmdDef* cmd_tab, size_t cmd_cnt) {
+	const IrCmdDef* ir_cmd_def = (const IrCmdDef*)bsearch((const void*)(int)code, cmd_tab, cmd_cnt, sizeof(IrCmdDef), ir_cmds_compare);
+	return ir_cmd_def ? pgm_read_byte(&ir_cmd_def->app_cmd) : (uint8_t)APP_CMD_IDLE;	
+}	
+
 static int8_t sm_ir_rec(EventSmContextBase* context, t_event ev) {
 	SmIrRecContext* my_context = (SmIrRecContext*)context;        // Downcast to derived class.
 	(void)my_context;
@@ -579,14 +619,19 @@ static int8_t sm_ir_rec(EventSmContextBase* context, t_event ev) {
 		case ST_IR_REC_RUN:
 		switch(event_id(ev)) {
 			case EV_IR_REC: {
-				const IrCmdDef* ir_cmd_def = (const IrCmdDef*)bsearch((const void*)(int)event_p8(ev), &IR_CMD_DEFS, UTILS_ELEMENT_COUNT(IR_CMD_DEFS), sizeof(IrCmdDef), ir_cmds_compare);
-				if (ir_cmd_def)
-					appCmdRun(pgm_read_byte(&ir_cmd_def->app_cmd));
+				if (IR_CODE_ADDRESS == event_p16(ev)) {
+					const uint8_t app_cmd = search_cmd(event_p8(ev), IR_CMD_DEFS, UTILS_ELEMENT_COUNT(IR_CMD_DEFS));
+					if (APP_CMD_IDLE != app_cmd)
+						appCmdRun(app_cmd);
+				}
 			}
+			break;
 			case EV_REMOTE_CMD: {
-				const IrCmdDef* ir_cmd_def = (const IrCmdDef*)bsearch((const void*)(int)event_p16(ev), &REMOTE_CMD_DEFS, UTILS_ELEMENT_COUNT(REMOTE_CMD_DEFS), sizeof(IrCmdDef), ir_cmds_compare);
-				if (ir_cmd_def)
-					appCmdRun(pgm_read_byte(&ir_cmd_def->app_cmd));
+				if (IR_CODE_ADDRESS == event_p16(ev)) {
+					const uint8_t app_cmd = search_cmd(event_p8(ev), REMOTE_CMD_DEFS, UTILS_ELEMENT_COUNT(REMOTE_CMD_DEFS));
+					if (APP_CMD_IDLE != app_cmd)
+						appCmdRun(app_cmd);
+				}
 			}
 			break;
 		}
@@ -744,7 +789,7 @@ enum {
 };
 // Define states.
 enum { 
-	ST_INIT, ST_RUN, ST_MENU 
+	ST_INIT, ST_CLEAR_LIMITS, ST_RUN, ST_MENU 
 };
 
 // LCD
@@ -753,16 +798,6 @@ AsyncLiquidCrystal f_lcd(GPIO_PIN_LCD_RS, GPIO_PIN_LCD_E, GPIO_PIN_LCD_D4, GPIO_
 static void lcd_init() {
 	f_lcd.begin(GPIO_LCD_NUM_COLS, GPIO_LCD_NUM_ROWS);
 }
-#if 0
-static void lcd_printf(uint8_t row, const char* fmt, ...){
-	va_list ap;
-	char buf[20];
-	va_start(ap, fmt);
-	myprintf_vsnprintf(buf, sizeof(buf), fmt, ap);  // Don't overwrite buffer, note max length includes nul terminator.
-	f_lcd.setCursor(0, row);
-	f_lcd.print(buf);
-}
-#else
 static void lcd_printf_of(char c, void* arg) {
 	*(uint8_t*)arg += 1;
 	f_lcd.write(c);
@@ -777,19 +812,20 @@ void lcd_printf(uint8_t row, PGM_P fmt, ...) {
 		f_lcd.write(' ');
 	va_end(ap);
 }
-#endif
 static void lcd_service() {
 	f_lcd.processQueue();
 }
 static void lcd_flush() {
 	f_lcd.flush();
 }
+
 //	1234567890123456
 //	
 //	H-12345 F-12345
 static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 	SmLcdContext* my_context = (SmLcdContext*)context;        // Downcast to derived class.
 	(void)my_context;
+	
 	switch (context->st) {
 		case ST_INIT:
 		switch(event_id(ev)) {
@@ -802,12 +838,33 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 			break;
 			
 			case EV_TIMER:
-			if (event_p8(ev) == TIMER_MSG)
+			if (event_p8(ev) == TIMER_MSG) {
+				if (regsFlags() & REGS_FLAGS_MASK_SW_TOUCH_LEFT)
+					return ST_CLEAR_LIMITS;
 				return ST_RUN;
+			}
 			break;
 		}	// Closes ST_INIT...
 		break;
-				
+			
+		case ST_CLEAR_LIMITS:
+		switch(event_id(ev)) {
+			case EV_SM_ENTRY:
+			lcd_printf(0, PSTR("Clear Pos Limits"));
+			lcd_flush();
+			lcd_printf(1, PSTR(""));
+			eventSmTimerStart(TIMER_MSG, DISPLAY_BANNER_DURATION_MS/100U);
+			driverAxisLimitsClear();
+			driverNvWrite();
+			break;
+			
+			case EV_TIMER:
+			if (event_p8(ev) == TIMER_MSG) 
+				return ST_RUN;
+			break;
+		}	// Closes ST_CLEAR_LIMITS...
+		break;
+			
 		case ST_RUN:
 		switch(event_id(ev)) {
 			case EV_SM_ENTRY:
@@ -821,7 +878,7 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 			break;
 
 			case EV_COMMAND_START:
-			lcd_printf(0, PSTR("CMD %S"), get_cmd_desc(event_p8(ev)));
+			lcd_printf(0, get_cmd_desc(event_p8(ev)));
 			lcd_printf(1, PSTR("Running"));
 			eventSmTimerStop(TIMER_BL);
 			eventSmTimerStop(TIMER_UPDATE_INFO);
@@ -937,6 +994,8 @@ void appService10hz() {
 	eventSmTimerService();
 	
 	const uint8_t app_timer_timeouts = app_timer_service();
-	if (app_timer_timeouts && _BV(APP_TIMER_WAKEUP))	
+	if (app_timer_timeouts && _BV(APP_TIMER_WAKEUP)) {
+		regsWriteMaskFlags(REGS_FLAGS_MASK_AWAKE, false);
 		eventPublish(EV_WAKEUP, 0);
+	}
 }
