@@ -3,7 +3,7 @@
 
 // Define version of NV data. If you change the schema or the implementation, increment the number to force any existing
 // EEPROM to flag as corrupt. Also increment to force the default values to be set for testing.
-const uint16_t REGS_DEF_VERSION = 7;
+const uint16_t REGS_DEF_VERSION = 8;
 
 /* [[[ Definition start...
 FLAGS [hex] "Various flags."
@@ -25,12 +25,14 @@ ACCEL_DATA_RATE_MEAS "Accel. measured sample rate."
 ACCEL_X	[signed] "Accel. raw X axis reading."
 ACCEL_Y	[signed] "Accel. raw Y axis reading."
 ACCEL_Z	[signed] "Accel. raw Z axis reading."
-ENABLES [nv hex 0x0000] "Enable flags."
+ENABLES [nv hex 0x0010] "Enable flags."
 	DUMP_MODBUS_EVENTS [0] "Dump MODBUS event value."
-	DUMP_REGS [2] "Regs values dump to console."
-	DUMP_REGS_FAST [3] "Dump at 5/s rather than 1/s."
+	DUMP_REGS [1] "Regs values dump to console."
+	DUMP_REGS_FAST [2] "Dump at 5/s rather than 1/s."
 	TILT_QUAD_CORRECT [4] "Correct for tilt angles over 90Deg."
 	DISABLE_BLINKY_LED [15] "Disable setting Blinky Led from fault states."
+MODBUS_DUMP_EVENT_MASK [nv hex 0x0000] "Dump MODBUS events mask, refer MODBUS_CB_EVT_xxx."
+MODBUS_DUMP_SLAVE_ID [nv 0] "For master, only dump MODBUS events from this slave ID."
 ACCEL_AVG [nv 20] "Number of accel samples to average."
 ACCEL_DATA_RATE_SET[nv 400] "Accel data rate Hz."
 ACCEL_DATA_RATE_TEST [nv 0] "Test accel sample rate check if non-zero."
@@ -55,23 +57,25 @@ enum {
     REGS_IDX_ACCEL_Y = 11,
     REGS_IDX_ACCEL_Z = 12,
     REGS_IDX_ENABLES = 13,
-    REGS_IDX_ACCEL_AVG = 14,
-    REGS_IDX_ACCEL_DATA_RATE_SET = 15,
-    REGS_IDX_ACCEL_DATA_RATE_TEST = 16,
-    REGS_IDX_ACCEL_TILT_FILTER_K = 17,
-    REGS_IDX_ACCEL_TILT_MOTION_DISC_FILTER_K = 18,
-    REGS_IDX_ACCEL_TILT_MOTION_DISC_THRESHOLD = 19,
-    COUNT_REGS = 20
+    REGS_IDX_MODBUS_DUMP_EVENT_MASK = 14,
+    REGS_IDX_MODBUS_DUMP_SLAVE_ID = 15,
+    REGS_IDX_ACCEL_AVG = 16,
+    REGS_IDX_ACCEL_DATA_RATE_SET = 17,
+    REGS_IDX_ACCEL_DATA_RATE_TEST = 18,
+    REGS_IDX_ACCEL_TILT_FILTER_K = 19,
+    REGS_IDX_ACCEL_TILT_MOTION_DISC_FILTER_K = 20,
+    REGS_IDX_ACCEL_TILT_MOTION_DISC_THRESHOLD = 21,
+    COUNT_REGS = 22
 };
 
 // Define the start of the NV regs. The region is from this index up to the end of the register array.
 #define REGS_START_NV_IDX REGS_IDX_ENABLES
 
 // Define default values for the NV segment.
-#define REGS_NV_DEFAULT_VALS 0, 20, 400, 0, 1, 4, 5
+#define REGS_NV_DEFAULT_VALS 16, 0, 0, 20, 400, 0, 1, 4, 5
 
 // Define how to format the reg when printing.
-#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_D, CFMT_X, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U
+#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_D, CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U
 
 // Flags/masks for register FLAGS.
 enum {
@@ -86,8 +90,8 @@ enum {
 // Flags/masks for register ENABLES.
 enum {
     	REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS = (int)0x1,
-    	REGS_ENABLES_MASK_DUMP_REGS = (int)0x4,
-    	REGS_ENABLES_MASK_DUMP_REGS_FAST = (int)0x8,
+    	REGS_ENABLES_MASK_DUMP_REGS = (int)0x2,
+    	REGS_ENABLES_MASK_DUMP_REGS_FAST = (int)0x4,
     	REGS_ENABLES_MASK_TILT_QUAD_CORRECT = (int)0x10,
     	REGS_ENABLES_MASK_DISABLE_BLINKY_LED = (int)0x8000,
 };
@@ -108,12 +112,14 @@ enum {
  static const char REGS_NAMES_11[] PROGMEM = "ACCEL_Y";                                 \
  static const char REGS_NAMES_12[] PROGMEM = "ACCEL_Z";                                 \
  static const char REGS_NAMES_13[] PROGMEM = "ENABLES";                                 \
- static const char REGS_NAMES_14[] PROGMEM = "ACCEL_AVG";                               \
- static const char REGS_NAMES_15[] PROGMEM = "ACCEL_DATA_RATE_SET";                     \
- static const char REGS_NAMES_16[] PROGMEM = "ACCEL_DATA_RATE_TEST";                    \
- static const char REGS_NAMES_17[] PROGMEM = "ACCEL_TILT_FILTER_K";                     \
- static const char REGS_NAMES_18[] PROGMEM = "ACCEL_TILT_MOTION_DISC_FILTER_K";         \
- static const char REGS_NAMES_19[] PROGMEM = "ACCEL_TILT_MOTION_DISC_THRESHOLD";        \
+ static const char REGS_NAMES_14[] PROGMEM = "MODBUS_DUMP_EVENT_MASK";                  \
+ static const char REGS_NAMES_15[] PROGMEM = "MODBUS_DUMP_SLAVE_ID";                    \
+ static const char REGS_NAMES_16[] PROGMEM = "ACCEL_AVG";                               \
+ static const char REGS_NAMES_17[] PROGMEM = "ACCEL_DATA_RATE_SET";                     \
+ static const char REGS_NAMES_18[] PROGMEM = "ACCEL_DATA_RATE_TEST";                    \
+ static const char REGS_NAMES_19[] PROGMEM = "ACCEL_TILT_FILTER_K";                     \
+ static const char REGS_NAMES_20[] PROGMEM = "ACCEL_TILT_MOTION_DISC_FILTER_K";         \
+ static const char REGS_NAMES_21[] PROGMEM = "ACCEL_TILT_MOTION_DISC_THRESHOLD";        \
                                                                                         \
  static const char* const REGS_NAMES[] PROGMEM = {                                      \
    REGS_NAMES_0,                                                                        \
@@ -136,6 +142,8 @@ enum {
    REGS_NAMES_17,                                                                       \
    REGS_NAMES_18,                                                                       \
    REGS_NAMES_19,                                                                       \
+   REGS_NAMES_20,                                                                       \
+   REGS_NAMES_21,                                                                       \
  }
 
 // Declare an array of description text for each register.
@@ -154,12 +162,14 @@ enum {
  static const char REGS_DESCRS_11[] PROGMEM = "Accel. raw Y axis reading.";             \
  static const char REGS_DESCRS_12[] PROGMEM = "Accel. raw Z axis reading.";             \
  static const char REGS_DESCRS_13[] PROGMEM = "Enable flags.";                          \
- static const char REGS_DESCRS_14[] PROGMEM = "Number of accel samples to average.";    \
- static const char REGS_DESCRS_15[] PROGMEM = "Accel data rate Hz.";                    \
- static const char REGS_DESCRS_16[] PROGMEM = "Test accel sample rate check if non-zero.";\
- static const char REGS_DESCRS_17[] PROGMEM = "Tilt filter constant for value returned to master.";\
- static const char REGS_DESCRS_18[] PROGMEM = "Tilt filter constant for tilt motion discrimination.";\
- static const char REGS_DESCRS_19[] PROGMEM = "Threshold for tilt motion discrimination.";\
+ static const char REGS_DESCRS_14[] PROGMEM = "Dump MODBUS events mask, refer MODBUS_CB_EVT_xxx.";\
+ static const char REGS_DESCRS_15[] PROGMEM = "For master, only dump MODBUS events from this slave ID.";\
+ static const char REGS_DESCRS_16[] PROGMEM = "Number of accel samples to average.";    \
+ static const char REGS_DESCRS_17[] PROGMEM = "Accel data rate Hz.";                    \
+ static const char REGS_DESCRS_18[] PROGMEM = "Test accel sample rate check if non-zero.";\
+ static const char REGS_DESCRS_19[] PROGMEM = "Tilt filter constant for value returned to master.";\
+ static const char REGS_DESCRS_20[] PROGMEM = "Tilt filter constant for tilt motion discrimination.";\
+ static const char REGS_DESCRS_21[] PROGMEM = "Threshold for tilt motion discrimination.";\
                                                                                         \
  static const char* const REGS_DESCRS[] PROGMEM = {                                     \
    REGS_DESCRS_0,                                                                       \
@@ -182,6 +192,8 @@ enum {
    REGS_DESCRS_17,                                                                      \
    REGS_DESCRS_18,                                                                      \
    REGS_DESCRS_19,                                                                      \
+   REGS_DESCRS_20,                                                                      \
+   REGS_DESCRS_21,                                                                      \
  }
 
 // Declare a multiline string description of the fields.
@@ -196,8 +208,8 @@ enum {
     "\n WATCHDOG_RESTART: 15 (Whoops.)"                                                 \
     "\nEnables:"                                                                        \
     "\n DUMP_MODBUS_EVENTS: 0 (Dump MODBUS event value.)"                               \
-    "\n DUMP_REGS: 2 (Regs values dump to console.)"                                    \
-    "\n DUMP_REGS_FAST: 3 (Dump at 5/s rather than 1/s.)"                               \
+    "\n DUMP_REGS: 1 (Regs values dump to console.)"                                    \
+    "\n DUMP_REGS_FAST: 2 (Dump at 5/s rather than 1/s.)"                               \
     "\n TILT_QUAD_CORRECT: 4 (Correct for tilt angles over 90Deg.)"                     \
     "\n DISABLE_BLINKY_LED: 15 (Disable setting Blinky Led from fault states.)"         \
 
