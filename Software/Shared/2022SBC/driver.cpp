@@ -621,10 +621,10 @@ void service_devices_50ms() { /* empty */ }
 // IR decoder.
 //
 
+// Keep things simple to vanilla NEC protocol, "NEC with 32 bits, 16 address + 8 + 8 command bits, Pioneer, JVC, Toshiba, NoName etc."
 #define IRMP_INPUT_PIN				GPIO_PIN_IR_REC
 #define IRMP_USE_COMPLETE_CALLBACK	1		// Enable callback functionality.
 #define NO_LED_FEEDBACK_CODE				// Activate this if you want to suppress LED feedback or if you do not have a LED. This saves 14 bytes code and 2 clock cycles per interrupt.
-
 #define IRMP_SUPPORT_NEC_PROTOCOL 1
 
 #pragma GCC diagnostic push
@@ -824,10 +824,8 @@ static void nv_set_defaults(void* data, const void* defaultarg) {
     regsSetDefaultRange(REGS_START_NV_IDX, COUNT_REGS);	// Set default values for NV regs.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 	fori(DRIVER_BED_POS_PRESET_COUNT)
-		driverPresetSetInvalid(i);
-	fori (CFG_TILT_SENSOR_COUNT) 
-		driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_LOWER] = driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_UPPER] = SBC2022_MODBUS_TILT_FAULT;
-			
+		driverPresetClear(i);
+	driverAxisLimitsClear();		
 #endif
 }
 
@@ -854,11 +852,15 @@ void driverNvSetDefaults() { nv_set_defaults(NULL, NULL); }
 int16_t* driverPresets(uint8_t idx) {
 	return &l_nv_data.pos_presets[idx * CFG_TILT_SENSOR_COUNT];
 }
-void driverPresetSetInvalid(uint8_t idx) {
+void driverPresetClear(uint8_t idx) {
 	fori(CFG_TILT_SENSOR_COUNT)
 		driverPresets(idx)[i] = SBC2022_MODBUS_TILT_FAULT;
 }
 int16_t* driverAxisLimits(uint8_t axis_idx) { return l_nv_data.axis_limits[axis_idx]; }
+void driverAxisLimitsClear() {
+	fori (CFG_TILT_SENSOR_COUNT)
+		driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_LOWER] = driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_UPPER] = SBC2022_MODBUS_TILT_FAULT;
+}
 #endif
 
 static uint8_t nv_init() {

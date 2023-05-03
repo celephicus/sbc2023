@@ -15,6 +15,7 @@ FLAGS [hex] "Various flags."
 	SW_TOUCH_MENU [6] "Touch sw MENU."
 	SW_TOUCH_RET [7] "Touch sw RET."
 	SENSOR_DUMP_ENABLE [8] "Send SENSOR_UPDATE events."
+	AWAKE [9] "Controller awake"
 	EEPROM_READ_BAD_0 [13] "EEPROM bank 0 corrupt."
 	EEPROM_READ_BAD_1 [14] "EEPROM bank 1 corrupt."
 	WATCHDOG_RESTART [15] "Whoops."
@@ -96,6 +97,7 @@ enum {
     	REGS_FLAGS_MASK_SW_TOUCH_MENU = (int)0x40,
     	REGS_FLAGS_MASK_SW_TOUCH_RET = (int)0x80,
     	REGS_FLAGS_MASK_SENSOR_DUMP_ENABLE = (int)0x100,
+    	REGS_FLAGS_MASK_AWAKE = (int)0x200,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_0 = (int)0x2000,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_1 = (int)0x4000,
     	REGS_FLAGS_MASK_WATCHDOG_RESTART = (int)0x8000,
@@ -225,6 +227,7 @@ enum {
     "\n SW_TOUCH_MENU: 6 (Touch sw MENU.)"                                              \
     "\n SW_TOUCH_RET: 7 (Touch sw RET.)"                                                \
     "\n SENSOR_DUMP_ENABLE: 8 (Send SENSOR_UPDATE events.)"                             \
+    "\n AWAKE: 9 (Controller awake)"                                                    \
     "\n EEPROM_READ_BAD_0: 13 (EEPROM bank 0 corrupt.)"                                 \
     "\n EEPROM_READ_BAD_1: 14 (EEPROM bank 1 corrupt.)"                                 \
     "\n WATCHDOG_RESTART: 15 (Whoops.)"                                                 \

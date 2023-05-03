@@ -14,7 +14,7 @@ class LoopbackStream : public Stream {
   uint16_t buffer_size;
   uint16_t pos, size;
 public:
-  static const uint16_t DEFAULT_SIZE = 64;
+  static const uint16_t DEFAULT_SIZE = 128;
   
   LoopbackStream(uint16_t buf_size = LoopbackStream::DEFAULT_SIZE);
   ~LoopbackStream();
