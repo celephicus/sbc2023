@@ -26,6 +26,12 @@ int8_t driverGetFaultySensor();
 
 bool driverSlaveIsEnabled(uint8_t slave_idx);
 
+// Console output.
+// 
+
+// Send a character to the console port.
+void putc_s(char c);
+
 // Minimal printf.
 void printf_s(PGM_P fmt, ...);
 

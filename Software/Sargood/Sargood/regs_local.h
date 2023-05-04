@@ -3,7 +3,7 @@
 
 // Define version of NV data. If you change the schema or the implementation, increment the number to force any existing
 // EEPROM to flag as corrupt. Also increment to force the default values to be set for testing.
-const uint16_t REGS_DEF_VERSION = 3;
+const uint16_t REGS_DEF_VERSION = 4;
 
 /* [[[ Definition start...
 FLAGS [hex] "Various flags."
@@ -16,6 +16,7 @@ FLAGS [hex] "Various flags."
 	SW_TOUCH_RET [7] "Touch sw RET."
 	SENSOR_DUMP_ENABLE [8] "Send SENSOR_UPDATE events."
 	AWAKE [9] "Controller awake"
+	ABORT_REQ [10] "Abort running command."
 	EEPROM_READ_BAD_0 [13] "EEPROM bank 0 corrupt."
 	EEPROM_READ_BAD_1 [14] "EEPROM bank 1 corrupt."
 	WATCHDOG_RESTART [15] "Whoops."
@@ -34,7 +35,8 @@ RELAY_STATE "Value written to relays."
 UPDATE_COUNT "Incremented on each update cycle."
 CMD_ACTIVE "Current running command."
 CMD_STATUS "Status from previous command."
-SLEW_TIMEOUT [nv 10] "Timeout for axis slew in seconds."
+SLEW_TIMEOUT [nv 30] "Timeout for axis slew in seconds."
+JOG_DURATION_MS [nv 500] "Jog duration for single axis in ms."
 MAX_SLAVE_ERRORS [nv 3] "Max number of consecutive slave errors before flagging."
 ENABLES [nv hex 0x0000] "Enable flags."
 	DUMP_MODBUS_EVENTS [0] "Dump MODBUS event value."
@@ -44,6 +46,8 @@ ENABLES [nv hex 0x0000] "Enable flags."
 	SENSOR_DISABLE_1 [5] "Disable Sensor 1."
 	SENSOR_DISABLE_2 [6] "Disable Sensor 2."
 	SENSOR_DISABLE_3 [7] "Disable Sensor 3."
+	TRACE_FORMAT_BINARY [13] "Dump trace in binary format."
+	TRACE_FORMAT_CONCISE [14] "Dump trace in concise text format."
 	DISABLE_BLINKY_LED [15] "Disable setting Blinky Led from fault states."
 MODBUS_DUMP_EVENT_MASK [nv hex 0x0000] "Dump MODBUS events mask, refer MODBUS_CB_EVT_xxx."
 MODBUS_DUMP_SLAVE_ID [nv 0] "For master, only dump MODBUS events from this slave ID."
@@ -70,22 +74,23 @@ enum {
     REGS_IDX_CMD_ACTIVE = 14,
     REGS_IDX_CMD_STATUS = 15,
     REGS_IDX_SLEW_TIMEOUT = 16,
-    REGS_IDX_MAX_SLAVE_ERRORS = 17,
-    REGS_IDX_ENABLES = 18,
-    REGS_IDX_MODBUS_DUMP_EVENT_MASK = 19,
-    REGS_IDX_MODBUS_DUMP_SLAVE_ID = 20,
-    REGS_IDX_SLEW_DEADBAND = 21,
-    COUNT_REGS = 22
+    REGS_IDX_JOG_DURATION_MS = 17,
+    REGS_IDX_MAX_SLAVE_ERRORS = 18,
+    REGS_IDX_ENABLES = 19,
+    REGS_IDX_MODBUS_DUMP_EVENT_MASK = 20,
+    REGS_IDX_MODBUS_DUMP_SLAVE_ID = 21,
+    REGS_IDX_SLEW_DEADBAND = 22,
+    COUNT_REGS = 23
 };
 
 // Define the start of the NV regs. The region is from this index up to the end of the register array.
 #define REGS_START_NV_IDX REGS_IDX_SLEW_TIMEOUT
 
 // Define default values for the NV segment.
-#define REGS_NV_DEFAULT_VALS 10, 3, 0, 0, 0, 30
+#define REGS_NV_DEFAULT_VALS 30, 500, 3, 0, 0, 0, 30
 
 // Define how to format the reg when printing.
-#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U, CFMT_U
+#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U, CFMT_U
 
 // Flags/masks for register FLAGS.
 enum {
@@ -98,6 +103,7 @@ enum {
     	REGS_FLAGS_MASK_SW_TOUCH_RET = (int)0x80,
     	REGS_FLAGS_MASK_SENSOR_DUMP_ENABLE = (int)0x100,
     	REGS_FLAGS_MASK_AWAKE = (int)0x200,
+    	REGS_FLAGS_MASK_ABORT_REQ = (int)0x400,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_0 = (int)0x2000,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_1 = (int)0x4000,
     	REGS_FLAGS_MASK_WATCHDOG_RESTART = (int)0x8000,
@@ -112,6 +118,8 @@ enum {
     	REGS_ENABLES_MASK_SENSOR_DISABLE_1 = (int)0x20,
     	REGS_ENABLES_MASK_SENSOR_DISABLE_2 = (int)0x40,
     	REGS_ENABLES_MASK_SENSOR_DISABLE_3 = (int)0x80,
+    	REGS_ENABLES_MASK_TRACE_FORMAT_BINARY = (int)0x2000,
+    	REGS_ENABLES_MASK_TRACE_FORMAT_CONCISE = (int)0x4000,
     	REGS_ENABLES_MASK_DISABLE_BLINKY_LED = (int)0x8000,
 };
 
@@ -134,11 +142,12 @@ enum {
  static const char REGS_NAMES_14[] PROGMEM = "CMD_ACTIVE";                              \
  static const char REGS_NAMES_15[] PROGMEM = "CMD_STATUS";                              \
  static const char REGS_NAMES_16[] PROGMEM = "SLEW_TIMEOUT";                            \
- static const char REGS_NAMES_17[] PROGMEM = "MAX_SLAVE_ERRORS";                        \
- static const char REGS_NAMES_18[] PROGMEM = "ENABLES";                                 \
- static const char REGS_NAMES_19[] PROGMEM = "MODBUS_DUMP_EVENT_MASK";                  \
- static const char REGS_NAMES_20[] PROGMEM = "MODBUS_DUMP_SLAVE_ID";                    \
- static const char REGS_NAMES_21[] PROGMEM = "SLEW_DEADBAND";                           \
+ static const char REGS_NAMES_17[] PROGMEM = "JOG_DURATION_MS";                         \
+ static const char REGS_NAMES_18[] PROGMEM = "MAX_SLAVE_ERRORS";                        \
+ static const char REGS_NAMES_19[] PROGMEM = "ENABLES";                                 \
+ static const char REGS_NAMES_20[] PROGMEM = "MODBUS_DUMP_EVENT_MASK";                  \
+ static const char REGS_NAMES_21[] PROGMEM = "MODBUS_DUMP_SLAVE_ID";                    \
+ static const char REGS_NAMES_22[] PROGMEM = "SLEW_DEADBAND";                           \
                                                                                         \
  static const char* const REGS_NAMES[] PROGMEM = {                                      \
    REGS_NAMES_0,                                                                        \
@@ -163,6 +172,7 @@ enum {
    REGS_NAMES_19,                                                                       \
    REGS_NAMES_20,                                                                       \
    REGS_NAMES_21,                                                                       \
+   REGS_NAMES_22,                                                                       \
  }
 
 // Declare an array of description text for each register.
@@ -184,11 +194,12 @@ enum {
  static const char REGS_DESCRS_14[] PROGMEM = "Current running command.";               \
  static const char REGS_DESCRS_15[] PROGMEM = "Status from previous command.";          \
  static const char REGS_DESCRS_16[] PROGMEM = "Timeout for axis slew in seconds.";      \
- static const char REGS_DESCRS_17[] PROGMEM = "Max number of consecutive slave errors before flagging.";\
- static const char REGS_DESCRS_18[] PROGMEM = "Enable flags.";                          \
- static const char REGS_DESCRS_19[] PROGMEM = "Dump MODBUS events mask, refer MODBUS_CB_EVT_xxx.";\
- static const char REGS_DESCRS_20[] PROGMEM = "For master, only dump MODBUS events from this slave ID.";\
- static const char REGS_DESCRS_21[] PROGMEM = "If delta tilt less than deadband then stop.";\
+ static const char REGS_DESCRS_17[] PROGMEM = "Jog duration for single axis in ms.";    \
+ static const char REGS_DESCRS_18[] PROGMEM = "Max number of consecutive slave errors before flagging.";\
+ static const char REGS_DESCRS_19[] PROGMEM = "Enable flags.";                          \
+ static const char REGS_DESCRS_20[] PROGMEM = "Dump MODBUS events mask, refer MODBUS_CB_EVT_xxx.";\
+ static const char REGS_DESCRS_21[] PROGMEM = "For master, only dump MODBUS events from this slave ID.";\
+ static const char REGS_DESCRS_22[] PROGMEM = "If delta tilt less than deadband then stop.";\
                                                                                         \
  static const char* const REGS_DESCRS[] PROGMEM = {                                     \
    REGS_DESCRS_0,                                                                       \
@@ -213,6 +224,7 @@ enum {
    REGS_DESCRS_19,                                                                      \
    REGS_DESCRS_20,                                                                      \
    REGS_DESCRS_21,                                                                      \
+   REGS_DESCRS_22,                                                                      \
  }
 
 // Declare a multiline string description of the fields.
@@ -228,6 +240,7 @@ enum {
     "\n SW_TOUCH_RET: 7 (Touch sw RET.)"                                                \
     "\n SENSOR_DUMP_ENABLE: 8 (Send SENSOR_UPDATE events.)"                             \
     "\n AWAKE: 9 (Controller awake)"                                                    \
+    "\n ABORT_REQ: 10 (Abort running command.)"                                         \
     "\n EEPROM_READ_BAD_0: 13 (EEPROM bank 0 corrupt.)"                                 \
     "\n EEPROM_READ_BAD_1: 14 (EEPROM bank 1 corrupt.)"                                 \
     "\n WATCHDOG_RESTART: 15 (Whoops.)"                                                 \
@@ -239,6 +252,8 @@ enum {
     "\n SENSOR_DISABLE_1: 5 (Disable Sensor 1.)"                                        \
     "\n SENSOR_DISABLE_2: 6 (Disable Sensor 2.)"                                        \
     "\n SENSOR_DISABLE_3: 7 (Disable Sensor 3.)"                                        \
+    "\n TRACE_FORMAT_BINARY: 13 (Dump trace in binary format.)"                         \
+    "\n TRACE_FORMAT_CONCISE: 14 (Dump trace in concise text format.)"                  \
     "\n DISABLE_BLINKY_LED: 15 (Disable setting Blinky Led from fault states.)"         \
 
 // ]]] Declarations end

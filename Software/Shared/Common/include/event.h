@@ -56,7 +56,7 @@ t_event eventGet();
 typedef struct {
     uint32_t timestamp;
     t_event event;
-} EventTraceItem;
+} __attribute__((packed)) EventTraceItem;
 
 // Clear the trace buffer.
 void eventTraceClear();

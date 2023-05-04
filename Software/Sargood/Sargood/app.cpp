@@ -72,8 +72,7 @@ static int8_t axis_get_active() {
 	if ((uint8_t)REGS[REGS_IDX_RELAY_STATE] & RELAY_TILT_MASK) return AXIS_TILT;
 	return -1;
 }
-static const uint16_t RELAY_RUN_DURATION_MS = 1000U;
-// TODO: Change to 200ms for production. 
+
 static const uint16_t RELAY_STOP_DURATION_MS = 200U;
 static const uint16_t WAKEUP_TIMEOUT_SECS = 60U;
 static const uint16_t PRESET_SAVE_TIMEOUT_SECS = 5U;
@@ -114,6 +113,12 @@ bool appCmdRun(uint8_t cmd) {
 	return accept;
 }
 
+static void do_wakeup() {
+	app_timer_start(APP_TIMER_WAKEUP, WAKEUP_TIMEOUT_SECS*10U);
+	if (regsWriteMaskFlags(REGS_FLAGS_MASK_AWAKE, true))
+		eventPublish(EV_WAKEUP, 1);
+}
+
 // Really place holders, cmd_start() called when command started, cmd_stop() may be called multiple times but only has an effect the first time.
 static void cmd_start() {
 	REGS[REGS_IDX_CMD_STATUS] = APP_CMD_STATUS_PENDING;
@@ -126,7 +131,8 @@ static void cmd_done(uint16_t status=APP_CMD_STATUS_OK) {
 		REGS[REGS_IDX_CMD_STATUS] = status;
 		eventPublish(EV_COMMAND_DONE, REGS[REGS_IDX_CMD_ACTIVE], REGS[REGS_IDX_CMD_STATUS]);
 		REGS[REGS_IDX_CMD_ACTIVE] = APP_CMD_IDLE;
-	
+		if (APP_CMD_STATUS_OK == status)
+			do_wakeup();
 	}
 }
 
@@ -175,6 +181,13 @@ static bool check_slew_timeout() {
 	}
 	return false;
 }
+static bool check_abort_flag() {
+	if (regsFlags() & REGS_FLAGS_MASK_ABORT_REQ) {
+		cmd_done(APP_CMD_STATUS_ABORT);
+		return true;
+	}
+	return false;
+}
 static bool check_not_awake() {
 	if (!(regsFlags() & REGS_FLAGS_MASK_AWAKE)) {
 		cmd_done(APP_CMD_STATUS_NOT_AWAKE);
@@ -191,6 +204,24 @@ void do_save_axis_limit(uint8_t axis_idx, uint8_t limit_idx) {
 	}
 	else
 		cmd_done(APP_CMD_STATUS_SENSOR_FAIL_0);
+}
+static bool check_can_save() {
+	if (check_not_awake())	// If not awake set fail status...
+		return false; 
+			
+	// Logic is first save command starts timer, sets count to 1, but returns fail. Subsequent commands increment count if no timeout, does action when count == 3.
+	if (!app_timer_is_active(APP_TIMER_SAVE)) {
+		app_timer_start(APP_TIMER_SAVE, PRESET_SAVE_TIMEOUT_SECS*10U);
+		f_app_ctx.save_preset_attempts = 1;
+		cmd_done(APP_CMD_STATUS_SAVE_PRESET_FAIL);
+		return false;
+	}
+	else if (++f_app_ctx.save_preset_attempts < 3) {
+		cmd_done(APP_CMD_STATUS_SAVE_PRESET_FAIL);
+		return false;
+	}
+	else 
+		return true;	
 }
 
 static int8_t thread_cmd(void* arg) {
@@ -230,14 +261,12 @@ static int8_t thread_cmd(void* arg) {
 			break;
 			
 		// Wakeup command.
-		case APP_CMD_WAKEUP:		
-			app_timer_start(APP_TIMER_WAKEUP, WAKEUP_TIMEOUT_SECS*10U);
-			regsWriteMaskFlags(REGS_FLAGS_MASK_AWAKE, true);
-			eventPublish(EV_WAKEUP, 1);
+		case APP_CMD_WAKEUP:	
+			do_wakeup();	
 			cmd_done();
 			THREAD_YIELD();
 			break;
-			
+
 		// Timed motion commands
 		case APP_CMD_HEAD_UP:	axis_set_drive(AXIS_HEAD, AXIS_DIR_UP);		goto do_manual;
 		case APP_CMD_HEAD_DOWN:	axis_set_drive(AXIS_HEAD, AXIS_DIR_DOWN);	goto do_manual;
@@ -254,7 +283,7 @@ do_manual:	if (check_not_awake()) {
 			}
 
 			THREAD_START_DELAY();
-			while ((!check_relay()) && (!THREAD_IS_DELAY_DONE(RELAY_RUN_DURATION_MS)) && (!check_stop_command())) {
+			while ((!check_relay()) && (!THREAD_IS_DELAY_DONE(REGS[REGS_IDX_JOG_DURATION_MS])) && (!check_stop_command())) {
 				int8_t axis = axis_get_active();
 				if (axis < 0) 
 					goto jog_done;
@@ -291,7 +320,7 @@ jog_done:	axis_stop_all();
 		
 		// Clear all limits.
 		case APP_CMD_CLEAR_LIMITS:		
-			if (!check_not_awake()) {
+			if (check_can_save()) {
 				driverAxisLimitsClear();
 				driverNvWrite();
 				cmd_done();
@@ -309,32 +338,18 @@ jog_done:	axis_stop_all();
 		case APP_CMD_SAVE_POS_1:
 		case APP_CMD_SAVE_POS_2:
 		case APP_CMD_SAVE_POS_3:
-		case APP_CMD_SAVE_POS_4: {
-			if (check_not_awake())
-				break; 
-			
-			// Logic is first save command starts timer, sets count to 1, but returns fail. Subsequent commands increment count if no timeout, does action when count == 3.
-			if (!app_timer_is_active(APP_TIMER_SAVE)) {
-				app_timer_start(APP_TIMER_SAVE, PRESET_SAVE_TIMEOUT_SECS*10U);
-				f_app_ctx.save_preset_attempts = 1;
-				cmd_done(APP_CMD_STATUS_SAVE_PRESET_FAIL);
-			}
-			else if (++f_app_ctx.save_preset_attempts < 3) {
-				cmd_done(APP_CMD_STATUS_SAVE_PRESET_FAIL);
-			}
-			else {
+		case APP_CMD_SAVE_POS_4: 
+			if (check_can_save()) {
 				preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_SAVE_POS_1;
 				if (!check_sensors()) {		// All _enabled_ sensors OK.
 					fori (CFG_TILT_SENSOR_COUNT) // Read sensor value or force it to invalid is not enabled.
 						driverPresets(preset_idx)[i] = driverSlaveIsEnabled(i) ?  REGS[REGS_IDX_TILT_SENSOR_0 + i] : SBC2022_MODBUS_TILT_FAULT;
+					driverNvWrite();
 				}
-				else 
-					driverPresetClear(preset_idx);
-				driverNvWrite();
 				cmd_done();
 			}
 			THREAD_YIELD();
-			} break;
+			break;
 
 		// Restore to saved position...
 		case APP_CMD_RESTORE_POS_1:
@@ -345,6 +360,7 @@ jog_done:	axis_stop_all();
 				break; 
 				
 			axis_stop_all();		// Should always be true...
+			regsWriteMaskFlags(REGS_FLAGS_MASK_ABORT_REQ, false);
 			preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_RESTORE_POS_1;
 			if (!is_preset_valid(preset_idx)) {				// Invalid preset, abort.
 				cmd_done(APP_CMD_STATUS_PRESET_INVALID);
@@ -360,7 +376,7 @@ jog_done:	axis_stop_all();
 					continue;
 					
 				app_timer_start(APP_TIMER_SLEW, REGS[REGS_IDX_SLEW_TIMEOUT]*10U);
-				while ((!check_sensors()) && (!check_relay()) && (!check_stop_command()) && (!check_slew_timeout())) {
+				while ((!check_sensors()) && (!check_relay()) && (!check_stop_command()) && (!check_slew_timeout()) && (!check_abort_flag())) {
 					// TODO: Verify sensor going offline can't lock up.
 					THREAD_WAIT_UNTIL(avail);		// Wait for new reading.
 				
@@ -466,7 +482,7 @@ static int8_t thread_rs232_cmd(void* arg) {
 		THREAD_WAIT_UNTIL((ch >= 0) || timeout);	// Need select(...) call. 
 		if (ch >= 0) {
 			timer_start((uint16_t)millis(), &then);
-			eventPublish(EV_REMOTE_DATA, (uint8_t)ch);
+			regsWriteMaskFlags(REGS_FLAGS_MASK_ABORT_REQ, true);
 			if (nchs < sizeof(cmd)) 
 				cmd[nchs++] = ch;
 		}
@@ -485,15 +501,31 @@ static int8_t thread_rs232_cmd(void* arg) {
 	THREAD_END();
 }
 
-bool service_trace_log() {
+static constexpr uint8_t TRACE_BINARY_START_CHAR = 0xfe;
+static void service_trace_log() {
 	EventTraceItem evt;
 	if (eventTraceRead(&evt)) {
-		const uint8_t id = event_id(evt.event);
-		const char * name = eventGetEventName(id);
-		printf_s(PSTR("E: %lu: %S %u(%u,%u)\r\n"), evt.timestamp, name, id, event_p8(evt.event), event_p16(evt.event));
-		return true;
+		if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TRACE_FORMAT_BINARY) {
+			putc_s(TRACE_BINARY_START_CHAR);
+			const uint8_t* pd = reinterpret_cast<const uint8_t*>(&evt);
+			fori (sizeof(evt)) {
+				if (TRACE_BINARY_START_CHAR == *pd) {
+					putc_s(TRACE_BINARY_START_CHAR);
+					putc_s(~*pd);
+				}
+				else
+					putc_s(*pd);
+				pd += 1;
+			}
+		}
+		else {
+			const uint8_t id = event_id(evt.event);
+			if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TRACE_FORMAT_CONCISE) 
+				printf_s(PSTR("%lu %u %u %u\n"), evt.timestamp, id, event_p8(evt.event), event_p16(evt.event));
+			else
+				printf_s(PSTR("E: %lu: %S %u(%u,%u)\n"), evt.timestamp, eventGetEventName(id), id, event_p8(evt.event), event_p16(evt.event));
+		}
 	}
-	return false;
 }
 
 static const char* get_cmd_desc(uint8_t cmd) {
@@ -545,7 +577,7 @@ static const char* get_cmd_status_desc(uint8_t cmd) {
 	case APP_CMD_STATUS_SLEW_TIMEOUT:		return PSTR("Move Timeout");
 	case APP_CMD_STATUS_SAVE_PRESET_FAIL:	return PSTR("Save Fail");
 	case APP_CMD_STATUS_MOTION_LIMIT:		return PSTR("Move Limit");
-	
+	case APP_CMD_STATUS_ABORT: 				return PSTR("Move Aborted");
 	default:								return PSTR("Unknown Status");
 	}
 }
@@ -620,6 +652,7 @@ static int8_t sm_ir_rec(EventSmContextBase* context, t_event ev) {
 		switch(event_id(ev)) {
 			case EV_IR_REC: {
 				if (IR_CODE_ADDRESS == event_p16(ev)) {
+					regsWriteMaskFlags(REGS_FLAGS_MASK_ABORT_REQ, true);
 					const uint8_t app_cmd = search_cmd(event_p8(ev), IR_CMD_DEFS, UTILS_ELEMENT_COUNT(IR_CMD_DEFS));
 					if (APP_CMD_IDLE != app_cmd)
 						appCmdRun(app_cmd);
@@ -678,23 +711,32 @@ typedef struct {
 } MenuItem;
 
 // Slew timeout in seconds.
-static const char MENU_ITEM_SLEW_TIMEOUT_TITLE[] PROGMEM = "Motion Timeout";
-static const int16_t MENU_ITEM_SLEW_TIMEOUT_MIN = 10;
-static const int16_t MENU_ITEM_SLEW_TIMEOUT_MAX = 60;
-static const int16_t MENU_ITEM_SLEW_TIMEOUT_INC = 5;
+static constexpr char MENU_ITEM_SLEW_TIMEOUT_TITLE[] PROGMEM = "Motion Timeout";
+static constexpr int16_t MENU_ITEM_SLEW_TIMEOUT_MIN = 10;
+static constexpr int16_t MENU_ITEM_SLEW_TIMEOUT_MAX = 60;
+static constexpr int16_t MENU_ITEM_SLEW_TIMEOUT_INC = 5;
 static int16_t menu_scale_slew_timeout(int16_t val) { return utilsMscale<int16_t, uint8_t>(val, MENU_ITEM_SLEW_TIMEOUT_MIN, MENU_ITEM_SLEW_TIMEOUT_MAX, MENU_ITEM_SLEW_TIMEOUT_INC); }
 static int16_t menu_unscale_slew_timeout(uint8_t v) { return utilsUnmscale<int16_t, uint8_t>((int16_t)v, MENU_ITEM_SLEW_TIMEOUT_MIN, MENU_ITEM_SLEW_TIMEOUT_MAX, MENU_ITEM_SLEW_TIMEOUT_INC); }
 static uint8_t menu_max_slew_timeout() { return utilsMscaleMax<int16_t, uint8_t>(MENU_ITEM_SLEW_TIMEOUT_MIN, MENU_ITEM_SLEW_TIMEOUT_MAX, MENU_ITEM_SLEW_TIMEOUT_INC); }
 
-
 // Slew deadband in tilt sensor units.
 static const char MENU_ITEM_ANGLE_DEADBAND_TITLE[] PROGMEM = "Position Error";
-static const int16_t MENU_ITEM_ANGLE_DEADBAND_MIN = 5;
-static const int16_t MENU_ITEM_ANGLE_DEADBAND_MAX = 100;
-static const int16_t MENU_ITEM_ANGLE_DEADBAND_INC = 5;
+static constexpr int16_t MENU_ITEM_ANGLE_DEADBAND_MIN = 5;
+static constexpr int16_t MENU_ITEM_ANGLE_DEADBAND_MAX = 100;
+static constexpr int16_t MENU_ITEM_ANGLE_DEADBAND_INC = 5;
 static int16_t menu_scale_angle_deadband(int16_t val) { return utilsMscale<int16_t, uint8_t>(val, MENU_ITEM_ANGLE_DEADBAND_MIN, MENU_ITEM_ANGLE_DEADBAND_MAX, MENU_ITEM_ANGLE_DEADBAND_INC); }
 static int16_t menu_unscale_angle_deadband(uint8_t v) { return utilsUnmscale<int16_t, uint8_t>((int16_t)v, MENU_ITEM_ANGLE_DEADBAND_MIN, MENU_ITEM_ANGLE_DEADBAND_MAX, MENU_ITEM_ANGLE_DEADBAND_INC); }
 static uint8_t menu_max_angle_deadband() { return utilsMscaleMax<int16_t, uint8_t>( MENU_ITEM_ANGLE_DEADBAND_MIN, MENU_ITEM_ANGLE_DEADBAND_MAX, MENU_ITEM_ANGLE_DEADBAND_INC); }
+
+// Axis jog duration in ms.
+static const char MENU_ITEM_JOG_DURATION_TITLE[] PROGMEM = "Motion Run On";
+static constexpr int16_t MENU_ITEM_JOG_DURATION_MIN = 200;
+static constexpr int16_t MENU_ITEM_JOG_DURATION_MAX = 3000;
+static constexpr int16_t MENU_ITEM_JOG_DURATION_INC = 100;
+static int16_t menu_scale_jog_duration(int16_t val) { return utilsMscale<int16_t, uint8_t>(val, MENU_ITEM_JOG_DURATION_MIN, MENU_ITEM_JOG_DURATION_MAX, MENU_ITEM_JOG_DURATION_INC); }
+static int16_t menu_unscale_jog_duration(uint8_t v) { return utilsUnmscale<int16_t, uint8_t>((int16_t)v, MENU_ITEM_JOG_DURATION_MIN, MENU_ITEM_JOG_DURATION_MAX, MENU_ITEM_JOG_DURATION_INC); }
+static uint8_t menu_max_jog_duration() { return utilsMscaleMax<int16_t, uint8_t>( MENU_ITEM_JOG_DURATION_MIN, MENU_ITEM_JOG_DURATION_MAX, MENU_ITEM_JOG_DURATION_INC); }
+
 
 static char f_menu_fmt_buf[15];
 const char* menu_format_number(int16_t v) { myprintf_snprintf(f_menu_fmt_buf, sizeof(f_menu_fmt_buf), PSTR("%u"), v); return f_menu_fmt_buf; }
@@ -715,6 +757,14 @@ static const MenuItem MENU_ITEMS[] PROGMEM = {
 		REGS_IDX_SLEW_DEADBAND, 0U,
 		menu_scale_angle_deadband, menu_unscale_angle_deadband,
 		menu_max_angle_deadband,
+		false,
+		NULL,		// Special case, call unscale and print number.
+	},
+	{
+		MENU_ITEM_JOG_DURATION_TITLE,
+		REGS_IDX_JOG_DURATION_MS, 0U,
+		menu_scale_jog_duration, menu_unscale_jog_duration,
+		menu_max_jog_duration,
 		false,
 		NULL,		// Special case, call unscale and print number.
 	},
@@ -922,6 +972,8 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 			break;
 			
 			case EV_SM_EXIT:
+			// TODO: Only update value if has changed.
+			menuItemWriteValue(my_context->menu_item_idx, my_context->menu_item_value);
 			driverNvWrite();
 			break;
 			
@@ -951,9 +1003,14 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 					eventPublish(EV_UPDATE_MENU);
 			}
 			break;
+
+			case EV_SW_TOUCH_MENU:
+			if (event_p8(ev) == EV_P8_SW_LONG_HOLD)
+				return ST_MENU;
+			break;
 			
 			case EV_TIMER:
-			if (event_p8(ev) == TIMER_MSG)
+			if (event_p8(ev) == TIMER_MSG) 
 				return ST_RUN;
 			break;
 			
@@ -994,8 +1051,8 @@ void appService10hz() {
 	eventSmTimerService();
 	
 	const uint8_t app_timer_timeouts = app_timer_service();
-	if (app_timer_timeouts && _BV(APP_TIMER_WAKEUP)) {
-		regsWriteMaskFlags(REGS_FLAGS_MASK_AWAKE, false);
-		eventPublish(EV_WAKEUP, 0);
+	if (app_timer_timeouts & _BV(APP_TIMER_WAKEUP)) {
+		if (regsWriteMaskFlags(REGS_FLAGS_MASK_AWAKE, false))
+			eventPublish(EV_WAKEUP, 0);
 	}
 }

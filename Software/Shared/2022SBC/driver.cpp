@@ -28,13 +28,9 @@ FILENUM(2);
 #include "myprintf.h"
 #include "event.h"
 
-
-// Helper for myprintf to write a single character to the serial port.
-static void myprintf_of(char c, void* arg) {
-	GPIO_SERIAL_CONSOLE.write(c);
-}
-
-// Minimal printf.
+// Console output.
+void putc_s(char c) { GPIO_SERIAL_CONSOLE.write(c); }
+static void myprintf_of(char c, void* arg) { putc_s(c); }
 void printf_s(PGM_P fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);

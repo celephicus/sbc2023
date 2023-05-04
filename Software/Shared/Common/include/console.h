@@ -71,7 +71,7 @@ typedef int8_t console_rc_t;
 console_rc_t consoleService();
 
 // Newline on output.
-#define CONSOLE_OUTPUT_NEWLINE_STR "\r\n"
+#define CONSOLE_OUTPUT_NEWLINE_STR "\n"
 
 // Print various datatypes in the second arg to consolePrint().
 enum {

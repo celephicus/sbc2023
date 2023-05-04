@@ -67,7 +67,7 @@ enum {
 	APP_CMD_STATUS_SLEW_TIMEOUT = 6,		// Timeout on slew to position. 
 	APP_CMD_STATUS_SAVE_PRESET_FAIL = 7,	// Save preset needs to be repeated 3 times before it will work.
 	APP_CMD_STATUS_MOTION_LIMIT = 8,
-	
+	APP_CMD_STATUS_ABORT = 9,				// Motion aborted with IR code or RS232 data.
 	APP_CMD_STATUS_SENSOR_FAIL_0 = 100,		// Tilt sensor 0 offline or failed.
 	APP_CMD_STATUS_SENSOR_FAIL_1 = 101,		// Tilt sensor 1 offline or failed.
 

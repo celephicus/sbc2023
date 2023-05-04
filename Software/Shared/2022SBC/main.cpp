@@ -68,7 +68,7 @@ static bool console_cmds_user(char* cmd) {
 	case /** ?TM **/ 0x7a03: fori ((COUNT_EV + 15) / 16) consolePrint(CFMT_X, ((uint16_t)eventGetTraceMask()[i*2+1]<<8) | (uint16_t)eventGetTraceMask()[i*2]); break;
 	case /** ??TM **/ 0x3fbc: {
 		fori (COUNT_EV) {
-			printf_s(PSTR("\r\n%d: %S: %c"), i, eventGetEventName(i), eventTraceMaskGetBit(i) + '0');
+			printf_s(PSTR("\n%d: %S: %c"), i, eventGetEventName(i), eventTraceMaskGetBit(i) + '0');
 			wdt_reset();
 		}
 	} break;
