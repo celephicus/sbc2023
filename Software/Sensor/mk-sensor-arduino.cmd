@@ -9,4 +9,4 @@ robocopy ..\Shared\AVR\src 			Sensor-Arduino dev.cpp SparkFun_ADXL345.cpp
 robocopy ..\Shared\2022SBC 			Sensor-Arduino driver.h driver.cpp sbc2022_modbus.h
 copy ..\Shared\2022SBC\main.cpp Sensor-Arduino\Sensor-Arduino.ino
 
-
+"C:\Program Files\7-Zip\7z" a -r -tzip Sensor-Arduino Sensor-Arduino

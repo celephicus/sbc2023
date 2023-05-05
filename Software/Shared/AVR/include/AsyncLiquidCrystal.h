@@ -1,7 +1,7 @@
 #ifndef AsyncLiquidCrystal_h
 #define AsyncLiquidCrystal_h
 
-#include <LoopbackStream.h>
+#include "LoopbackStream.h"
 
 #include <inttypes.h>
 #include "Print.h"
