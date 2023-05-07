@@ -83,7 +83,7 @@ void test_modbus_frame_valid_ovf() {
 	bufferFrameReset(&bf);
 	char fovf[MODBUS_MAX_RESP_SIZE+1];
 	bufferFrameAddMem(&bf, fovf, sizeof(fovf));
-	TEST_ASSERT_EQUAL_UINT8(MODBUS_CB_EVT_INVALID_LEN, modbusVerifyFrameValid(&bf));
+	TEST_ASSERT_EQUAL_UINT8(MODBUS_CB_EVT_MS_INVALID_LEN, modbusVerifyFrameValid(&bf));
 }
 void test_modbus_frame_valid(const char* f, uint8_t rc) {
 	int sz = read_hex_string(frame, f);
@@ -94,15 +94,15 @@ void test_modbus_frame_valid(const char* f, uint8_t rc) {
 } 
 
 TT_TEST_CASE(test_modbus_frame_valid("1103006B00037687", 0)); /* Good frame (and checking that C-style comments do not result in test case not being seen by grm.py) */
-TT_TEST_CASE(test_modbus_frame_valid("1103006B00038776", MODBUS_CB_EVT_INVALID_CRC));	// CRC swapped.
-TT_TEST_CASE(test_modbus_frame_valid("1103006B00037688", MODBUS_CB_EVT_INVALID_CRC));	// CRC munged.
+TT_TEST_CASE(test_modbus_frame_valid("1103006B00038776", MODBUS_CB_EVT_MS_INVALID_CRC));	// CRC swapped.
+TT_TEST_CASE(test_modbus_frame_valid("1103006B00037688", MODBUS_CB_EVT_MS_INVALID_CRC));	// CRC munged.
 TT_TEST_CASE(test_modbus_frame_valid("4142435085", 0));	// Smallest frame.
-TT_TEST_CASE(test_modbus_frame_valid("", MODBUS_CB_EVT_INVALID_LEN));	// Empty frame.
-TT_TEST_CASE(test_modbus_frame_valid("41b1d1", MODBUS_CB_EVT_INVALID_LEN));	// Valid Slave Id & CRC but too small.
+TT_TEST_CASE(test_modbus_frame_valid("", MODBUS_CB_EVT_MS_INVALID_LEN));	// Empty frame.
+TT_TEST_CASE(test_modbus_frame_valid("41b1d1", MODBUS_CB_EVT_MS_INVALID_LEN));	// Valid Slave Id & CRC but too small.
 TT_TEST_CASE(test_modbus_frame_valid("0142435151", 0));	// Smallest slave ID.
 TT_TEST_CASE(test_modbus_frame_valid("f74243b163", 0));	// Largest slave ID.
-TT_TEST_CASE(test_modbus_frame_valid("0042430091", MODBUS_CB_EVT_INVALID_ID));	// Invalid slave ID.
-TT_TEST_CASE(test_modbus_frame_valid("f842438160", MODBUS_CB_EVT_INVALID_ID));	// Invalid slave ID.
+TT_TEST_CASE(test_modbus_frame_valid("0042430091", MODBUS_CB_EVT_MS_INVALID_ID));	// Invalid slave ID.
+TT_TEST_CASE(test_modbus_frame_valid("f842438160", MODBUS_CB_EVT_MS_INVALID_ID));	// Invalid slave ID.
 
 void test_modbus_set_u16() {
 	uint8_t f[2];

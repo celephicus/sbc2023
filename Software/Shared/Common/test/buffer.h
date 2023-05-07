@@ -38,6 +38,7 @@ public:
 	operator const uint8_t*() const { return m_buf; }
 };
 
+#if 0
 // Uses a static buffer and a pointer to next free location, which is NULL on overflow. 
 template <const size_t CAPACITY_>
 class SBuffer {
@@ -68,6 +69,6 @@ public:
 	uint8_t operator [](uint8_t idx) const { return m_buf[idx]; }
 	operator const uint8_t*() const { return m_buf; }
 };
-
+#endif
 
 #endif	// BUFFER_H__

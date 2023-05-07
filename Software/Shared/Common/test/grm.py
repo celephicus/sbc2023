@@ -128,6 +128,15 @@ def add_test_case(test_func, test_args):
 	add_test(test_stub_name, descr, lineno)
 	test_stubs.append((if_condition, f'static void {test_stub_name}(void) {{ {test_stub_body}; }}'))
 	num_tests += 1
+	
+def add_test_case_vector(test_func, argc, vectors):
+	"""Allows a number of test cases to be added with a common test function but args taken from string vectors
+		which is split into lines and then by whitespace, with the number or args in argc. 
+		Blank lines and those starting with a `#' are ignored. """
+	for test_v in vectors.splitlines():
+		test_args = test_v.split()[:argc]
+		if test_args and not test_args[0].startswith('#'):
+			add_test_case(test_func, ', '.join(test_args))
 
 # Returns (macro, list-of-args), ('test-func', [test-func, args]), ('line', line)
 MACRO_PREFIX = 'TT_'
@@ -172,7 +181,7 @@ for fn in input_files:
 	fixture, if_condition = None, None
 	num_tests = 0
 	line_proc = None
-	script_globals = {'add_test_case': add_test_case}
+	script_globals = {'add_test_case': add_test_case, 'add_test_case_vector': add_test_case_vector}
 
 	try:
 		with open(fn, 'rt') as f:
