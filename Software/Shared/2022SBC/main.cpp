@@ -39,12 +39,19 @@ static bool console_cmds_user(char* cmd) {
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 	case /** ?S **/ 0x6889: fori (CFG_TILT_SENSOR_COUNT) consolePrint(CFMT_D, REGS[REGS_IDX_TILT_SENSOR_0 + i]); break; 
 	case /** ?PR **/ 0x7998: fori (DRIVER_BED_POS_PRESET_COUNT) {
-		forj (CFG_TILT_SENSOR_COUNT) consolePrint(CFMT_D, driverPresets(i)[j]); 
-		}  break;
+		forj (CFG_TILT_SENSOR_COUNT) consolePrint(CFMT_D, driverPresets(i)[j]);
+	}  break;
 	case /** PR **/ 0x74c7: {
 		const uint8_t idx = consoleStackPop(); if (idx >= DRIVER_BED_POS_PRESET_COUNT) consoleRaise(CONSOLE_RC_ERROR_USER);
 		fori (CFG_TILT_SENSOR_COUNT) driverPresets(idx)[i] = consoleStackPop();
-		} break;
+	} break;
+	case /** ?LIM **/ 0xdeb2: fori (CFG_TILT_SENSOR_COUNT) {
+		consolePrint(CFMT_D, (uint16_t)driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_LOWER]); consolePrint(CFMT_D, (uint16_t)driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_UPPER]);
+	}  break;
+	case /** LIM **/ 0xdb0d: {
+		const uint8_t axis_idx = consoleStackPop(); if (axis_idx >= CFG_TILT_SENSOR_COUNT) consoleRaise(CONSOLE_RC_ERROR_USER);
+		driverAxisLimits(axis_idx)[DRIVER_AXIS_LIMIT_IDX_LOWER] = consoleStackPop(); driverAxisLimits(axis_idx)[DRIVER_AXIS_LIMIT_IDX_LOWER] = consoleStackPop();
+	} break;
 #if 0		
 	case /** LCD **/ 0xdcce: {
 		const char* msg = (const char*)consoleStackPop();
@@ -61,7 +68,7 @@ static bool console_cmds_user(char* cmd) {
 	case /** ?TM **/ 0x7a03: fori ((COUNT_EV + 15) / 16) consolePrint(CFMT_X, ((uint16_t)eventGetTraceMask()[i*2+1]<<8) | (uint16_t)eventGetTraceMask()[i*2]); break;
 	case /** ??TM **/ 0x3fbc: {
 		fori (COUNT_EV) {
-			printf_s(PSTR("\r\n%d: %S: %c"), i, eventGetEventName(i), eventTraceMaskGetBit(i) + '0');
+			printf_s(PSTR("\n%d: %S: %c"), i, eventGetEventName(i), eventTraceMaskGetBit(i) + '0');
 			wdt_reset();
 		}
 	} break;

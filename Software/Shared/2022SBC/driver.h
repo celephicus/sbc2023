@@ -14,13 +14,23 @@ uint8_t* eventGetTraceMask();
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 #define DRIVER_BED_POS_PRESET_COUNT 4
 int16_t* driverPresets(uint8_t idx);
-void driverPresetSetInvalid(uint8_t idx);
+void driverPresetClear(uint8_t idx);
+enum { DRIVER_AXIS_LIMIT_IDX_LOWER, DRIVER_AXIS_LIMIT_IDX_UPPER };
+int16_t* driverAxisLimits(uint8_t axis_idx);
+void driverAxisLimitsClear();
+
 bool driverSensorUpdateAvailable();
 
 // Return index of first faulty _AND_ enabled sensor, else -1.
 int8_t driverGetFaultySensor();
 
 bool driverSlaveIsEnabled(uint8_t slave_idx);
+
+// Console output.
+// 
+
+// Send a character to the console port.
+void putc_s(char c);
 
 // Minimal printf.
 void printf_s(PGM_P fmt, ...);
@@ -44,9 +54,6 @@ uint8_t driverGetLedPattern();
 uint8_t driverNvRead();
 void driverNvWrite();
 void driverNvSetDefaults();
-
-// The scanner controls various flags in the flags register. This function causes the events associated with a flags mask to be rescanned, and the event to be resent if the value is above/below a threshold.
-void driverRescan(uint16_t mask);
 
 // Take ATN low for a while to signal back to the master.
 void driverSendAtn();

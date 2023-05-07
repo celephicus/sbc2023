@@ -24,6 +24,8 @@ ENABLES [nv hex 0x0000] "Enable flags."
 	DUMP_REGS [2] "Regs values dump to console."
 	DUMP_REGS_FAST [3] "Dump at 5/s rather than 1/s."
 	DISABLE_BLINKY_LED [15] "Disable setting Blinky Led from fault states."
+MODBUS_DUMP_EVENT_MASK [nv hex 0x0000] "Dump MODBUS events mask, refer MODBUS_CB_EVT_xxx."
+MODBUS_DUMP_SLAVE_ID [nv 0] "For master, only dump MODBUS events from this slave ID."
 >>>  Definition end, declaration start... */
 
 // Declare the indices to the registers.
@@ -36,17 +38,19 @@ enum {
     REGS_IDX_VOLTS_MON_BUS = 5,
     REGS_IDX_RELAYS = 6,
     REGS_IDX_ENABLES = 7,
-    COUNT_REGS = 8
+    REGS_IDX_MODBUS_DUMP_EVENT_MASK = 8,
+    REGS_IDX_MODBUS_DUMP_SLAVE_ID = 9,
+    COUNT_REGS = 10
 };
 
 // Define the start of the NV regs. The region is from this index up to the end of the register array.
 #define REGS_START_NV_IDX REGS_IDX_ENABLES
 
 // Define default values for the NV segment.
-#define REGS_NV_DEFAULT_VALS 0
+#define REGS_NV_DEFAULT_VALS 0, 0, 0
 
 // Define how to format the reg when printing.
-#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X
+#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U
 
 // Flags/masks for register FLAGS.
 enum {
@@ -76,6 +80,8 @@ enum {
  static const char REGS_NAMES_5[] PROGMEM = "VOLTS_MON_BUS";                            \
  static const char REGS_NAMES_6[] PROGMEM = "RELAYS";                                   \
  static const char REGS_NAMES_7[] PROGMEM = "ENABLES";                                  \
+ static const char REGS_NAMES_8[] PROGMEM = "MODBUS_DUMP_EVENT_MASK";                   \
+ static const char REGS_NAMES_9[] PROGMEM = "MODBUS_DUMP_SLAVE_ID";                     \
                                                                                         \
  static const char* const REGS_NAMES[] PROGMEM = {                                      \
    REGS_NAMES_0,                                                                        \
@@ -86,6 +92,8 @@ enum {
    REGS_NAMES_5,                                                                        \
    REGS_NAMES_6,                                                                        \
    REGS_NAMES_7,                                                                        \
+   REGS_NAMES_8,                                                                        \
+   REGS_NAMES_9,                                                                        \
  }
 
 // Declare an array of description text for each register.
@@ -98,6 +106,8 @@ enum {
  static const char REGS_DESCRS_5[] PROGMEM = "Bus volts /mV.";                          \
  static const char REGS_DESCRS_6[] PROGMEM = "Bed control relays.";                     \
  static const char REGS_DESCRS_7[] PROGMEM = "Enable flags.";                           \
+ static const char REGS_DESCRS_8[] PROGMEM = "Dump MODBUS events mask, refer MODBUS_CB_EVT_xxx.";\
+ static const char REGS_DESCRS_9[] PROGMEM = "For master, only dump MODBUS events from this slave ID.";\
                                                                                         \
  static const char* const REGS_DESCRS[] PROGMEM = {                                     \
    REGS_DESCRS_0,                                                                       \
@@ -108,6 +118,8 @@ enum {
    REGS_DESCRS_5,                                                                       \
    REGS_DESCRS_6,                                                                       \
    REGS_DESCRS_7,                                                                       \
+   REGS_DESCRS_8,                                                                       \
+   REGS_DESCRS_9,                                                                       \
  }
 
 // Declare a multiline string description of the fields.

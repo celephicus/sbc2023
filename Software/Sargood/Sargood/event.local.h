@@ -12,6 +12,8 @@
 	UPDATE_MENU		Update menu item value on LCD.
 	IR_REC			IR command received, p8=cmd, p16=cmd
 	SENSOR_UPDATE	Sensor value updated: p8=idx, p16=value.
+	WAKEUP			Controller wakeup: p8=status.
+	REMOTE_CMD		Command from RS232 port, p8=byte2, p16=byte0..1.
 	DEBUG_SLEW_AXIS	p8: axis idx; p16=target
 	DEBUG_RELAY		p8: relay register
 	DEBUG_CMD		p8: accepted, p16=cmd
@@ -39,10 +41,12 @@ enum {
     EV_UPDATE_MENU = 16,                // Update menu item value on LCD.
     EV_IR_REC = 17,                     // IR command received, p8=cmd, p16=cmd
     EV_SENSOR_UPDATE = 18,              // Sensor value updated: p8=idx, p16=value.
-    EV_DEBUG_SLEW_AXIS = 19,            // p8: axis idx; p16=target
-    EV_DEBUG_RELAY = 20,                // p8: relay register
-    EV_DEBUG_CMD = 21,                  // p8: accepted, p16=cmd
-    COUNT_EV = 22,                      // Total number of events defined.
+    EV_WAKEUP = 19,                     // Controller wakeup: p8=status.
+    EV_REMOTE_CMD = 20,                 // Command from RS232 port, p8=byte2, p16=byte0..1.
+    EV_DEBUG_SLEW_AXIS = 21,            // p8: axis idx; p16=target
+    EV_DEBUG_RELAY = 22,                // p8: relay register
+    EV_DEBUG_CMD = 23,                  // p8: accepted, p16=cmd
+    COUNT_EV = 24,                      // Total number of events defined.
 };
 
 // Size of trace mask in bytes.
@@ -69,9 +73,11 @@ enum {
  static const char EVENT_NAMES_16[] PROGMEM = "UPDATE_MENU";                            \
  static const char EVENT_NAMES_17[] PROGMEM = "IR_REC";                                 \
  static const char EVENT_NAMES_18[] PROGMEM = "SENSOR_UPDATE";                          \
- static const char EVENT_NAMES_19[] PROGMEM = "DEBUG_SLEW_AXIS";                        \
- static const char EVENT_NAMES_20[] PROGMEM = "DEBUG_RELAY";                            \
- static const char EVENT_NAMES_21[] PROGMEM = "DEBUG_CMD";                              \
+ static const char EVENT_NAMES_19[] PROGMEM = "WAKEUP";                                 \
+ static const char EVENT_NAMES_20[] PROGMEM = "REMOTE_CMD";                             \
+ static const char EVENT_NAMES_21[] PROGMEM = "DEBUG_SLEW_AXIS";                        \
+ static const char EVENT_NAMES_22[] PROGMEM = "DEBUG_RELAY";                            \
+ static const char EVENT_NAMES_23[] PROGMEM = "DEBUG_CMD";                              \
                                                                                         \
  static const char* const EVENT_NAMES[] PROGMEM = {                                     \
    EVENT_NAMES_0,                                                                       \
@@ -96,6 +102,8 @@ enum {
    EVENT_NAMES_19,                                                                      \
    EVENT_NAMES_20,                                                                      \
    EVENT_NAMES_21,                                                                      \
+   EVENT_NAMES_22,                                                                      \
+   EVENT_NAMES_23,                                                                      \
  }
 
 // Event Descriptions.
@@ -119,9 +127,11 @@ enum {
  static const char EVENT_DESCS_16[] PROGMEM = "Update menu item value on LCD.";                                                             \
  static const char EVENT_DESCS_17[] PROGMEM = "IR command received, p8=cmd, p16=cmd";                                                       \
  static const char EVENT_DESCS_18[] PROGMEM = "Sensor value updated: p8=idx, p16=value.";                                                   \
- static const char EVENT_DESCS_19[] PROGMEM = "p8: axis idx; p16=target";                                                                   \
- static const char EVENT_DESCS_20[] PROGMEM = "p8: relay register";                                                                         \
- static const char EVENT_DESCS_21[] PROGMEM = "p8: accepted, p16=cmd";                                                                      \
+ static const char EVENT_DESCS_19[] PROGMEM = "Controller wakeup: p8=status.";                                                              \
+ static const char EVENT_DESCS_20[] PROGMEM = "Command from RS232 port, p8=byte2, p16=byte0..1.";                                           \
+ static const char EVENT_DESCS_21[] PROGMEM = "p8: axis idx; p16=target";                                                                   \
+ static const char EVENT_DESCS_22[] PROGMEM = "p8: relay register";                                                                         \
+ static const char EVENT_DESCS_23[] PROGMEM = "p8: accepted, p16=cmd";                                                                      \
                                                                                                                                             \
  static const char* const EVENT_DESCS[] PROGMEM = {                                                                                         \
    EVENT_DESCS_0,                                                                                                                           \
@@ -146,6 +156,8 @@ enum {
    EVENT_DESCS_19,                                                                                                                          \
    EVENT_DESCS_20,                                                                                                                          \
    EVENT_DESCS_21,                                                                                                                          \
+   EVENT_DESCS_22,                                                                                                                          \
+   EVENT_DESCS_23,                                                                                                                          \
  }
 
 // ]]] End generated code.

@@ -28,13 +28,9 @@ FILENUM(2);
 #include "myprintf.h"
 #include "event.h"
 
-
-// Helper for myprintf to write a single character to the serial port.
-static void myprintf_of(char c, void* arg) {
-	GPIO_SERIAL_CONSOLE.write(c);
-}
-
-// Minimal printf.
+// Console output.
+void putc_s(char c) { GPIO_SERIAL_CONSOLE.write(c); }
+static void myprintf_of(char c, void* arg) { putc_s(c); }
 void printf_s(PGM_P fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
@@ -47,14 +43,21 @@ void printf_s(PGM_P fmt, ...) {
 // Simple timer to set flags on timeout for error checking. Defined by a regs flags mask value with a SINGLE bit set and a timeout. Calling clear_fault_timer(m) will restart the timer and clear the flag.
 //  On timeout, the flag is set.
 //
-#if (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR) || (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY)
 typedef struct {
 	uint16_t flags_mask;
 	uint8_t timeout;
 } TimeoutTimerDef;
+
 static const TimeoutTimerDef FAULT_TIMER_DEFS[] PROGMEM = {
+#if (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR) || (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY)
 	{ REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS, 10 },		// Long timeout as Display might get busy and not send queries for a while
+	{ REGS_FLAGS_MASK_DC_LOW, 10 },
+#elif (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD)		
+	{ REGS_FLAGS_MASK_DC_LOW, 10 },
+#endif
 };
+
+
 static uint8_t f_fault_timers[UTILS_ELEMENT_COUNT(FAULT_TIMER_DEFS)];
 static void service_fault_timers() {
 	fori (UTILS_ELEMENT_COUNT(FAULT_TIMER_DEFS)) {
@@ -78,10 +81,6 @@ static void init_fault_timer() { // Assumes fault flags are all cleared already.
 	fori (UTILS_ELEMENT_COUNT(FAULT_TIMER_DEFS))
 		f_fault_timers[i] = pgm_read_byte(&FAULT_TIMER_DEFS[i].timeout);
 }
-#else
-static void init_fault_timer() {}
-static void service_fault_timers() {}
-#endif
 
 // MODBUS
 //
@@ -621,10 +620,10 @@ void service_devices_50ms() { /* empty */ }
 // IR decoder.
 //
 
+// Keep things simple to vanilla NEC protocol, "NEC with 32 bits, 16 address + 8 + 8 command bits, Pioneer, JVC, Toshiba, NoName etc."
 #define IRMP_INPUT_PIN				GPIO_PIN_IR_REC
 #define IRMP_USE_COMPLETE_CALLBACK	1		// Enable callback functionality.
 #define NO_LED_FEEDBACK_CODE				// Activate this if you want to suppress LED feedback or if you do not have a LED. This saves 14 bytes code and 2 clock cycles per interrupt.
-
 #define IRMP_SUPPORT_NEC_PROTOCOL 1
 
 #pragma GCC diagnostic push
@@ -799,6 +798,7 @@ typedef struct {
 	regs_t regs[COUNT_REGS];		// Must be first item in struct.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 	int16_t pos_presets[DRIVER_BED_POS_PRESET_COUNT * CFG_TILT_SENSOR_COUNT];
+	int16_t axis_limits[CFG_TILT_SENSOR_COUNT][2]; // low-0, high-0, low-1, high-1, ...
 	uint8_t trace_mask[EVENT_TRACE_MASK_SIZE];
 #endif
 } NvData;
@@ -823,7 +823,8 @@ static void nv_set_defaults(void* data, const void* defaultarg) {
     regsSetDefaultRange(REGS_START_NV_IDX, COUNT_REGS);	// Set default values for NV regs.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 	fori(DRIVER_BED_POS_PRESET_COUNT)
-		driverPresetSetInvalid(i);
+		driverPresetClear(i);
+	driverAxisLimitsClear();		
 #endif
 }
 
@@ -850,9 +851,14 @@ void driverNvSetDefaults() { nv_set_defaults(NULL, NULL); }
 int16_t* driverPresets(uint8_t idx) {
 	return &l_nv_data.pos_presets[idx * CFG_TILT_SENSOR_COUNT];
 }
-void driverPresetSetInvalid(uint8_t idx) {
+void driverPresetClear(uint8_t idx) {
 	fori(CFG_TILT_SENSOR_COUNT)
 		driverPresets(idx)[i] = SBC2022_MODBUS_TILT_FAULT;
+}
+int16_t* driverAxisLimits(uint8_t axis_idx) { return l_nv_data.axis_limits[axis_idx]; }
+void driverAxisLimitsClear() {
+	fori (CFG_TILT_SENSOR_COUNT)
+		driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_LOWER] = driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_UPPER] = SBC2022_MODBUS_TILT_FAULT;
 }
 #endif
 
@@ -879,134 +885,35 @@ static void adc_init() {
 }
 static void adc_start() { devAdcStartConversions(); }
 
-static uint16_t scaler_12v_mon(uint16_t raw) { return utilsRescaleU16(raw, 1023, 13300); }
-static void adc_do_scaling() {
-	// No need for critical section as we have waited for the ADC ISR to sample new values into the input registers, now it is idle.
+// ADC scaling has same resistor divider values for all units but Sargood has a 5V ref, others have 3.3V. So need different scaling.
+// Scaling is done by giving scaled output value at 1023 counts.
+static uint16_t scaler_12v_mon(uint16_t raw) { 
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
+	return utilsRescaleU16(raw, 1023U, 20151U); // Scales 10 bit ADC with 5V ref and a 10K/3K3 divider. So 13.3 / 3.3 * 5 at input will give 1023 counts.
+#elif (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR) || (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY) 
+	return utilsRescaleU16(raw, 1023U, 13300U); // Scales 10 bit ADC with 5V ref and a 10K/3K3 divider. So 13.3 / 3.3 * 3.3 at input will give 1023 counts.
+#endif	
+}
+
+// Undervolt is simply if volts are below threshold for timeout period, after which fault flag is set. Then volts have to be above t/hold plus hysteresis to clear flag.
+static constexpr uint16_t VOLTS_LOW_THRESHOLD_MV = 10000U;
+static constexpr uint16_t VOLTS_LOW_HYSTERESIS_MV = 500U;
+static void adc_service() {
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 	REGS[REGS_IDX_VOLTS_MON_12V_IN] = scaler_12v_mon(REGS[REGS_IDX_ADC_VOLTS_MON_12V_IN]);
-#endif
 	REGS[REGS_IDX_VOLTS_MON_BUS] = scaler_12v_mon(REGS[REGS_IDX_ADC_VOLTS_MON_BUS]);
-}
-
-// Threshold scanner
-typedef uint8_t (*thold_scanner_threshold_func)(uint8_t tstate, uint16_t value); 	// Get new tstate, from value, and current tstate for implementing hysteresis.
-typedef uint16_t (*thold_scanner_action_delay_func)();				// Returns number of ticks before update is published.
-typedef struct {	// Define a single scan, always const.
-	uint16_t flags_mask;
-	const void* publish_func_arg;    				// Argument supplied to callback function.
-    const uint16_t* input_reg;              		// Input register, usually scaled ADC.
-    thold_scanner_threshold_func threshold;    		// Thresholding function, returns small zero based value
-    thold_scanner_action_delay_func delay_get;  	// Function returning delay before tstate update is published. Null implies no delay.
-} TholdScannerDef;
-
-typedef struct {	// Holds current state of a scan.
-	uint16_t action_timer;
-	uint8_t prev_tstate;
-} TholdScannerState;
-
-typedef void (*thold_scanner_update_cb)(uint16_t mask, const void* arg);	// Callback that a scan has changed state.
-
-void tholdScanInit(const TholdScannerDef* def, TholdScannerState* sst, uint8_t count, thold_scanner_update_cb cb) {
-	while (count-- > 0U) {
-		sst->prev_tstate = 2;	// Force update as current tstate can never equal this, being a bool.
-
-		const uint16_t mask =  pgm_read_word(&def->flags_mask);
-		// Check all values that we can here.
-        ASSERT(0 != mask);
-		// publish_func_arg may be NULL.
-        ASSERT(NULL != pgm_read_ptr(&def->input_reg));
-		ASSERT(NULL != (thold_scanner_threshold_func)pgm_read_ptr(&def->threshold));
-		// delay_get may be NULL for no delay.
-		if (NULL != cb)
-			cb(mask, pgm_read_ptr(&def->publish_func_arg));
-
-		def += 1, sst += 1;
-    }
-}
-
-static void thold_scan_publish_update(uint16_t mask, void* cb_arg, thold_scanner_update_cb cb, bool tstate) {
-	regsWriteMaskFlags(mask, tstate);
-	if (NULL != cb)
-		cb(mask, cb_arg);
-}
-
-void tholdScanSample(const TholdScannerDef* def, TholdScannerState* sst, uint8_t count, thold_scanner_update_cb cb) {
-	while (count-- > 0U) {
-		const uint16_t mask =  pgm_read_word(&def->flags_mask);
-        const uint16_t input_val = *(const uint16_t*)pgm_read_ptr(&def->input_reg);	        // Read input value from register.
-
-		// Get new state by thresholding the input value with a custom function, which is supplied the old tstate so it can set the threshold hysteresis.
-        const uint8_t new_tstate = !!((thold_scanner_threshold_func)pgm_read_ptr(&def->threshold))(sst->prev_tstate, input_val); // Convert to boolean, but type uint8_t.
-
-		if (sst->prev_tstate != new_tstate)  {		 						// If the tstate has changed...
-			sst->prev_tstate = new_tstate;
-			const thold_scanner_action_delay_func delay_get = (thold_scanner_action_delay_func)pgm_read_ptr(&def->delay_get);
-			sst->action_timer = (NULL != delay_get) ? delay_get() : 0U;
-			if (0U == sst->action_timer)			// Check, might be loaded with zero for immediate update.
-				thold_scan_publish_update(mask, pgm_read_ptr(&def->publish_func_arg), cb, new_tstate);
-		}
-		else if ((sst->action_timer > 0U) && (0U == --sst->action_timer)) 	// If state has not changed but timer has timed out, update as stable during delay.
-			thold_scan_publish_update(mask, pgm_read_ptr(&def->publish_func_arg), cb, new_tstate);
-		def += 1, sst += 1;
-    }
-}
-
-void tholdScanRescan(const TholdScannerDef* def, TholdScannerState* sst, uint8_t count, thold_scanner_update_cb cb, uint16_t scan_mask) {
-	while (count-- > 0U) {
-		const uint16_t mask =  pgm_read_word(&def->flags_mask);
-        if (scan_mask & mask) {     // Do we have a set bit in mask?
-			thold_scan_publish_update(mask, pgm_read_ptr(&def->publish_func_arg), cb, regsFlags() & mask);
-			sst->action_timer = 0U;		// Since we've just updated, reset timer to prevent doing it again if it times out.
-
-			// Early exit if we've done our mask.
-			scan_mask &= ~mask;
-			if (0U == scan_mask)
-				break;
-		}
-		def += 1, sst += 1;
-    }
-}
-
-static uint8_t scanner_thold_12v_mon(uint8_t tstate, uint16_t val) {  return val < (tstate ? 10500 : 10000); }
-static uint16_t scanner_get_delay() { return 10; }
-static const TholdScannerDef SCANDEFS[] PROGMEM = {
-
-#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
-	{
-		REGS_FLAGS_MASK_DC_LOW,						// Flags mask
-		NULL,										// Callback function arg.
-		&regs_storage[REGS_IDX_VOLTS_MON_12V_IN],	// Input register.
-		scanner_thold_12v_mon,						// Threshold function.
-		scanner_get_delay,							// Delay function.
-	},
-#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR
-	{
-		REGS_FLAGS_MASK_DC_LOW,						// Flags mask
-		NULL,										// Callback function arg.
-		&regs_storage[REGS_IDX_VOLTS_MON_BUS],		// Input register.
-		scanner_thold_12v_mon,						// Threshold function.
-		scanner_get_delay,							// Delay function.
-	},
-#elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
-	{
-		REGS_FLAGS_MASK_DC_LOW,						// Flags mask
-		NULL,										// Callback function arg.
-		&regs_storage[REGS_IDX_VOLTS_MON_BUS],		// Input register.
-		scanner_thold_12v_mon,						// Threshold function.
-		scanner_get_delay,							// Delay function.
-	},
+#elif (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR) || (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD) 
+	REGS[REGS_IDX_VOLTS_MON_BUS] = scaler_12v_mon(REGS[REGS_IDX_ADC_VOLTS_MON_BUS]);
 #endif
-
-};
-
-static void thold_scanner_cb(uint16_t mask, const void* arg) {
+	
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
+	const uint16_t volts = REGS[REGS_IDX_VOLTS_MON_12V_IN];
+#elif (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR) || (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD) 
+	const uint16_t volts = REGS[REGS_IDX_VOLTS_MON_BUS];
+#endif	
+	if (volts > (VOLTS_LOW_THRESHOLD_MV + ((regsFlags()&REGS_FLAGS_MASK_DC_LOW) ? VOLTS_LOW_HYSTERESIS_MV : 0U)))
+		clear_fault_timer(REGS_FLAGS_MASK_DC_LOW);
 }
-
-TholdScannerState f_scan_states[UTILS_ELEMENT_COUNT(SCANDEFS)];
-
-static void scanner_init() { tholdScanInit(SCANDEFS, f_scan_states, UTILS_ELEMENT_COUNT(SCANDEFS), thold_scanner_cb); }
-static void scanner_scan() { tholdScanSample(SCANDEFS, f_scan_states, UTILS_ELEMENT_COUNT(SCANDEFS), thold_scanner_cb); }
-void driverRescan(uint16_t mask) { tholdScanRescan(SCANDEFS, f_scan_states, UTILS_ELEMENT_COUNT(SCANDEFS), thold_scanner_cb, mask); }
 
 // ATN line on Bus back to master.
 static uint8_t f_atn_state;
@@ -1042,7 +949,6 @@ void driverInit() {
 	regsWriteMaskFlags(REGS_FLAGS_MASK_EEPROM_READ_BAD_1, nv_status&2);
 	led_init();
 	adc_init();
-	scanner_init();
 	setup_devices();
 	setup_spare_gpio();
 	modbus_init();
@@ -1066,7 +972,6 @@ void driverService() {
 		service_devices_50ms();
 	}
 	if (devAdcIsConversionDone()) {		// Run scanner when all ADC channels converted.
-		adc_do_scaling();
-		scanner_scan();
+		adc_service();
 	}
 }

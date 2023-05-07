@@ -518,7 +518,7 @@ void debugRuntimeError(int fileno, int lineno, int errorno) __attribute__ ((nore
 
 // Dump trace info with no extra text if level >= current level.
 #define TRACE_RAW(_level, _fmt, ...)  \
-  do { if (CFG_DEBUG_GET_TRACE_LEVEL() >= (_level)) CFG_DEBUG_TRACE_OUTPUT("\r\nTRACE: "  _fmt,  ## __VA_ARGS__); } while (0)
+  do { if (CFG_DEBUG_GET_TRACE_LEVEL() >= (_level)) CFG_DEBUG_TRACE_OUTPUT("\nTRACE: "  _fmt,  ## __VA_ARGS__); } while (0)
 	
 // Trace with file number & line info.
 #define TRACE(_level, _type, _fmt, ...) \

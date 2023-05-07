@@ -263,14 +263,6 @@ build.cmd
       <SubType>compile</SubType>
       <Link>Shared\2022SBC\sbc2022_modbus.h</Link>
     </Compile>
-    <Compile Include="..\..\Shared\2022SBC\SparkFun_ADXL345.cpp">
-      <SubType>compile</SubType>
-      <Link>Shared\2022SBC\SparkFun_ADXL345.cpp</Link>
-    </Compile>
-    <Compile Include="..\..\Shared\2022SBC\SparkFun_ADXL345.h">
-      <SubType>compile</SubType>
-      <Link>Shared\2022SBC\SparkFun_ADXL345.h</Link>
-    </Compile>
     <Compile Include="..\..\Shared\AVR\include\dev.h">
       <SubType>compile</SubType>
       <Link>Shared\AVR\dev.h</Link>
