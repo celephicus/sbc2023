@@ -115,6 +115,7 @@ bool appCmdRun(uint8_t cmd) {
 
 static void do_wakeup() {
 	app_timer_start(APP_TIMER_WAKEUP, WAKEUP_TIMEOUT_SECS*10U);
+	driverSetLcdBacklight(255);
 	if (regsWriteMaskFlags(REGS_FLAGS_MASK_AWAKE, true))
 		eventPublish(EV_WAKEUP, 1);
 }
@@ -827,14 +828,13 @@ static SmLcdContext f_sm_lcd_ctx;
 // Timeouts.
 static const uint16_t DISPLAY_CMD_START_DURATION_MS =		1U*1000U;
 static const uint16_t DISPLAY_BANNER_DURATION_MS =			2U*1000U;
-static const uint16_t BACKLIGHT_TIMEOUT_MS =				4U*1000U;
+//static const uint16_t BACKLIGHT_TIMEOUT_MS =				4U*1000U;
 static const uint16_t UPDATE_INFO_PERIOD_MS =				500U;
 static const uint16_t MENU_TIMEOUT_MS =						10U*1000U;
 
 // Timers
 enum {
 	TIMER_MSG,
-	TIMER_BL,
 	TIMER_UPDATE_INFO,
 };
 // Define states.
@@ -880,10 +880,10 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 		case ST_INIT:
 		switch(event_id(ev)) {
 			case EV_SM_ENTRY:
+			driverSetLcdBacklight(255);
 			lcd_printf(0, PSTR("  TSA MBC 2022"));
 			lcd_flush();
 			lcd_printf(1, PSTR("V" CFG_VER_STR " build " CFG_BUILD_NUMBER_STR));
-			driverSetLcdBacklight(255);
 			eventSmTimerStart(TIMER_MSG, DISPLAY_BANNER_DURATION_MS/100U);
 			break;
 			
@@ -918,35 +918,34 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 		case ST_RUN:
 		switch(event_id(ev)) {
 			case EV_SM_ENTRY:
+			driverSetLcdBacklight(0);
 			eventSmPostSelf(context);
+			if (!(regsFlags() & REGS_FLAGS_MASK_AWAKE))
+				driverSetLcdBacklight(0);
 			break;
 			
 			case EV_SM_SELF:
 			eventSmTimerStart(TIMER_UPDATE_INFO, 1);
-			eventSmTimerStart(TIMER_BL, BACKLIGHT_TIMEOUT_MS/100U);
-			driverSetLcdBacklight(255);
 			break;
 
+			case EV_WAKEUP:
+				driverSetLcdBacklight((regsFlags() & REGS_FLAGS_MASK_AWAKE) ? 255 : 0);
+				break;
+				
 			case EV_COMMAND_START:
 			lcd_printf(0, get_cmd_desc(event_p8(ev)));
 			lcd_printf(1, PSTR("Running"));
-			eventSmTimerStop(TIMER_BL);
 			eventSmTimerStop(TIMER_UPDATE_INFO);
-			driverSetLcdBacklight(255);
 			break;
 			
 			case EV_COMMAND_DONE:
 			lcd_printf(1, get_cmd_status_desc(event_p16(ev)));
 			eventSmTimerStart(TIMER_MSG, DISPLAY_CMD_START_DURATION_MS/100U);
-			eventSmTimerStart(TIMER_BL, BACKLIGHT_TIMEOUT_MS/100U);
-			driverSetLcdBacklight(255);
 			break;
 			
 			case EV_TIMER:
 			if (event_p8(ev) == TIMER_MSG)
 				eventSmPostSelf(context);
-			if (event_p8(ev) == TIMER_BL)
-				driverSetLcdBacklight(0);
 			if (event_p8(ev) == TIMER_UPDATE_INFO) {
 				lcd_printf(0, PSTR("R %S"), (regsFlags() & REGS_FLAGS_MASK_RELAY_FAULT) ? PSTR("FAIL") : PSTR("OK"));
 				//lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("    Ready..."));

@@ -772,8 +772,13 @@ static const sw_scan_def_t SWITCHES_DEFS[] PROGMEM = {
 };
 static sw_scan_context_t switches_contexts[UTILS_ELEMENT_COUNT(SWITCHES_DEFS)];
 
-static void switches_setup() { swScanInit(SWITCHES_DEFS, switches_contexts, UTILS_ELEMENT_COUNT(SWITCHES_DEFS)); }
-static void switches_service() { swScanSample(SWITCHES_DEFS, switches_contexts, UTILS_ELEMENT_COUNT(SWITCHES_DEFS)); }
+static void switches_setup() { 
+	swScanInit(SWITCHES_DEFS, switches_contexts, UTILS_ELEMENT_COUNT(SWITCHES_DEFS)); 
+}
+static void switches_service() { 
+	if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TOUCH_DISABLE) 
+		swScanSample(SWITCHES_DEFS, switches_contexts, UTILS_ELEMENT_COUNT(SWITCHES_DEFS)); 
+}
 
 #else
 static void switches_setup() { /* empty */ }
