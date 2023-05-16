@@ -92,18 +92,25 @@ void test_myprintf_snsprintf(const char* exp, char rc_exp, size_t len, const cha
 	char rc = myprintf_snprintf(&buf[1], len, fmt);
 	if (exp) {
 		TEST_ASSERT_EQUAL_STRING(exp, &buf[1]);
-		memset(&buf[1], 'x', strlen(exp)+1);
+		memset(&buf[1], 'x', strlen(exp)+1); // Reset written area
 	}
-	TEST_ASSERT_EACH_EQUAL_CHAR('x', buf, sizeof(buf));
+	TEST_ASSERT_EACH_EQUAL_CHAR('x', buf, sizeof(buf));	// Check buffer is still reset.
 	TEST_ASSERT_EQUAL(rc_exp, rc);
 }
-TT_TEST_CASE(test_myprintf_snsprintf(NULL, 0, 0, ""));	// Zero length buffer does not write anything.
-TT_TEST_CASE(test_myprintf_snsprintf(NULL, 0, 0, "Z"));	// Ditto for non-empty string.
-TT_TEST_CASE(test_myprintf_snsprintf("", 1, 1, ""));	// Can write zero length string to buffer length 1.
-TT_TEST_CASE(test_myprintf_snsprintf("", 0, 1, "Z"));	// But not non-empty string.
-TT_TEST_CASE(test_myprintf_snsprintf("", 1, 2, ""));	// Can write zero length string to buffer length 2.
-TT_TEST_CASE(test_myprintf_snsprintf("X", 1, 2, "X"));	// Can write 1 length string to buffer length 2.
-TT_TEST_CASE(test_myprintf_snsprintf("X", 0, 2, "XZ"));	// But not string length 2.
+
+/*
+TT_BEGIN_SCRIPT()
+add_test_case_vector('test_myprintf_snsprintf', '''
+	NULL 0 0 ""	# Zero length buffer does not write anything.
+	NULL 0 0 "Z"	# Ditto for non-empty string.
+	"" 1 1 ""	# Can write zero length string to buffer length 1.
+	"" 0 1 "Z"	# But not non-empty string.
+	"" 1 2 ""	# Can write zero length string to buffer length 2.
+	"X" 1 2 "X"	# Can write 1 length string to buffer length 2.
+	"X" 0 2 "XZ"	# But not string length 2.
+''')
+TT_END_SCRIPT()
+*/
 
 // Generic formatting test case.
 void test_printf_format_v(const char* expected, const char* fmt, va_list ap) {
@@ -118,41 +125,47 @@ void test_printf_format(const char* expected, const char* fmt, ...) {
 	va_end(ap);
 }
 
-// No formatting.
-TT_TEST_CASE(test_printf_format("", ""));
-TT_TEST_CASE(test_printf_format("x", "x"));
+/*
+TT_BEGIN_SCRIPT()
+add_test_case_vector('test_printf_format', '''
+	# No formatting.
+    ""    		""
+    "x"   		"x" 
 
-// Literal percent, width ignored.
-TT_TEST_CASE(test_printf_format("x%x", "x%%x"));
-TT_TEST_CASE(test_printf_format("x%x", "x%3%x"));
-TT_TEST_CASE(test_printf_format("x%x", "x%0%x"));
-TT_TEST_CASE(test_printf_format("x%x", "x%03%x"));
-TT_TEST_CASE(test_printf_format("x%x", "x%-3%x"));
+	# Literal percent width ignored.
+    "x%%x"    	"x%x"
+    "x%3%x"   	"x%x" 
+    "x%0%x"    	"x%x"
+    "x%03%x"    "x%x"
+    "x%-3%x"    "x%x"
 
-// Bad format ignored. Not important,just to check that it doesn't catch fire. 
-TT_TEST_CASE(test_printf_format("xx123x", "x%zx%dx", 123));
+	# Bad format ignored. Not important,just to check that it doesn't catch fire. 
+	"x%zx%dx" 	123    	"xx123x"
 
-// Character.
-TT_TEST_CASE(test_printf_format("xzx", "x%cx", 'z'));
-TT_TEST_CASE(test_printf_format("xzx", "x%1cx", 'z'));
-TT_TEST_CASE(test_printf_format("x zx", "x%2cx", 'z'));
-TT_TEST_CASE(test_printf_format("xz x", "x%-2cx", 'z'));
+	# Character.
+	"x%cx" 		'z'  	"xzx"
+	"x%1cx" 	'z' 	"xzx"
+	"x%2cx" 	'z'  	"x zx"
+	"x%-2cx" 	'z'    	"xz x" 
 
-// String
-TT_TEST_CASE(test_printf_format("xx", "x%sx", ""));
-TT_TEST_CASE(test_printf_format("xzx", "x%sx", "z"));
-TT_TEST_CASE(test_printf_format("x x", "x%1sx", ""));
-TT_TEST_CASE(test_printf_format("x x", "x%-1sx", ""));
-TT_TEST_CASE(test_printf_format("x)ovmm*x", "x%sx", NULL)); // `(null)' + 1.
-TT_TEST_CASE(test_printf_format("x  zx", "x%3sx", "z"));
-TT_TEST_CASE(test_printf_format("xz  x", "x%-3sx", "z"));
+	# String
+	"x%sx" 		""    	"xx"
+	"x%sx" 		"z"    	"xzx"
+	"x%1sx" 	""    	"x x"
+	"x%-1sx" 	""    	"x x"
+	"x%sx"		NULL  	"x)ovmm*x"   # `(null)' + 1.
+	"x%3sx" 	"z" 	"x  zx"    
+	"x%-3sx" 	"z"    	"xz  x" 
 
-// String in PGM space. 
-TT_TEST_CASE(test_printf_format("xx", "x%Sx", ""));
-TT_TEST_CASE(test_printf_format("xzx", "x%Sx", "y"));
-TT_TEST_CASE(test_printf_format("x)ovmm*x", "x%Sx", NULL)); // `(null)' + 1.
-TT_TEST_CASE(test_printf_format("x  zx", "x%3Sx", "y"));
-TT_TEST_CASE(test_printf_format("xz  x", "x%-3Sx", "y"));
+	# String in PGM space. 
+	"x%Sx" 		""    	"xx"
+	"x%Sx" 		"y"    	"xzx" 
+	"x%Sx" 		NULL   	"x)ovmm*x"  # `(null)' + 1.
+	"x%3Sx" 	"y"    	"x  zx" 
+    "x%-3Sx" 	"y"    	"xz  x" 
+''', arg_proc=lambda x: [x[-1]]+x[:-1])
+TT_END_SCRIPT()
+*/
 
 // Integer decimal.
 /*

@@ -20,7 +20,7 @@ void test_utils_mscale_valid_unsigned(uint8_t exp, uint8_t min, uint8_t max, uin
 }
 /*
 TT_BEGIN_SCRIPT()
-add_test_case_vector('test_utils_mscale_valid_signed', 4, '''\
+add_test_case_vector('test_utils_mscale_valid_signed', '''\
 	true 	0	10  15
 	true	0  	4   5
 	false	0  	10  0 	# Inc = 0
@@ -39,7 +39,7 @@ void test_utils_mscale_max_signed(int8_t exp, int8_t min, int8_t max, int8_t inc
 }
 /*
 TT_BEGIN_SCRIPT()
-add_test_case_vector('test_utils_mscale_max_signed', 4, '''\
+add_test_case_vector('test_utils_mscale_max_signed', '''\
 	2	0	10	5
 	2	-10	 0	5
 	4	-10	10	5
@@ -57,7 +57,7 @@ void test_utils_mscale_max_unsigned(uint8_t exp, uint8_t min, uint8_t max, uint8
 }
 /*
 TT_BEGIN_SCRIPT()
-add_test_case_vector('test_utils_mscale_max_unsigned', 4, '''\
+add_test_case_vector('test_utils_mscale_max_unsigned', '''\
 	2	0	10	5
 	2	10	20	5
 	2	210	220	5
@@ -71,7 +71,7 @@ void test_utils_mscale_signed(int8_t exp, int8_t val, int8_t min, int8_t max, in
 }
 /*
 TT_BEGIN_SCRIPT()
-add_test_case_vector('test_utils_mscale_signed', 5, '''\
+add_test_case_vector('test_utils_mscale_signed', '''\
 	0	0	0	10	5
 	1	5	0	10	5
 	2	10	0	10	5
@@ -108,7 +108,7 @@ void test_utils_unmscale_signed(int8_t exp, uint8_t val, int8_t min, int8_t max,
 }
 /*
 TT_BEGIN_SCRIPT()
-add_test_case_vector('test_utils_unmscale_signed', 5, '''\
+add_test_case_vector('test_utils_unmscale_signed', '''\
 	10	0	10	20	5
 	15	1	10	20	5
 	20	2	10	20	5
