@@ -3,7 +3,7 @@
 
 // Define version of NV data. If you change the schema or the implementation, increment the number to force any existing
 // EEPROM to flag as corrupt. Also increment to force the default values to be set for testing.
-const uint16_t REGS_DEF_VERSION = 4;
+const uint16_t REGS_DEF_VERSION = 5;
 
 /* [[[ Definition start...
 FLAGS [hex] "Various flags."
@@ -38,7 +38,7 @@ CMD_STATUS "Status from previous command."
 SLEW_TIMEOUT [nv 30] "Timeout for axis slew in seconds."
 JOG_DURATION_MS [nv 500] "Jog duration for single axis in ms."
 MAX_SLAVE_ERRORS [nv 3] "Max number of consecutive slave errors before flagging."
-ENABLES [nv hex 0x0000] "Enable flags."
+ENABLES [nv hex 0x0100] "Enable flags."
 	DUMP_MODBUS_EVENTS [0] "Dump MODBUS event value."
 	DUMP_REGS [1] "Regs values dump to console."
 	DUMP_REGS_FAST [2] "Dump at 5/s rather than 1/s."
@@ -46,6 +46,7 @@ ENABLES [nv hex 0x0000] "Enable flags."
 	SENSOR_DISABLE_1 [5] "Disable Sensor 1."
 	SENSOR_DISABLE_2 [6] "Disable Sensor 2."
 	SENSOR_DISABLE_3 [7] "Disable Sensor 3."
+	TOUCH_DISABLE [8] "Disable touch buttons."
 	TRACE_FORMAT_BINARY [13] "Dump trace in binary format."
 	TRACE_FORMAT_CONCISE [14] "Dump trace in concise text format."
 	DISABLE_BLINKY_LED [15] "Disable setting Blinky Led from fault states."
@@ -87,7 +88,7 @@ enum {
 #define REGS_START_NV_IDX REGS_IDX_SLEW_TIMEOUT
 
 // Define default values for the NV segment.
-#define REGS_NV_DEFAULT_VALS 30, 500, 3, 0, 0, 0, 30
+#define REGS_NV_DEFAULT_VALS 30, 500, 3, 256, 0, 0, 30
 
 // Define how to format the reg when printing.
 #define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U, CFMT_U
@@ -118,6 +119,7 @@ enum {
     	REGS_ENABLES_MASK_SENSOR_DISABLE_1 = (int)0x20,
     	REGS_ENABLES_MASK_SENSOR_DISABLE_2 = (int)0x40,
     	REGS_ENABLES_MASK_SENSOR_DISABLE_3 = (int)0x80,
+    	REGS_ENABLES_MASK_TOUCH_DISABLE = (int)0x100,
     	REGS_ENABLES_MASK_TRACE_FORMAT_BINARY = (int)0x2000,
     	REGS_ENABLES_MASK_TRACE_FORMAT_CONCISE = (int)0x4000,
     	REGS_ENABLES_MASK_DISABLE_BLINKY_LED = (int)0x8000,
@@ -252,6 +254,7 @@ enum {
     "\n SENSOR_DISABLE_1: 5 (Disable Sensor 1.)"                                        \
     "\n SENSOR_DISABLE_2: 6 (Disable Sensor 2.)"                                        \
     "\n SENSOR_DISABLE_3: 7 (Disable Sensor 3.)"                                        \
+    "\n TOUCH_DISABLE: 8 (Disable touch buttons.)"                                      \
     "\n TRACE_FORMAT_BINARY: 13 (Dump trace in binary format.)"                         \
     "\n TRACE_FORMAT_CONCISE: 14 (Dump trace in concise text format.)"                  \
     "\n DISABLE_BLINKY_LED: 15 (Disable setting Blinky Led from fault states.)"         \
