@@ -7,7 +7,12 @@
 
 #include "modbus.h"
 
+#ifndef TEST
 #include "gpio.h"
+#define DEBUG_IN_SERVICE(f_) gpioSp4Write(f_)
+#else
+#define DEBUG_IN_SERVICE(f_) /* empty */
+#endif
 
 /* Customisation for AVR target. */
 #if defined(__AVR__)
@@ -115,9 +120,9 @@ void modbusSlaveSend(const uint8_t* frame, uint8_t sz) {
 	// CRC is added in LITTLE ENDIAN!! 
 	bufferFrameAddU16(&f_modbus_ctx.buf_tx, utilsU16_native_to_le(modbusCrc(f_modbus_ctx.buf_tx.buf, bufferFrameLen(&f_modbus_ctx.buf_tx))));
 	while (modbusIsBusy()) {	// If we are still transmitting or waiting a response then keep doing it.
-gpioSp4Set();			
+DEBUG_IN_SERVICE(true);			
 		modbusService();
-gpioSp4Clear();
+DEBUG_IN_SERVICE(false);
 	}
 	modbusSendRaw(f_modbus_ctx.buf_tx.buf, bufferFrameLen(&f_modbus_ctx.buf_tx));
 }

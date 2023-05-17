@@ -20,84 +20,104 @@ void test_utils_mscale_valid_unsigned(uint8_t exp, uint8_t min, uint8_t max, uin
 }
 /*
 TT_BEGIN_SCRIPT()
-for test_v in '''\
+add_test_case_vector('test_utils_mscale_valid_signed', '''\
 	true 	0	10  15
 	true	0  	4   5
 	false	0  	10  0 	# Inc = 0
 	false 	10 	0	5	# Min > max.
 	true	10	0	-5	# Min > max, inc < 0.
 	false	10	0	5	# Min > max.	
-  '''.splitlines():
-	test_args = test_v.split()[:4]
-	if test_args:
-		add_test_case('test_utils_mscale_valid_signed', ', '.join(test_args))
+  ''')
 TT_END_SCRIPT()
 */
 TT_TEST_CASE(test_utils_mscale_valid_unsigned(false, 10, 0, 5));	// Min > max.
 
+// Verify Mscale max function. 
 void test_utils_mscale_max_signed(int8_t exp, int8_t min, int8_t max, int8_t inc) {
 	TEST_ASSERT(utilsMscaleValid<int8_t>(min, max, inc));
  	TEST_ASSERT_EQUAL_UINT8(exp, (utilsMscaleMax<int8_t, uint8_t>)(min, max, inc));
 }
-TT_TEST_CASE(test_utils_mscale_max_signed(2, 0, 10, 5));
-TT_TEST_CASE(test_utils_mscale_max_signed(2, -10, 0, 5));
-TT_TEST_CASE(test_utils_mscale_max_signed(4, -10, 10, 5));
-
-TT_TEST_CASE(test_utils_mscale_max_signed(2, 0, 11, 5));	// Max is clipped to lowest multiple of inc.
-TT_TEST_CASE(test_utils_mscale_max_signed(2, 0, 14, 5));
-
-TT_TEST_CASE(test_utils_mscale_max_signed(0, 0, 0, 5));		// Zero length range.
-TT_TEST_CASE(test_utils_mscale_max_signed(0, 0, 4, 5));
+/*
+TT_BEGIN_SCRIPT()
+add_test_case_vector('test_utils_mscale_max_signed', '''\
+	2	0	10	5
+	2	-10	 0	5
+	4	-10	10	5
+	2	0	11	5	# Max is clipped to lowest multiple of inc.
+	2	0	14	5
+	0	0	0	5	# Zero length range.
+	0	0	4	5
+  ''')
+TT_END_SCRIPT()
+*/
 
 void test_utils_mscale_max_unsigned(uint8_t exp, uint8_t min, uint8_t max, uint8_t inc) {
 	TEST_ASSERT(utilsMscaleValid<uint8_t>(min, max, inc));
 	TEST_ASSERT_EQUAL_UINT8(exp, ( utilsMscaleMax<uint8_t, uint8_t>)(min, max, inc));
 }
-TT_TEST_CASE(test_utils_mscale_max_unsigned(2, 0, 10, 5));
-TT_TEST_CASE(test_utils_mscale_max_unsigned(2, 10, 20, 5));
-TT_TEST_CASE(test_utils_mscale_max_unsigned(2, 210, 220, 5));
+/*
+TT_BEGIN_SCRIPT()
+add_test_case_vector('test_utils_mscale_max_unsigned', '''\
+	2	0	10	5
+	2	10	20	5
+	2	210	220	5
+  ''')
+TT_END_SCRIPT()
+*/
 
 void test_utils_mscale_signed(int8_t exp, int8_t val, int8_t min, int8_t max, int8_t inc) {
 	TEST_ASSERT((utilsMscaleValid<int8_t>)(min, max, inc));
 	TEST_ASSERT_EQUAL_INT8(exp, (utilsMscale<int8_t, uint8_t>)(val, min, max, inc));
 }
-TT_TEST_CASE(test_utils_mscale_signed(0, 0, 0, 10, 5));
-TT_TEST_CASE(test_utils_mscale_signed(1, 5, 0, 10, 5));
-TT_TEST_CASE(test_utils_mscale_signed(2, 10, 0, 10, 5));
-TT_TEST_CASE(test_utils_mscale_signed(0, -1, 0, 10, 5));
-TT_TEST_CASE(test_utils_mscale_signed(0, -100, 0, 10, 5));
-TT_TEST_CASE(test_utils_mscale_signed(2, 11, 0, 10, 5));
-TT_TEST_CASE(test_utils_mscale_signed(2, 111, 0, 10, 5));
+/*
+TT_BEGIN_SCRIPT()
+add_test_case_vector('test_utils_mscale_signed', '''\
+	0	0	0	10	5
+	1	5	0	10	5
+	2	10	0	10	5
+	0	-1	0	10	5
+	0	-100 0	10	5
+	2	11	0	10	5
+	2	111	0	10	5
 
-// Reversed range. 
-TT_TEST_CASE(test_utils_mscale_signed(2, -10, 10, 0, -5));
-TT_TEST_CASE(test_utils_mscale_signed(2, 0, 10, 0, -5));
-TT_TEST_CASE(test_utils_mscale_signed(1, 5, 10, 0, -5));
-TT_TEST_CASE(test_utils_mscale_signed(0, 10, 10, 0, -5));
-TT_TEST_CASE(test_utils_mscale_signed(0, 20, 10, 0, -5));
+	# Reversed range. 
+	2	-10	10	0	-5
+	2	0	10	0	-5
+	1	5	10	0	-5
+	0	10	10	0	-5
+	0	20	10	0	-5
 
-// Between multiples of inc. 
-TT_TEST_CASE(test_utils_mscale_signed(1, -3, -10, 10, 5));		
-TT_TEST_CASE(test_utils_mscale_signed(2, -2, -10, 10, 5));		
-TT_TEST_CASE(test_utils_mscale_signed(0, 2, 0, 10, 5));		
-TT_TEST_CASE(test_utils_mscale_signed(1, 3, 0, 10, 5));		
-TT_TEST_CASE(test_utils_mscale_signed(0, 2, 0, 12, 6));		
-TT_TEST_CASE(test_utils_mscale_signed(1, 3, 0, 12, 6));		
+	# Between multiples of inc. 
+	1	-3	-10	10	5		
+	2	-2	-10	10	5		
+	0	2	0	10	5		
+	1	3	0	10	5		
+	0	2	0	12	6		
+	1	3	0	12	6		
 
-// Between multiples of inc, reversed range. 
-TT_TEST_CASE(test_utils_mscale_signed(2, 2, 10, 0, -5));		
-TT_TEST_CASE(test_utils_mscale_signed(1, 3, 10, 0, -5));		
+	# Between multiples of inc & reversed range. 
+	2	2	10	0	-5		
+	1	3	10	0	-5		
+  ''')
+TT_END_SCRIPT()
+*/
 
 void test_utils_unmscale_signed(int8_t exp, uint8_t val, int8_t min, int8_t max, int8_t inc) {
 	TEST_ASSERT(utilsMscaleValid<int8_t>(min, max, inc));
 	TEST_ASSERT_EQUAL_INT8(exp, (utilsUnmscale<int8_t, uint8_t>)(val, min, max, inc));
 }
-TT_TEST_CASE(test_utils_unmscale_signed(10, 0, 10, 20, 5));
-TT_TEST_CASE(test_utils_unmscale_signed(15, 1, 10, 20, 5));
-TT_TEST_CASE(test_utils_unmscale_signed(20, 2, 10, 20, 5));
-TT_TEST_CASE(test_utils_unmscale_signed(10, 2, 20, 10, -5));
-TT_TEST_CASE(test_utils_unmscale_signed(15, 1, 20, 10, -5));
-TT_TEST_CASE(test_utils_unmscale_signed(20, 0, 20, 10, -5));
+/*
+TT_BEGIN_SCRIPT()
+add_test_case_vector('test_utils_unmscale_signed', '''\
+	10	0	10	20	5
+	15	1	10	20	5
+	20	2	10	20	5
+	10	2	20	10	-5
+	15	1	20	10	-5
+	20	0	20	10	-5
+  ''')
+TT_END_SCRIPT()
+*/
 
 // Endianness conversion.
 void test_utils_endianness() {

@@ -128,6 +128,23 @@ def add_test_case(test_func, test_args):
 	add_test(test_stub_name, descr, lineno)
 	test_stubs.append((if_condition, f'static void {test_stub_name}(void) {{ {test_stub_body}; }}'))
 	num_tests += 1
+	
+def add_test_case_vector(test_func, vectors, argc=None, comment='#', arg_proc=None):
+	"""Allows a number of test cases to be added with a common test function but args taken from string vectors.
+		The input string is forst split into lines.
+		If optional arg `comment' is not None (default is `#') then all chars following the comment are removed.
+		Each line is then split on whitespace, with the maximum number of args in `argc'.
+		Blank lines and those starting with a `#' are ignored. """
+	for test_v in vectors.splitlines():
+		if comment:
+			test_v = test_v.split(comment, 1)[0]
+		if arg_proc:
+			test_v = arg_proc(arg_proc)
+		nsplits = -1 if argc is None else argc-1
+		test_args = test_v.split(None, nsplits)
+		if test_args and not test_args[0].startswith('#'):
+			add_test_case(test_func, ', '.join(test_args))
+			
 
 # Returns (macro, list-of-args), ('test-func', [test-func, args]), ('line', line)
 MACRO_PREFIX = 'TT_'
@@ -172,7 +189,7 @@ for fn in input_files:
 	fixture, if_condition = None, None
 	num_tests = 0
 	line_proc = None
-	script_globals = {'add_test_case': add_test_case}
+	script_globals = {'add_test_case': add_test_case, 'add_test_case_vector': add_test_case_vector}
 
 	try:
 		with open(fn, 'rt') as f:
