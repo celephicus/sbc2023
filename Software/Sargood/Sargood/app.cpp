@@ -47,10 +47,10 @@ enum {
 	AXIS_BED,
 	AXIS_TILT,
 };
-#pragma message "FIX RELAY CODE!!"
+
 enum { 
 	AXIS_DIR_STOP = 0, 
-	AXIS_DIR_DOWN = 3,	// TODO: change to 2 for release.
+	AXIS_DIR_DOWN = 2,	
 	AXIS_DIR_UP = 1, 
 };
 
