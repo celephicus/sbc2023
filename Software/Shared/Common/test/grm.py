@@ -139,7 +139,7 @@ def add_test_case_vector(test_func, vectors, argc=None, comment='#', arg_proc=No
 		if comment:
 			test_v = test_v.split(comment, 1)[0]
 		if arg_proc:
-			test_v = arg_proc(arg_proc)
+			test_v = arg_proc(test_v)
 		nsplits = -1 if argc is None else argc-1
 		test_args = test_v.split(None, nsplits)
 		if test_args and not test_args[0].startswith('#'):

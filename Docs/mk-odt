@@ -1,0 +1,2 @@
+#!/bin/bash
+pandoc -f gfm -t odt -o $1.odt $1.MD

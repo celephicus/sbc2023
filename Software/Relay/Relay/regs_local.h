@@ -3,29 +3,49 @@
 
 // Define version of NV data. If you change the schema or the implementation, increment the number to force any existing
 // EEPROM to flag as corrupt. Also increment to force the default values to be set for testing.
-const uint16_t REGS_DEF_VERSION = 3;
+const uint16_t REGS_DEF_VERSION = 4;
 
 /* [[[ Definition start...
-FLAGS [hex] "Various flags."
-	MODBUS_MASTER_NO_COMMS [0] "No comms from MODBUS master."
-	DC_LOW [1] "External DC power volts low."
-	EEPROM_READ_BAD_0 [13] "EEPROM bank 0 corrupt."
-	EEPROM_READ_BAD_1 [14] "EEPROM bank 1 corrupt."
-	WATCHDOG_RESTART [15] "Whoops."
-RESTART [hex] "MCUSR in low byte, wdog in high byte."
-ADC_VOLTS_MON_12V_IN "Raw ADC DC power in volts."
-ADC_VOLTS_MON_BUS "Raw ADC Bus volts."
-VOLTS_MON_12V_IN "DC power in /mV."
+FLAGS [hex] "Various flags.
+	A register with a number of boolean flags that represent various conditions. They may be set only at at startup, or as the
+	result of variouys conditions."
+- MODBUS_MASTER_NO_COMMS [0] "No comms from MODBUS master.
+	No request has been receieved from the MODBUS master for a while, probably indicating that the MODBUS connection or
+	cable is faulty, or that another slave is interfering with the bus."
+- DC_LOW [1] "External DC power volts low.
+	The DC volts suppliting power to the slave from the bus cable is low indicating a possible problem."
+- EEPROM_READ_BAD_0 [13] "EEPROM bank 0 corrupt.
+	EEPROM bank 0 corrupt. If bank 1 is corrupt too then a default set of values has been written. Flag written at startup only."
+- EEPROM_READ_BAD_1 [14] "EEPROM bank 1 corrupt.
+	EEPROM bank 1 corrupt. If bank 0 is corrupt too then a default set of values has been written. Flag written at startup only."
+- WATCHDOG_RESTART [15] "Device has restarted from a watchdog timeout."
+RESTART [hex] "MCUSR in low byte, wdog in high byte.
+	The processor MCUSR register is copied into the low byte. The watchdog reset source is copied to the high byte. For details
+	refer to devWatchdogInit()."
+ADC_VOLTS_MON_12V_IN "Raw ADC (unscaled) DC power in voltage.
+	Raw ADC (unscaled) DC power in. Read from DC power in jack after series diode."
+ADC_VOLTS_MON_BUS "Raw ADC (unscaled) voltage on Bus."
+VOLTS_MON_12V_IN "DC power in volts /mV."
 VOLTS_MON_BUS "Bus volts /mV."
-RELAYS "Bed control relays."
-ENABLES [nv hex 0x0000] "Enable flags."
-	DUMP_MODBUS_EVENTS [0] "Dump MODBUS event value."
-	DUMP_MODBUS_DATA [1] "Dump MODBUS data."
-	DUMP_REGS [2] "Regs values dump to console."
-	DUMP_REGS_FAST [3] "Dump at 5/s rather than 1/s."
-	DISABLE_BLINKY_LED [15] "Disable setting Blinky Led from fault states."
-MODBUS_DUMP_EVENT_MASK [nv hex 0x0000] "Dump MODBUS events mask, refer MODBUS_CB_EVT_xxx."
-MODBUS_DUMP_SLAVE_ID [nv 0] "For master, only dump MODBUS events from this slave ID."
+RELAYS "Bed control relays.
+	Lower 8 bits are written to relays, upper 8 bits ignored. Note that if the Controller is sending data then these values
+	will be overwritten	very quickly."
+ENABLES [nv hex 0x0000] "Non-volatile enable flags.
+	A number of flags that are rarely written by the code, but control the behaviour of the system."
+- DUMP_MODBUS_EVENTS [0] "Dump MODBUS event value.
+	Set to dump MODBUS events. Note that the MODBUS dump is also further controlled by other registers, but if this flag is
+	false no dump takes place. Also note that if too many events are dumped it can cause MODBUS errors as it
+	may delay reponses to the master."
+- DUMP_REGS [1] "Enable regs dump to console.
+	If set then registers are dumped at a set rate."
+- DUMP_REGS_FAST [2] "Dump regs at 5/s rather than 1/s."
+- DISABLE_BLINKY_LED [15] "Disable setting Blinky Led from fault states.
+	Used for testing the blinky LED, if set then the system will not set the LED pattern, allowing it to be set by the console
+	for testing the driver."
+MODBUS_DUMP_EVENT_MASK [nv hex 0x0000] "Dump MODBUS events mask, refer MODBUS_CB_EVT_xxx.
+	If MODBUS dump events is enabled, only events matching the bitmask in this register are dumped."
+MODBUS_DUMP_SLAVE_ID [nv 0] "For master, only dump MODBUS events from this slave ID.
+	Event must be from this slace ID."
 >>>  Definition end, declaration start... */
 
 // Declare the indices to the registers.
@@ -64,9 +84,8 @@ enum {
 // Flags/masks for register ENABLES.
 enum {
     	REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS = (int)0x1,
-    	REGS_ENABLES_MASK_DUMP_MODBUS_DATA = (int)0x2,
-    	REGS_ENABLES_MASK_DUMP_REGS = (int)0x4,
-    	REGS_ENABLES_MASK_DUMP_REGS_FAST = (int)0x8,
+    	REGS_ENABLES_MASK_DUMP_REGS = (int)0x2,
+    	REGS_ENABLES_MASK_DUMP_REGS_FAST = (int)0x4,
     	REGS_ENABLES_MASK_DISABLE_BLINKY_LED = (int)0x8000,
 };
 
@@ -100,12 +119,12 @@ enum {
 #define DECLARE_REGS_DESCRS()                                                           \
  static const char REGS_DESCRS_0[] PROGMEM = "Various flags.";                          \
  static const char REGS_DESCRS_1[] PROGMEM = "MCUSR in low byte, wdog in high byte.";   \
- static const char REGS_DESCRS_2[] PROGMEM = "Raw ADC DC power in volts.";              \
- static const char REGS_DESCRS_3[] PROGMEM = "Raw ADC Bus volts.";                      \
- static const char REGS_DESCRS_4[] PROGMEM = "DC power in /mV.";                        \
+ static const char REGS_DESCRS_2[] PROGMEM = "Raw ADC (unscaled) DC power in voltage."; \
+ static const char REGS_DESCRS_3[] PROGMEM = "Raw ADC (unscaled) voltage on Bus.";      \
+ static const char REGS_DESCRS_4[] PROGMEM = "DC power in volts /mV.";                  \
  static const char REGS_DESCRS_5[] PROGMEM = "Bus volts /mV.";                          \
  static const char REGS_DESCRS_6[] PROGMEM = "Bed control relays.";                     \
- static const char REGS_DESCRS_7[] PROGMEM = "Enable flags.";                           \
+ static const char REGS_DESCRS_7[] PROGMEM = "Non-volatile enable flags.";              \
  static const char REGS_DESCRS_8[] PROGMEM = "Dump MODBUS events mask, refer MODBUS_CB_EVT_xxx.";\
  static const char REGS_DESCRS_9[] PROGMEM = "For master, only dump MODBUS events from this slave ID.";\
                                                                                         \
@@ -130,12 +149,11 @@ enum {
     "\n DC_LOW: 1 (External DC power volts low.)"                                       \
     "\n EEPROM_READ_BAD_0: 13 (EEPROM bank 0 corrupt.)"                                 \
     "\n EEPROM_READ_BAD_1: 14 (EEPROM bank 1 corrupt.)"                                 \
-    "\n WATCHDOG_RESTART: 15 (Whoops.)"                                                 \
+    "\n WATCHDOG_RESTART: 15 (Device has restarted from a watchdog timeout.)"           \
     "\nEnables:"                                                                        \
     "\n DUMP_MODBUS_EVENTS: 0 (Dump MODBUS event value.)"                               \
-    "\n DUMP_MODBUS_DATA: 1 (Dump MODBUS data.)"                                        \
-    "\n DUMP_REGS: 2 (Regs values dump to console.)"                                    \
-    "\n DUMP_REGS_FAST: 3 (Dump at 5/s rather than 1/s.)"                               \
+    "\n DUMP_REGS: 1 (Enable regs dump to console.)"                                    \
+    "\n DUMP_REGS_FAST: 2 (Dump regs at 5/s rather than 1/s.)"                          \
     "\n DISABLE_BLINKY_LED: 15 (Disable setting Blinky Led from fault states.)"         \
 
 // ]]] Declarations end

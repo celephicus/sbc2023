@@ -23,7 +23,7 @@ class RegionParser:
 			parts[s].append(ln)
 		parts[self.S_LEADER].append(parts[self.S_DEFS].pop(0))	# Fix up tags to not be removed by processing.
 		return parts
-		
+
 cg = codegen.Codegen(infile)
 parser = RegionParser()
 parts = cg.begin(parser.read)
@@ -33,52 +33,66 @@ FLAGS [hex] "Various flags."
 	DC_IN_VOLTS_LOW [0] "External DC power volts low,"
 """
 reReg = re.compile(r'''
-	(\s*)				# Leading whitespace to indicate fields within a register.
-	([a-z_][a-z_0-9]+)	# Name for register or field, same rules as for C identifier.
-	\s*					# Possible non-significant whitespace.
-	(?:\[([^\]]*)\])?	# Optional options in [].
-	\s*					# Possible non-significant whitespace.
-	(?:"([^"]*)")?		# Optional description in dquotes.
+	(-\s*)?					# Leading `-' with optional trailing whitespace to indicate fields within a register.
+	([a-z_][a-z_0-9]+)		# Name for register or field, same rules as for C identifier.
+	\s+						# Some whitespace.
+	(?:\[([^\]]*)\]\s+)?	# Options in [], which may be left out if empty.
+	"([^"]*)"				# Description in dquotes.
+	\s*						# Some evil trailing whitespace.
 	$
 ''', re.X|re.I)
 
 def error(msg, lineno=None):
 	codegen.error(f"line {lineno}: {msg}" if lineno else msg)
-	
+
 registers = {} # defs with ident in col 1 are registers, with a 4-tuple of (fields, default-value, options, description). Options are a default value as an int, optional `nv' and one of (`hex', 'signed').
 				# defs with leading whitepsace are fields, and add a dict of name: 2-tuple of (bits, description). Options are bit `3' or range `5..7'.
-REG_IDX_FIELDS, REG_IDX_DEFAULT, REG_IDX_OPTIONS, REG_IDX_DESC = range(4)
-FIELD_IDX_BITS, FIELD_IDX_MASK, FIELD_IDX_DESC = range(3)
+REG_IDX_FIELDS, REG_IDX_DEFAULT, REG_IDX_OPTIONS, REG_IDX_DESC, REG_IDX_LONG_DESC = range(5)
+FIELD_IDX_BITS, FIELD_IDX_MASK, FIELD_IDX_DESC, FIELD_IDX_LONG_DESC = range(4)
+
+# Turn physical lines into a tuple of (lineno, string), with lines with a leading space joined with a single spaces.
+llines = []
 for lineno, ln in enumerate(parts[RegionParser.S_DEFS], len(parts[RegionParser.S_LEADER])+1):
-	if not ln or ln.isspace(): continue
+	ln = ln.rstrip()			# Remove TRAILING spaces.
+	if not ln: continue		# Ignore empty lines.
+	if ln[0].isspace():
+		llines[-1][1].append(ln.lstrip())
+	else:
+		llines.append([lineno, [ln]])
+
+# Process logical lines...
+for lineno, lns in llines:
+	ln = ' '.join(lns)
 	m = reReg.match(ln)
 	if not m: error(f"Line {ln}", lineno)
-	r_lwsp, r_name, r_options, r_desc = m.groups()
-	#print(r_lwsp, r_name, r_options, r_desc)
+	r_field, r_name, r_options, r_desc = m.groups()
+	r_short_desc, r_long_desc = (r_desc.split('.', 1) + [''])[:2]
+	if not r_short_desc.endswith('.'): r_short_desc = r_short_desc + '.'
+	#print(r_field, r_name, r_options, r_desc)
 	#continue
 	name = r_name.upper()
 	raw_options = r_options.lower().split() if r_options else [] 	# Normalise options.
-	if not r_lwsp:		# Register declaration...
-		options = {}		
+	if not r_field:		# Register declaration...
+		options = {}
 		if name in registers: error(f"{name}: duplicate register name.", lineno)
 		default_value = 0					# Default value has a default value!
-		options['format'] = 'unsigned'		# Format to use when printing. 
+		options['format'] = 'unsigned'		# Format to use when printing.
 		for opt in raw_options:
-			try: 
-				default_value = int(opt, 0)	
+			try:
+				default_value = int(opt, 0)
 			except ValueError: 	# Not an int, try other options.
 				if opt in 'nv'.split():		# Simple options.
 					options[opt] = ''
-				elif opt in 'hex signed'.split(): 
+				elif opt in 'hex signed'.split():
 					options['format'] = opt
 				else:
-					error(f"{name}: illegal option `{opt}'.", lineno) 
-		
-		registers[name] = ({}, default_value, options, r_desc)
+					error(f"{name}: illegal option `{opt}'.", lineno)
+
+		registers[name] = ({}, default_value, options, r_short_desc, r_long_desc)
 		existing_field_mask = 0		# Used to check fields do not overlap existing fields.
 	else:				# Field declaration...
-		if not registers: error(f"Field {name} has no register.", lineno) 
-		reg_name = list(registers)[-1]	# Register is last one defined. 
+		if not registers: error(f"Field {name} has no register.", lineno)
+		reg_name = list(registers)[-1]	# Register is last one defined.
 		if name in registers[reg_name][REG_IDX_FIELDS]: error(f"{reg_name}: duplicate field `{name}'.", lineno)
 		for opt in raw_options:
 			try: bits = [int(x) for x in opt.split('..', 1)]
@@ -90,7 +104,7 @@ for lineno, ln in enumerate(parts[RegionParser.S_DEFS], len(parts[RegionParser.S
 			for i in range(bits[0], bits[1]+1):	field_mask |= 1<<i # Inefficient...
 			if field_mask & existing_field_mask: error(f"{reg_name}: field {name} value overlap `{opt}'.", lineno)
 			existing_field_mask |= field_mask;
-		registers[reg_name][REG_IDX_FIELDS][name] = (bits, field_mask, r_desc)
+		registers[reg_name][REG_IDX_FIELDS][name] = (bits, field_mask, r_short_desc, r_long_desc)
 
 # Sort register names to have those tagged as `nv' last.
 registers = dict(sorted(registers.items(), key=lambda x: 'nv' in x[1][REG_IDX_OPTIONS]))
@@ -98,7 +112,7 @@ registers = dict(sorted(registers.items(), key=lambda x: 'nv' in x[1][REG_IDX_OP
 # Get index of start of NV segment. This is probably a oneliner for Python gurus.
 reg_first_nv = len(registers)
 for i, x in enumerate(registers.values()):
-	if 'nv' in x[REG_IDX_OPTIONS]: 
+	if 'nv' in x[REG_IDX_OPTIONS]:
 		reg_first_nv = i
 		break
 
@@ -141,7 +155,7 @@ for f in registers.items():
 		cg.add("enum {")
 		cg.indent()
 		for field_name in fields:
-			bits, field_mask, r_desc = fields[field_name]
+			bits, field_mask, r_short_desc, r_long_desc = fields[field_name]
 			cg.add(f"\tREGS_{reg_name}_MASK_{field_name} = (int)0x{field_mask:x},")
 		cg.dedent()
 		cg.add("};")

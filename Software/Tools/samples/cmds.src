@@ -1,0 +1,235 @@
+
+# Info
+?VER {{ print_banner(); }}
+	"( -- ) Prints the name of the project, and a version number, build number and build date in ISO 8601 format.
+	E.g `TSA SBC2022 Relay Module V1.0 (1234) 20221110T105347`."
+
+# Driver
+LED {{ driverSetLedPattern(consoleStackPop()); }}
+	"(u -- ) Sets the blink pattern on the LED to the index in TOS. Note that the system may well overwrite your setting,
+	so you should disable this by other means. If the index is out of range an error is flagged. A valueof zero turns off the
+	LED."
+?LED [ ] {{ consolePrint(CFMT_D, driverGetLedPattern()); }}
+	"( -- ) Print the index of the current blink pattern on the LED."
+RLY [RELAY] {{ REGS[REGS_IDX_RELAYS] = consoleStackPop(); }}
+	"(u8 -- ) Write the lower 8 bits to the 8 relays. This is a shortcut for writing a value to the register controlling the relays.
+	Note that the system will overwrite your setting, so you should disable this by disconnecting the unit from the bus."
+?RLY [RELAY] {{ consolePrint(CFMT_D, REGS[REGS_IDX_RELAYS]); }}
+	"( -- ) Print the state of the 8 relays. This is a shortcut for printing the value of the register controlling the relays."
+
+# Controller
+CMD [SARGOOD] {{ appCmdRun(consoleStackPop()); }}
+	"(u8 -- ) Queue a command from TOS to be run by the controller. Values given in APP_CMD_xxx in app.h. Note than commands
+	are only accepted if the command processor is not busy, with the exception of APP_CMD_STOP which immediately aborts
+	any command and stops motion, and the timed motion commands APP_CMD_HEAD_UP etc. which if repeated just extend the
+	running time of the motor."
+?S [SARGOOD] {{ fori (CFG_TILT_SENSOR_COUNT) { consolePrint(CFMT_D, REGS[REGS_IDX_TILT_SENSOR_0 + i]); } }}
+	"( -- ) Prints the values of all tilt sensors in signed decimal. If the sensor is not reponding or is reading bad data
+	then the value "32767" is printed."
+?PR [SARGOOD] {{ fori (DRIVER_BED_POS_PRESET_COUNT) {
+		forj (CFG_TILT_SENSOR_COUNT) consolePrint(CFMT_D, driverPresets(i)[j]);
+	} }}
+	"( -- ) Print the position presets as a row of sensor values for each preset on a separate line."
+PR [SARGOOD] {{
+		const uint8_t idx = consoleStackPop(); if (idx >= DRIVER_BED_POS_PRESET_COUNT) consoleRaise(CONSOLE_RC_ERROR_ARG);
+		fori (CFG_TILT_SENSOR_COUNT) driverPresets(idx)[i] = consoleStackPop();
+	} }}
+	"(foot-pos:d head-pos:d preset-index:u8 -- ) Write a position preset.
+	E.g. `1234 2345 2 PR` writes preset index 2, setting sensor 0 (head) to 2345 and sensor 1 (foot)
+	to 1234. If the preset index is out of range an error is flagged. No check is made of the sensor values.
+	Note that the change is not writen to non-volatile memory. The user must use the command `NV-W` to do that."
+?LIM [SARGOOD] {{ fori (CFG_TILT_SENSOR_COUNT) {
+		consolePrint(CFMT_D, (uint16_t)driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_LOWER]);
+		consolePrint(CFMT_D, (uint16_t)driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_UPPER]);
+	}  }}
+	"( -- ) Print the motion limits for each axis as a list of sensor values, as head-lower head-upper foot lower foot upper."
+LIM [SARGOOD] {{
+		const uint8_t axis_idx = consoleStackPop(); if (axis_idx >= CFG_TILT_SENSOR_COUNT) consoleRaise(CONSOLE_RC_ERROR_USER);
+		driverAxisLimits(axis_idx)[DRIVER_AXIS_LIMIT_IDX_LOWER] = consoleStackPop(); driverAxisLimits(axis_idx)[DRIVER_AXIS_LIMIT_IDX_LOWER] = consoleStackPop();
+	} }}
+	"(lower-limit:d upper-limit:d axis-idx:u8 -- )
+	Set the motion limits for an axis. E.g. `456 234 1 LIM` sets the limits for axis 1 (foot) to 234 (lower) and 456 (upper).
+	If the preset index is out of range an error is flagged. No check is made of the limit values.
+	Note that the change is not writen to non-volatile memory. The user must use the command `NV-W` to do that."
+BL [SARGOOD] {{ driverSetLcdBacklight(consoleStackPop()); }}
+	"(u8 -- ) Sets the LCD backlight brightness as an 8 bit value from 0 through 255 inclusive. Note that the system may also set
+	the brightness and overwrite the effects of this command."
+
+# Events & trace
+EVENT [SARGOOD] {{ eventPublish(consoleStackPop()); }}
+	"(u8 -- ) Publishes an event with ID set by the 8 bit value in TOS, and the event's 8 & 16 bit payloads set to zero.
+	The event is queued and read by all state machines. For event IDs refer to event_local.h."
+EVENT-EX [SARGOOD] {{
+	const uint16_t p16 = consoleStackPop(); const uint8_t p8 = consoleStackPop(); eventPublish(consoleStackPop(), p8, p16); }
+	}}
+	"(payload-16:u16 payload-8:u8 is:u8-- ) Publishes an event with ID and the 8 & 16 bit payloads set by values on the stack.
+	E.g `1234 56 78 EVENT-EX` will publish an event with 16 bit payload 1234, 8 bit payload 56 and ID 78.
+	The event is queued and read by all state machines. For event IDs refer to event_local.h."
+CTM [SARGOOD] {{ eventTraceMaskClear(); }}
+	"( -- ) Clears the event trace mask so that no events are traced.
+	The changes must be written to non-volatile storage with the `NV-W` command to be made permanent."
+DTM [SARGOOD] {{
+		eventTraceMaskSetDefault();
+		static const uint8_t EVSPROGMEM = { EV_TIMER, EV_DEBUG_TIMER_ARM, EV_DEBUG_TIMER_STOP, };
+		fori (UTILS_ELEMENT_COUNT(EVS))	eventTraceMaskSetBit(pgm_read_byte(&EVS[i], false);
+	}}
+	"( -- ) Sets the event trace mask to trace most interesting events.
+	The changes must be written to non-volatile storage with the `NV-W` command to be made permanent."
+?TM [SARGOOD] {{
+	fori ((COUNT_EV + 15) / 16)
+	 consolePrint(CFMT_X, ((uint16_t)eventGetTraceMask()[i*2+1]<<8) | (uint16_t)eventGetTraceMask()[i*2]);
+	}}
+	"( -- ) Print the event trace mask as a set of 16 bit hex values. Only the mask for used events is printed, rather than the entire
+	mask of 16 values."
+??TM [SARGOOD] {{
+	fori (COUNT_EV) {
+		printf_s(PSTR("\n%d: %S: %c"), i, eventGetEventName(i), eventTraceMaskGetBit(i) + '0');
+		wdt_reset();
+	}
+	}}
+	"( -- ) Prints a verbose list of all defined events: ID, name and whether they are being traced."
+STM [SARGOOD] {{
+	const uint8_t id = consoleStackPop();
+	if (id <= 255) eventTraceMaskSetBit(id, static_cast<bool>(consoleStackPop()));
+	else consoleRaise(CONSOLE_RC_ERROR_ARG);
+	}}
+	"(enable:b id:u8 -- ) Sets whether an individual event is traced. Event ID on TOS, value on NOS sets traced if nonzero,
+	not traced otherwise. E.g `1 33 STM` will set the tracemask bit for event ID 33."
+
+# MODBUS
+M {{ regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS, true); }}
+	"( -- ) Enable dumping MODBUS events. Use command `X` to disable. There are registers that further control
+	MODBUS dumping."
+ATN {{ driverSendAtn(); }}
+	"( -- ) Set the Bus ATN line active for a while."
+SL {{ modbusSetSlaveId(consoleStackPop()); }}
+	"(u8 -- ) The value in TOS is used to set the MODBUS slave ID. This is not saved in non-volatile storage and is reloaded
+	at each restart. Legal values are from 1 though 247 inclusive. Setting the slave ID to an illegal value will prevent that
+	slave from responding to any MODBUS requests."
+?SL {{ consolePrint(CFMT_D, modbusGetSlaveId()); }}
+	"( -- ) Print the MODBUS slave ID. Legal values are from 1 though 247 inclusive."
+SEND-RAW {{
+        const uint8_t* d = reinterpret_cast<uint8_t*>(consoleStackPop());
+		const uint8_t sz = *d;
+		modbusSendRaw(d + 1, sz);
+      }}
+	"(x -- ) Sends arbitrary data on the MODBUS. No CRC is appended to the data, it is sent exactly as given.
+	Used for testing that corrupted MODBUS packets are rejected."
+SEND {{
+        const uint8_t* d = reinterpret_cast<uint8_t*>(consoleStackPop());
+		const uint8_t sz = *d;
+		modbusMasterSend(d + 1, sz);
+      }}
+	"(x -- ) Sends arbitrary data on the MODBUS and appends a correct CRC."
+RELAY {{ // (state relay slave -- )
+        uint8_t slave_id = consoleStackPop();
+        uint8_t rly = consoleStackPop();
+        modbusRelayBoardWrite(slave_id, rly, consoleStackPop());
+      }}
+	"(state:u8 relay:u8 slave-id:u8 -- ) Writes to one of those cheap 8 way Ebay MODBUS boards.
+	Value `slave-id` is the MODBUS slave ID set on the board. Value `relay` is the index of the relay, from 1 through 8 inclusive.
+	Value `state` closes the relay for `1`, opens it for `2`, there are other values possible."
+WRITE {{ // (val addr sl -) REQ: [FC=6 addr:16 value:16] -- RESP: [FC=6 addr:16 value:16]
+		uint8_t req[MODBUS_MAX_RESP_SIZE];
+		req[MODBUS_FRAME_IDX_SLAVE_ID] = consoleStackPop();
+		req[MODBUS_FRAME_IDX_FUNCTION] = MODBUS_FC_WRITE_SINGLE_REGISTER;
+		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 0], consoleStackPop());
+		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 2], consoleStackPop());
+		modbusMasterSend(req, 6);
+      }}
+	"(val:u16 reg:u16 slave-id:u8 -- ) Sends a MODBUS write single register request to a slave.
+	Value `slave-id` is the MODBUS slave ID. Value `reg` is the MODBUS register address, value `val` is the value to write.
+	Note that the only way to see the response (if any) is by dumping MODBUS responses"
+READ {{ // (count addr sl -) REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
+		uint8_t req[MODBUS_MAX_RESP_SIZE];
+		req[MODBUS_FRAME_IDX_SLAVE_ID] = consoleStackPop();
+		req[MODBUS_FRAME_IDX_FUNCTION] = MODBUS_FC_READ_HOLDING_REGISTERS;
+		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 0], consoleStackPop());
+		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 2], consoleStackPop());
+		modbusMasterSend(req, 6);
+	 }}
+	"(count:u16 reg:u16 slave-id:u8 -- ) Sends a MODBUS read multiple registers request to a slave.
+	Value `slave-id` is the MODBUS slave ID. Value `reg` is the MODBUS register address to start, value `count` is
+	the number of values to read.
+	Note that the only way to see the response (if any) is by dumping MODBUS responses"
+
+# Registers
+?V {{ const uint8_t idx = consoleStackPop();
+		if (idx < COUNT_REGS) regsPrintValue(idx);
+		else consoleRaise(CONSOLE_RC_ERROR_ARG);
+	}}
+	"(reg-idx:u8 -- ) Print the value of the register at index in TOS. The printing format may be signed decimal, unsigned decimal or hex
+	depending on the register, the number will have appropriate prefix so that the format may be deduced.
+	If the index is out of range an argument error is flagged."
+V {{ const uint8_t idx = consoleStackPop(); const uint16_t v = (uint16_t)consoleStackPop();
+		if (idx < COUNT_REGS) CRITICAL( REGS[idx] = v ); // Might be interrupted by an ISR part way through.
+		else consoleRaise(CONSOLE_RC_ERROR_ARG);
+	}}
+	"(val:u16 reg-idx:u8 -- ) Set the value of the register at index in TOS to NOS. No check is made on the value.
+	If the index is out of range an argument error is flagged."
+??V {{ fori(COUNT_REGS) regsPrintValue(i); }}
+	"( -- ) Print the values of all registers on a single line. The printing format may be signed decimal, unsigned decimal or hex
+	depending on the register, the number will have appropriate prefix so that the format may be deduced."
+???V {{ fori (COUNT_REGS) {
+			consolePrint(CFMT_NL, 0);
+			consolePrint(CFMT_D|CFMT_M_NO_SEP, (console_cell_t)i);
+			consolePrint(CFMT_C, (console_cell_t)':');
+			regsPrintValue(i);
+			consolePrint(CFMT_STR_P, (console_cell_t)regsGetRegisterName(i));
+			consolePrint(CFMT_STR_P, (console_cell_t)regsGetRegisterDescription(i));
+			devWatchdogPat(DEV_WATCHDOG_MASK_MAINLOOP);
+		}
+		consolePrint(CFMT_STR_P, (console_cell_t)regsGetHelpStr());
+	}}
+	"( -- ) Print a verbose dump of all register values, together with descriptive text for each register and the meanings
+	of all flags. See the registers writeup for more information."
+DUMP {{
+		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS, (consoleStackTos() > 0));
+		regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS_FAST, (consoleStackPop() > 1));
+	}}
+	"(u8 -- ) Stops/starts a periodic dump of all the registers that are not backed up into non-volatile storage. The idea is
+	that this set of registers change frequently and to allow the developers to view them over time. The behaviour depends on
+	TOS. If zero, register dump is stopped. If 1, they are dumped every second. If 2 or higher,they are dumped 5 times a
+	second."
+X {{
+	regsWriteMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_DUMP_REGS|REGS_ENABLES_MASK_DUMP_REGS_FAST|REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS, 0);
+	}}
+	"( -- ) A shortcut for stopping register dump and MODBUS event dump. If there is too much output the outputcan be confusing
+	so this command kills all dump."
+
+# Runtime errors
+RESTART {{ while (1) continue; }}
+	"( -- ) Runs an infinite loop so that the watchdog will not get patted, causing a restart. Can also be used to check that the
+	watchdog is working."
+CLI {{ cli(); }}
+	"( -- ) Sets the processor I flag to prevent interrupts being serviced. This should cause a watchdog restart as part of the
+	watchdog service schedule is done by the timer interrupt."
+ABORT {{ RUNTIME_ERROR(consoleStackPop()); }}
+	"(u8 -- ) Aborts the program with the runtime error in TOS. This error is only used during development to check for logic
+	errors in the code. The command just verifies that the runtime error system is working."
+	They do not cause a restart, the program will print a message to the Console and then become unresponsive."
+ASSERT {{ ASSERT(consoleStackPop()); }}
+	"(u16 -- ) Asserts that the value in TOS is true (non-zero). Asserts trigger a special runtime error and are used to check
+	for	logic errors in the code.
+	They do not cause a restart, the program will print a message to the Console and then become unresponsive."
+
+# Non-volatile data
+NV-DEFAULT {{ driverNvSetDefaults(); }}
+	"( -- ) This command sets all non-volatile data to default values, but does not write the values to non-volatile storage.
+	This will clear any changes that have been made but not saved to NV storage.
+	For the Controller this will clear limits and presets."
+NV-W {{ driverNvWrite(); }}
+	"( -- ) Write all values to non-volatile storage. This will overwrite any existing data in NV storage."
+NV-R {{ driverNvRead(); }}
+	"( -- ) Read all values from non-volatile storage. This will clear any changes that have been made but not saved to NV storage."
+
+# Arduino system access...
+PWRITE {{ const uint8_t pin = (uint8_t)consoleStackPop(); digitalWrite(pin, (uint8_t)consoleStackPop()); }}
+	"(pin-num:u8 state:b -- ) Writes the output pin given in value `pin-num` to boolean value `state`,
+	directly via a call to digitalWrite().
+	E.g. `1 11 PWRITE` will set pin 11 high. Note that the system may also write the pin."
+PMODE {{ const uint8_t pin = (uint8_t)consoleStackPop(); pinMode(pin, (uint8_t)consoleStackPop()); }}
+	"(pin-num:u8 mode:u8 -- ) Sets the output mode of a pin given in value `pin-num` tomode in value `mode`,
+	via a call to pinMode(). E.g. 1 11 PMODE sets the mode of pin 11 to 1 (output)."
+?T {{ consolePrint(CFMT_U, (console_ucell_t)millis()); }}
+	"( -- ) Prints the system time in ms since restart as a 32 bit unsigned decimal. It overflows after about 50 days."
