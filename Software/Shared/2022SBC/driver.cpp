@@ -516,13 +516,16 @@ static void setup_devices() {
 	sensor_accel_init();
 }
 
-// Calculate pitch with given scale value for 90Deg. Note arg c must be the axis that doesn't change much, else the quadrant correction won't work.
+// Calculate pitch with max value taken from regs. Note that this factor should be 2 * 90deg / pi.
+// Note arg c must be the axis that doesn't change much, else the quadrant correction won't work.
 // TODO: make more robust, maybe if b & c differ in sign do correction.
-const float TILT_FS = 9000.0;
-static float tilt(float a, float b, float c, bool quad_correct) {
+static float tilt(float a, float b, float c) {
 	float mean = sqrt(b*b + c*c);
-	if (quad_correct && (b < 0.0)) mean = -mean;
-	return 2.0 * TILT_FS / M_PI * atan2(a, mean);
+	if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TILT_QUAD_CORRECT) {
+		if (b < 0.0)
+			mean = -mean;
+	}
+	return static_cast<float>(REGS[REGS_IDX_TILT_FULL_SCALE]) * atan2(a, mean);
 }
 
 static void accel_service_check_motion() {
@@ -567,7 +570,7 @@ void service_devices() {
 				f_accel_data.accum_samples_prev = f_accel_data.raw_sample_counter;
 
 				// Since components are used as a ratio, no need to divide each by counts. Note that the axes are active, quad, inactive. 
-				const float tilt_angle = tilt((float)(int16_t)REGS[REGS_IDX_ACCEL_Y], (float)(int16_t)REGS[REGS_IDX_ACCEL_Z], (float)(int16_t)REGS[REGS_IDX_ACCEL_X], REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TILT_QUAD_CORRECT);
+				const float tilt_angle = tilt((float)(int16_t)REGS[REGS_IDX_ACCEL_Y], (float)(int16_t)REGS[REGS_IDX_ACCEL_Z], (float)(int16_t)REGS[REGS_IDX_ACCEL_X]);
 				int16_t tilt_i16 = (int16_t)(0.5 + tilt_angle);
 				REGS[REGS_IDX_ACCEL_TILT_ANGLE] = (regs_t)utilsFilter(&f_accel_data.tilt_filter_accum, tilt_i16, (uint8_t)REGS[REGS_IDX_ACCEL_TILT_FILTER_K], f_accel_data.reset_filter);
 
