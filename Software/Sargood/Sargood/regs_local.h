@@ -3,7 +3,7 @@
 
 // Define version of NV data. If you change the schema or the implementation, increment the number to force any existing
 // EEPROM to flag as corrupt. Also increment to force the default values to be set for testing.
-const uint16_t REGS_DEF_VERSION = 5;
+const uint16_t REGS_DEF_VERSION = 7;
 
 /* [[[ Definition start...
 
@@ -47,7 +47,7 @@ SLEW_TIMEOUT [nv 30] "Timeout for axis slew in seconds."
 JOG_DURATION_MS [nv 500] "Jog duration for single axis in ms."
 MAX_SLAVE_ERRORS [nv 3] "Max number of consecutive slave errors before flagging."
 
-ENABLES [nv hex 0x0010] "Non-volatile enable flags.
+ENABLES [nv hex 0x0100] "Non-volatile enable flags.
 	A number of flags that are rarely written by the code, but control the behaviour of the system."
 - DUMP_MODBUS_EVENTS [0] "Dump MODBUS event value.
 	Set to dump MODBUS events. Note that the MODBUS dump is also further controlled by other registers, but if this flag is
@@ -69,8 +69,10 @@ ENABLES [nv hex 0x0010] "Non-volatile enable flags.
 MODBUS_DUMP_EVENT_MASK [nv hex 0x0000] "Dump MODBUS events mask, refer MODBUS_CB_EVT_xxx.
 	If MODBUS dump events is enabled, only events matching the bitmask in this register are dumped."
 MODBUS_DUMP_SLAVE_ID [nv 0] "For master, only dump MODBUS events from this slave ID.
-	Event must be from this slace ID."
-SLEW_DEADBAND [30 nv] "If delta tilt less than deadband then stop."
+	Event must be from this slave ID."
+SLEW_STOP_DEADBAND [30 nv] "Stop slew when within this deadband."
+SLEW_START_DEADBAND [50 nv] "Only start slew if delta tilt less than start-deadband.
+	If the tilt error is less than this value then slew is not started."
 
 >>>  Definition end, declaration start... */
 
@@ -98,18 +100,19 @@ enum {
     REGS_IDX_ENABLES = 19,
     REGS_IDX_MODBUS_DUMP_EVENT_MASK = 20,
     REGS_IDX_MODBUS_DUMP_SLAVE_ID = 21,
-    REGS_IDX_SLEW_DEADBAND = 22,
-    COUNT_REGS = 23
+    REGS_IDX_SLEW_STOP_DEADBAND = 22,
+    REGS_IDX_SLEW_START_DEADBAND = 23,
+    COUNT_REGS = 24
 };
 
 // Define the start of the NV regs. The region is from this index up to the end of the register array.
 #define REGS_START_NV_IDX REGS_IDX_SLEW_TIMEOUT
 
 // Define default values for the NV segment.
-#define REGS_NV_DEFAULT_VALS 30, 500, 3, 16, 0, 0, 30
+#define REGS_NV_DEFAULT_VALS 30, 500, 3, 256, 0, 0, 30, 50
 
 // Define how to format the reg when printing.
-#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U, CFMT_U
+#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_U
 
 // Flags/masks for register FLAGS.
 enum {
@@ -167,7 +170,8 @@ enum {
  static const char REGS_NAMES_19[] PROGMEM = "ENABLES";                                 \
  static const char REGS_NAMES_20[] PROGMEM = "MODBUS_DUMP_EVENT_MASK";                  \
  static const char REGS_NAMES_21[] PROGMEM = "MODBUS_DUMP_SLAVE_ID";                    \
- static const char REGS_NAMES_22[] PROGMEM = "SLEW_DEADBAND";                           \
+ static const char REGS_NAMES_22[] PROGMEM = "SLEW_STOP_DEADBAND";                      \
+ static const char REGS_NAMES_23[] PROGMEM = "SLEW_START_DEADBAND";                     \
                                                                                         \
  static const char* const REGS_NAMES[] PROGMEM = {                                      \
    REGS_NAMES_0,                                                                        \
@@ -193,6 +197,7 @@ enum {
    REGS_NAMES_20,                                                                       \
    REGS_NAMES_21,                                                                       \
    REGS_NAMES_22,                                                                       \
+   REGS_NAMES_23,                                                                       \
  }
 
 // Declare an array of description text for each register.
@@ -219,7 +224,8 @@ enum {
  static const char REGS_DESCRS_19[] PROGMEM = "Non-volatile enable flags.";             \
  static const char REGS_DESCRS_20[] PROGMEM = "Dump MODBUS events mask, refer MODBUS_CB_EVT_xxx.";\
  static const char REGS_DESCRS_21[] PROGMEM = "For master, only dump MODBUS events from this slave ID.";\
- static const char REGS_DESCRS_22[] PROGMEM = "If delta tilt less than deadband then stop.";\
+ static const char REGS_DESCRS_22[] PROGMEM = "Stop slew when within this deadband.";   \
+ static const char REGS_DESCRS_23[] PROGMEM = "Only start slew if delta tilt less than start-deadband.";\
                                                                                         \
  static const char* const REGS_DESCRS[] PROGMEM = {                                     \
    REGS_DESCRS_0,                                                                       \
@@ -245,6 +251,7 @@ enum {
    REGS_DESCRS_20,                                                                      \
    REGS_DESCRS_21,                                                                      \
    REGS_DESCRS_22,                                                                      \
+   REGS_DESCRS_23,                                                                      \
  }
 
 // Declare a multiline string description of the fields.

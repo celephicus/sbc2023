@@ -56,11 +56,11 @@ enum {
 
 static void axis_set_drive(uint8_t axis, uint8_t dir) {
 	regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK << (axis*2), dir << (axis*2));
-	eventPublish(EV_DEBUG_RELAY, REGS[REGS_IDX_RELAY_STATE]);
+	eventPublish(EV_RELAY_WRITE, REGS[REGS_IDX_RELAY_STATE]);
 }
 static void axis_stop_all() {
 	REGS[REGS_IDX_RELAY_STATE] = 0U;
-	eventPublish(EV_DEBUG_RELAY, REGS[REGS_IDX_RELAY_STATE]);
+	eventPublish(EV_RELAY_WRITE, REGS[REGS_IDX_RELAY_STATE]);
 }
 static uint8_t axis_get_dir(uint8_t axis) {
 	return ((uint8_t)REGS[REGS_IDX_RELAY_STATE] >> (axis*2)) & 3;
@@ -107,7 +107,7 @@ static void app_timer_start(uint8_t idx, uint16_t ticks) { f_app_ctx.timers[idx]
 
 bool appCmdRun(uint8_t cmd) {
 	const bool accept = (APP_CMD_STOP == cmd) || (REGS[REGS_IDX_CMD_ACTIVE] <= 99);
-	eventPublish(EV_DEBUG_CMD, accept, cmd);
+	eventPublish(EV_COMMAND_QUEUED, accept, cmd);
 	if (accept)
 		f_app_ctx.cmd_req = cmd;
 	return accept;
@@ -290,14 +290,14 @@ do_manual:	if (check_not_awake()) {
 					goto jog_done;
 				if (axis_get_dir(axis) == AXIS_DIR_UP) { // Pitch increasing...
 					int16_t upper_limit = driverAxisLimits(axis)[DRIVER_AXIS_LIMIT_IDX_UPPER];
-					if ((SBC2022_MODBUS_TILT_FAULT != upper_limit) && ((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis] > (upper_limit - (int16_t)REGS[REGS_IDX_SLEW_DEADBAND]))) {
+					if ((SBC2022_MODBUS_TILT_FAULT != upper_limit) && ((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis] > (upper_limit - (int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]))) {
 						cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
 						goto jog_done;
 					}
 				}
 				else {
 					int16_t lower_limit = driverAxisLimits(axis)[DRIVER_AXIS_LIMIT_IDX_LOWER];
-					if ((SBC2022_MODBUS_TILT_FAULT != lower_limit) && ((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis] < (lower_limit + (int16_t)REGS[REGS_IDX_SLEW_DEADBAND]))) {
+					if ((SBC2022_MODBUS_TILT_FAULT != lower_limit) && ((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis] < (lower_limit + (int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]))) {
 						cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
 						goto jog_done;
 					}
@@ -371,8 +371,8 @@ jog_done:	axis_stop_all();
 			// Preset good, start slewing...
 			static uint8_t axis_idx;
 			regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_DUMP_ENABLE, true);
-			for (axis_idx = 0; axis_idx < 2; axis_idx += 1) {
-				eventPublish(EV_DEBUG_SLEW_AXIS, axis_idx, driverPresets(preset_idx)[axis_idx]);
+			for (axis_idx = 0; axis_idx < CFG_TILT_SENSOR_COUNT; axis_idx += 1) {
+				eventPublish(EV_SLEW_TARGET, axis_idx, driverPresets(preset_idx)[axis_idx]);
 				if (!driverSlaveIsEnabled(axis_idx))		// Do not do disabled axes.
 					continue;
 					
@@ -384,39 +384,49 @@ jog_done:	axis_stop_all();
 					// Get direction to go, or we might be there anyways.
 					const int16_t* presets = driverPresets(preset_idx);
 					const int16_t delta = presets[axis_idx] - (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx];
-					const int8_t target_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_DEADBAND]);
-					//eventPublish(EV_DEBUG_SLEW, target_dir, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
 
-					// If we are moving in one direction, check for position reached. We can't just check for zero as it might overshoot.
-					if (axis_get_dir(axis_idx) == AXIS_DIR_UP) {	
-						if (target_dir <= 0)
-							break;
-					}
-					else if (axis_get_dir(axis_idx) == AXIS_DIR_DOWN) {		// Or the other...
-						if (target_dir >= 0)
-							break;
-					}
-					else {															// If not moving, turn on motors.
-						if (target_dir > 0)
+					if (axis_get_dir(axis_idx) == AXIS_DIR_STOP) {			// If not moving, turn on motors.
+						eventPublish(EV_SLEW_START, axis_idx, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
+						const int8_t start_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND]);
+						if (start_dir > 0)
 							axis_set_drive(axis_idx, AXIS_DIR_UP);
-						else if (target_dir < 0)
+						else if (start_dir < 0)
 							axis_set_drive(axis_idx, AXIS_DIR_DOWN);
 						else // No slew necessary...
 							break;
 					}
+	
+					else {						// If we are moving in one direction, check for position reached. We can't just check for zero as it might overshoot.
+						const int8_t target_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]);
+						if (axis_get_dir(axis_idx) == AXIS_DIR_UP) {	
+							if (target_dir <= 0) {
+								eventPublish(EV_SLEW_STOP, axis_idx, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
+								break;
+							}
+						}
+						else {		// Or the other...
+							if (target_dir >= 0) {
+								eventPublish(EV_SLEW_STOP, axis_idx, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
+								break;
+							}
+						}
+					}
+					
 					THREAD_YIELD();	// We need to yield to allow the avail flag to be updated at the start of the thread.
 				}	// Closes `while (...) {' ...
 
-				// Stop and let axis motors rundown if they are moving...
+				// Stop and let axis motor rundown if they are moving...
 				if (REGS[REGS_IDX_RELAY_STATE] & (RELAY_HEAD_MASK|RELAY_FOOT_MASK)) {
 					axis_stop_all();
 					THREAD_START_DELAY();															
 					do {
 						THREAD_WAIT_UNTIL(avail);
-						//eventPublish(EV_DEBUG_SLEW, 0, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
 						THREAD_YIELD();
 					} while (!THREAD_IS_DELAY_DONE(RELAY_STOP_DURATION_MS));
 				}
+				
+				// Report final position after run-on...
+				eventPublish(EV_SLEW_FINAL, axis_idx, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
 			}	// Closes for (axis_idx...) ...
 
 
@@ -755,7 +765,7 @@ static const MenuItem MENU_ITEMS[] PROGMEM = {
 	},
 	{
 		MENU_ITEM_ANGLE_DEADBAND_TITLE,
-		REGS_IDX_SLEW_DEADBAND, 0U,
+		REGS_IDX_SLEW_START_DEADBAND, 0U,
 		menu_scale_angle_deadband, menu_unscale_angle_deadband,
 		menu_max_angle_deadband,
 		false,

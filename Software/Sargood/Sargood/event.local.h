@@ -14,9 +14,12 @@
 	SENSOR_UPDATE	Sensor value updated: p8=idx, p16=value.
 	WAKEUP			Controller wakeup: p8=status.
 	REMOTE_CMD		Command from RS232 port, p8=byte2, p16=byte0..1.
-	DEBUG_SLEW_AXIS	p8: axis idx; p16=target
-	DEBUG_RELAY		p8: relay register
-	DEBUG_CMD		p8: accepted, p16=cmd
+	SLEW_TARGET		Slew target pos; p8: axis idx; p16=target
+	SLEW_START		Slew start pos; p8: axis idx; p16=target
+	SLEW_STOP		Slew stop pos; p8: axis idx; p16=target
+	SLEW_FINAL		Slew final pos; p8: axis idx; p16=target
+	RELAY_WRITE		Relay write; p8: relay
+	COMMAND_QUEUED	Command accepted; p8: accepted, p16=cmd
 
    >>> End event definitions, begin generated code. */
 
@@ -43,14 +46,17 @@ enum {
     EV_SENSOR_UPDATE = 18,              // Sensor value updated: p8=idx, p16=value.
     EV_WAKEUP = 19,                     // Controller wakeup: p8=status.
     EV_REMOTE_CMD = 20,                 // Command from RS232 port, p8=byte2, p16=byte0..1.
-    EV_DEBUG_SLEW_AXIS = 21,            // p8: axis idx; p16=target
-    EV_DEBUG_RELAY = 22,                // p8: relay register
-    EV_DEBUG_CMD = 23,                  // p8: accepted, p16=cmd
-    COUNT_EV = 24,                      // Total number of events defined.
+    EV_SLEW_TARGET = 21,                // Slew target pos; p8: axis idx; p16=target
+    EV_SLEW_START = 22,                 // Slew start pos; p8: axis idx; p16=target
+    EV_SLEW_STOP = 23,                  // Slew stop pos; p8: axis idx; p16=target
+    EV_SLEW_FINAL = 24,                 // Slew final pos; p8: axis idx; p16=target
+    EV_RELAY_WRITE = 25,                // Relay write; p8: relay
+    EV_COMMAND_QUEUED = 26,             // Command accepted; p8: accepted, p16=cmd
+    COUNT_EV = 27,                      // Total number of events defined.
 };
 
 // Size of trace mask in bytes.
-#define EVENT_TRACE_MASK_SIZE 3
+#define EVENT_TRACE_MASK_SIZE 4
 
 // Event Names.
 #define DECLARE_EVENT_NAMES()                                                           \
@@ -75,9 +81,12 @@ enum {
  static const char EVENT_NAMES_18[] PROGMEM = "SENSOR_UPDATE";                          \
  static const char EVENT_NAMES_19[] PROGMEM = "WAKEUP";                                 \
  static const char EVENT_NAMES_20[] PROGMEM = "REMOTE_CMD";                             \
- static const char EVENT_NAMES_21[] PROGMEM = "DEBUG_SLEW_AXIS";                        \
- static const char EVENT_NAMES_22[] PROGMEM = "DEBUG_RELAY";                            \
- static const char EVENT_NAMES_23[] PROGMEM = "DEBUG_CMD";                              \
+ static const char EVENT_NAMES_21[] PROGMEM = "SLEW_TARGET";                            \
+ static const char EVENT_NAMES_22[] PROGMEM = "SLEW_START";                             \
+ static const char EVENT_NAMES_23[] PROGMEM = "SLEW_STOP";                              \
+ static const char EVENT_NAMES_24[] PROGMEM = "SLEW_FINAL";                             \
+ static const char EVENT_NAMES_25[] PROGMEM = "RELAY_WRITE";                            \
+ static const char EVENT_NAMES_26[] PROGMEM = "COMMAND_QUEUED";                         \
                                                                                         \
  static const char* const EVENT_NAMES[] PROGMEM = {                                     \
    EVENT_NAMES_0,                                                                       \
@@ -104,6 +113,9 @@ enum {
    EVENT_NAMES_21,                                                                      \
    EVENT_NAMES_22,                                                                      \
    EVENT_NAMES_23,                                                                      \
+   EVENT_NAMES_24,                                                                      \
+   EVENT_NAMES_25,                                                                      \
+   EVENT_NAMES_26,                                                                      \
  }
 
 // Event Descriptions.
@@ -129,9 +141,12 @@ enum {
  static const char EVENT_DESCS_18[] PROGMEM = "Sensor value updated: p8=idx, p16=value.";                                                   \
  static const char EVENT_DESCS_19[] PROGMEM = "Controller wakeup: p8=status.";                                                              \
  static const char EVENT_DESCS_20[] PROGMEM = "Command from RS232 port, p8=byte2, p16=byte0..1.";                                           \
- static const char EVENT_DESCS_21[] PROGMEM = "p8: axis idx; p16=target";                                                                   \
- static const char EVENT_DESCS_22[] PROGMEM = "p8: relay register";                                                                         \
- static const char EVENT_DESCS_23[] PROGMEM = "p8: accepted, p16=cmd";                                                                      \
+ static const char EVENT_DESCS_21[] PROGMEM = "Slew target pos; p8: axis idx; p16=target";                                                  \
+ static const char EVENT_DESCS_22[] PROGMEM = "Slew start pos; p8: axis idx; p16=target";                                                   \
+ static const char EVENT_DESCS_23[] PROGMEM = "Slew stop pos; p8: axis idx; p16=target";                                                    \
+ static const char EVENT_DESCS_24[] PROGMEM = "Slew final pos; p8: axis idx; p16=target";                                                   \
+ static const char EVENT_DESCS_25[] PROGMEM = "Relay write; p8: relay";                                                                     \
+ static const char EVENT_DESCS_26[] PROGMEM = "Command accepted; p8: accepted, p16=cmd";                                                    \
                                                                                                                                             \
  static const char* const EVENT_DESCS[] PROGMEM = {                                                                                         \
    EVENT_DESCS_0,                                                                                                                           \
@@ -158,6 +173,9 @@ enum {
    EVENT_DESCS_21,                                                                                                                          \
    EVENT_DESCS_22,                                                                                                                          \
    EVENT_DESCS_23,                                                                                                                          \
+   EVENT_DESCS_24,                                                                                                                          \
+   EVENT_DESCS_25,                                                                                                                          \
+   EVENT_DESCS_26,                                                                                                                          \
  }
 
 // ]]] End generated code.
