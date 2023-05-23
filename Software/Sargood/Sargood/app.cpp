@@ -418,8 +418,10 @@ jog_done:	axis_stop_all();
 				// We might have got here from an abort from the condition in the while loop.
 				// This will set the command status to somethingother than PENDING.
 				// So we check if _NOT_ PENDING, and exit. We do not let the motors run down as this is an error.
-				if (APP_CMD_STATUS_PENDING != REGS[REGS_IDX_CMD_STATUS])
+				if (APP_CMD_STATUS_PENDING != REGS[REGS_IDX_CMD_STATUS]) {
+					axis_stop_all();
 					goto slew_abort;
+				}
 
 				// Stop and let axis motor rundown if they are moving...
 				if (REGS[REGS_IDX_RELAY_STATE] & (RELAY_HEAD_MASK|RELAY_FOOT_MASK)) {
