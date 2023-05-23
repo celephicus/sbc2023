@@ -177,7 +177,11 @@ static SoftwareSerial GPIO_SERIAL_CONSOLE(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); /
 #endif
 
 static void console_init() {
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD	
+	GPIO_SERIAL_CONSOLE.begin(115200);
+#else	
 	GPIO_SERIAL_CONSOLE.begin(38400);
+#endif
 	consoleInit(console_cmds_user, GPIO_SERIAL_CONSOLE, 0U);
 	// Signon message, note two newlines to leave a gap from any preceding output on the terminal.
 	consolePrint(CFMT_NL, 0); consolePrint(CFMT_NL, 0);

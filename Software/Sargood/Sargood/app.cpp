@@ -416,9 +416,10 @@ jog_done:	axis_stop_all();
 				}	// Closes `while (...) {' ...
 
 				// We might have got here from an abort from the condition in the while loop.
-				// This will set the command status to somethingother than PENDING.
+				// This will set the command status to something other than PENDING.
 				// So we check if _NOT_ PENDING, and exit. We do not let the motors run down as this is an error.
-				if (APP_CMD_STATUS_PENDING != REGS[REGS_IDX_CMD_STATUS]) {
+				// TODO: Send CMD_DONE event with non-zero error code if stopped with STOP.
+				if ((APP_CMD_STATUS_PENDING != REGS[REGS_IDX_CMD_STATUS]) || (APP_CMD_STOP == REGS[REGS_IDX_CMD_ACTIVE])) {
 					axis_stop_all();
 					goto slew_abort;
 				}
@@ -437,7 +438,17 @@ jog_done:	axis_stop_all();
 				eventPublish(EV_SLEW_FINAL, axis_idx, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
 			}	// Closes for (axis_idx...) ...
 
-slew_abort:	regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_DUMP_ENABLE, false);
+			// Stop and let axis motor rundown if they are moving...
+slew_abort:	if (REGS[REGS_IDX_RELAY_STATE] & (RELAY_HEAD_MASK|RELAY_FOOT_MASK)) {
+				axis_stop_all();
+				THREAD_START_DELAY();
+				do {
+					THREAD_WAIT_UNTIL(avail);
+					THREAD_YIELD();
+				} while (!THREAD_IS_DELAY_DONE(RELAY_STOP_DURATION_MS));
+			}
+
+			regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_DUMP_ENABLE, false);
 			cmd_done();
 			THREAD_YIELD();
 			} break;
@@ -473,6 +484,9 @@ static bool timer_is_timeout(uint16_t now, uint16_t* then, uint16_t duration) { 
 
 static constexpr uint16_t RS232_CMD_TIMEOUT_MILLIS = 100U;
 static constexpr uint8_t  RS232_CMD_CHAR_COUNT = 4;
+
+// My test IR remote uses this address.
+static constexpr uint16_t IR_CODE_ADDRESS = 0xef00;
 
 static int8_t thread_rs232_cmd(void* arg) {
 	(void)arg;
@@ -510,24 +524,38 @@ static int8_t thread_rs232_cmd(void* arg) {
 	}	// Closes `while (1) '...
 	THREAD_END();
 }
+static void rs232_resp(uint8_t cmd, uint8_t rc) {
+	GPIO_SERIAL_RS232.write((uint8_t)(IR_CODE_ADDRESS>>8));
+	GPIO_SERIAL_RS232.write((uint8_t)IR_CODE_ADDRESS);
+	GPIO_SERIAL_RS232.write(cmd);
+	GPIO_SERIAL_RS232.write(rc);
+	GPIO_SERIAL_RS232.write((uint8_t)((IR_CODE_ADDRESS>>8) + IR_CODE_ADDRESS + cmd + rc));
+}
 
-static constexpr uint8_t TRACE_BINARY_START_CHAR = 0xfe;
+// For binary format we emit ESC ID, then the event from memory, escaping an ESC with ESC 00. So data 123456fe is sent fe01123456fe00 
+enum {
+	BINARY_FMT_ID_EVENT = 1,
+};
+static constexpr uint8_t TRACE_BINARY_ESCAPE_CHAR = 0xfe;
+static void emit_binary_trace(uint8_t id, const uint8_t* m, uint8_t sz) {
+	putc_s(TRACE_BINARY_ESCAPE_CHAR);
+	putc_s(id);
+	fori (sz) {
+		if (TRACE_BINARY_ESCAPE_CHAR == *m) {
+			putc_s(TRACE_BINARY_ESCAPE_CHAR);
+			putc_s(0);
+		}
+		else
+			putc_s(*m);
+		m += 1;
+	}
+}
+
 static void service_trace_log() {
 	EventTraceItem evt;
 	if (eventTraceRead(&evt)) {
-		if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TRACE_FORMAT_BINARY) {
-			putc_s(TRACE_BINARY_START_CHAR);
-			const uint8_t* pd = reinterpret_cast<const uint8_t*>(&evt);
-			fori (sizeof(evt)) {
-				if (TRACE_BINARY_START_CHAR == *pd) {
-					putc_s(TRACE_BINARY_START_CHAR);
-					putc_s(~*pd);
-				}
-				else
-					putc_s(*pd);
-				pd += 1;
-			}
-		}
+		if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TRACE_FORMAT_BINARY) 
+			emit_binary_trace(BINARY_FMT_ID_EVENT, reinterpret_cast<const uint8_t*>(&evt), sizeof(evt));
 		else {
 			const uint8_t id = event_id(evt.event);
 			if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TRACE_FORMAT_CONCISE)
@@ -628,22 +656,19 @@ const static IrCmdDef IR_CMD_DEFS[] PROGMEM = {
 	{ 0x0e, APP_CMD_SAVE_LIMIT_FOOT_LOWER },
 	{ 0x0f, APP_CMD_SAVE_LIMIT_FOOT_UPPER },
 
-	{ 0x10, APP_CMD_SAVE_POS_1 },
-	{ 0x11, APP_CMD_SAVE_POS_2 },
-	{ 0x12, APP_CMD_SAVE_POS_3 },
-	{ 0x13, APP_CMD_SAVE_POS_4 },
+	{ 0x10, APP_CMD_RESTORE_POS_1 },
+	{ 0x11, APP_CMD_RESTORE_POS_2 },
+	{ 0x12, APP_CMD_RESTORE_POS_3 },
+	{ 0x13, APP_CMD_RESTORE_POS_4 },
 
-	{ 0x14, APP_CMD_RESTORE_POS_1 },
-	{ 0x15, APP_CMD_RESTORE_POS_2 },
-	{ 0x16, APP_CMD_RESTORE_POS_3 },
-	{ 0x17, APP_CMD_RESTORE_POS_4 },
+	{ 0x14, APP_CMD_SAVE_POS_1 },
+	{ 0x15, APP_CMD_SAVE_POS_2 },
+	{ 0x16, APP_CMD_SAVE_POS_3 },
+	{ 0x17, APP_CMD_SAVE_POS_4 },
 };
 
 // For now use same command table for remote.
 #define REMOTE_CMD_DEFS IR_CMD_DEFS
-
-// My test IR remote uses this address.
-static constexpr uint16_t IR_CODE_ADDRESS = 0xef00;
 
 int ir_cmds_compare(const void* k, const void* elem) {
 	const IrCmdDef* ir_cmd_def = (const IrCmdDef*)elem;
@@ -672,8 +697,10 @@ static int8_t sm_ir_rec(EventSmContextBase* context, t_event ev) {
 			case EV_REMOTE_CMD: {
 				if (IR_CODE_ADDRESS == event_p16(ev)) {
 					const uint8_t app_cmd = search_cmd(event_p8(ev), REMOTE_CMD_DEFS, UTILS_ELEMENT_COUNT(REMOTE_CMD_DEFS));
-					if (APP_CMD_IDLE != app_cmd)
-						appCmdRun(app_cmd);
+					if (APP_CMD_IDLE != app_cmd) {
+						const bool accepted = appCmdRun(app_cmd);
+						rs232_resp(event_p8(ev), accepted);
+					}
 				}
 			}
 			break;
