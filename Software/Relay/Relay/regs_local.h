@@ -39,6 +39,7 @@ ENABLES [nv hex 0x0000] "Non-volatile enable flags.
 - DUMP_REGS [1] "Enable regs dump to console.
 	If set then registers are dumped at a set rate."
 - DUMP_REGS_FAST [2] "Dump regs at 5/s rather than 1/s."
+- DISABLE_MASTER_RELAY_GUARD [14] "Disable guard to cut relays if no requests from Master for a while."
 - DISABLE_BLINKY_LED [15] "Disable setting Blinky Led from fault states.
 	Used for testing the blinky LED, if set then the system will not set the LED pattern, allowing it to be set by the console
 	for testing the driver."
