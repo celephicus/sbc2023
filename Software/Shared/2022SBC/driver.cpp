@@ -129,10 +129,11 @@ static uint8_t read_holding_register(uint16_t address, uint16_t* value) {
 	*value = (uint16_t)-1;
 	return 1;
 }
+static void write_relays(uint8_t v);
 static uint8_t write_holding_register(uint16_t address, uint16_t value) {
 	if (SBC2022_MODBUS_REGISTER_RELAY == address) {
 		REGS[REGS_IDX_RELAYS] = (uint8_t)value;
-		write_relays();
+		write_relays(REGS[REGS_IDX_RELAYS]);
 		clear_fault_timer(REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS);
 		return 0;
 	}
@@ -596,7 +597,9 @@ void service_devices_50ms() { /* empty */ }
 
 // MAX4820 relay driver driver.
 // TODO: Made a boo-boo, connected relay driver to SCK/MOSI instead of GPIO_PIN_RDAT/GPIO_PIN_RCLK. Suggest correcting in next board spin. Till then, we use the on-chip SPI.
-static uint8_t f_relay_data;
+// TODO: Fix relay recover from no watchdog as it sets the h/w state to zero. Think this fixes it. 
+//static constexpr int16_t RELAY_DATA_NONE = -1;
+static int16_t f_relay_data;
 static void write_relays(uint8_t v) {
 	f_relay_data = v;
 	digitalWrite(GPIO_PIN_RSEL, 0);
@@ -613,19 +616,21 @@ static void setup_devices() {
 }
 void service_devices() {
 }
-
 void service_devices_50ms() {
 	// Update relays if we have manually written the register. This will introduce latency but unimportant here.
 	if (f_relay_data != (uint8_t)REGS[REGS_IDX_RELAYS])
 		write_relays((uint8_t)REGS[REGS_IDX_RELAYS]);
 
-	// We pat the relay watchdog if the Master is talking or we
+	// We pat the relay watchdog Master guard disabled OR if the Master is talking.
 	if (
-	  (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DISABLE_MASTER_RELAY_GUARD) || // Master gaurd disabled?
-	  (!(regsFlags() & REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS))		// Master is talking to us?
+	  (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DISABLE_MASTER_RELAY_GUARD) || // Master guard disabled?
+	  (!(regsFlags() & REGS_FLAGS_MASK_MODBUS_MASTER_NO_COMMS))		// Master is talking to us .
 	)
 		gpioWdogToggle();
+	else
+		REGS[REGS_IDX_RELAYS] = f_relay_data = 0U;
 }
+
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 
 // IR decoder.
@@ -838,6 +843,7 @@ static EepromPackage EEMEM f_eeprom_package[2];
 static void nv_set_defaults(void* data, const void* defaultarg) {
     regsSetDefaultRange(REGS_START_NV_IDX, COUNT_REGS);	// Set default values for NV regs.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
+	eventTraceMaskClear();
 	fori(DRIVER_BED_POS_PRESET_COUNT)
 		driverPresetClear(i);
 	driverAxisLimitsClear();

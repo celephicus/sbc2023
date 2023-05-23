@@ -20,10 +20,10 @@ FILENUM(1);
 // Console
 static void print_banner() { consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CFG_BANNER_STR)); }
 static bool console_cmds_user(char* cmd) {
-	static int32_t f_acc;
   switch (console_hash(cmd)) {
 	case /** ?VER **/ 0xc33b: print_banner(); break;
-	case /** F **/ 0xb5e3:  consolePrint(CFMT_D, utilsFilter(&f_acc, consoleStackPop(), 3, false)); break;
+	case /** F **/ 0xb5e3:  { static int32_t f_acc; const uint8_t k = static_cast<uint8_t>(consoleStackPop()); consolePrint(CFMT_D, utilsFilter(&f_acc, static_cast<int16_t>(consoleStackPop()), k, false)); } break; 
+		
 	// Command processor.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
     case /** CMD **/ 0xd00f: appCmdRun(consoleStackPop()); break;
@@ -43,7 +43,7 @@ static bool console_cmds_user(char* cmd) {
 	}  break;
 	case /** PR **/ 0x74c7: {
 		const uint8_t idx = consoleStackPop(); if (idx >= DRIVER_BED_POS_PRESET_COUNT) consoleRaise(CONSOLE_RC_ERROR_USER);
-		fori (CFG_TILT_SENSOR_COUNT) driverPresets(idx)[i] = consoleStackPop();
+		fori (CFG_TILT_SENSOR_COUNT) driverPresets(idx)[CFG_TILT_SENSOR_COUNT-i-1] = consoleStackPop();
 	} break;
 	case /** ?LIM **/ 0xdeb2: fori (CFG_TILT_SENSOR_COUNT) {
 		consolePrint(CFMT_D, (uint16_t)driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_LOWER]); consolePrint(CFMT_D, (uint16_t)driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_UPPER]);
@@ -64,7 +64,7 @@ static bool console_cmds_user(char* cmd) {
 	case /** EVENT **/ 0x8a29: eventPublish(consoleStackPop()); break;
 	case /** EVENT-EX **/ 0x2f99: { const uint16_t p16 = consoleStackPop(); const uint8_t p8 = consoleStackPop(); eventPublish(consoleStackPop(), p8, p16); } break;
 	case /** CTM **/ 0xd17f: eventTraceMaskClear(); break;
-	case /** DTM **/ 0xbcb8: eventTraceMaskSetDefault(); eventTraceMaskSetBit(EV_TIMER, false);  eventTraceMaskSetBit(EV_DEBUG_TIMER_ARM, false); eventTraceMaskSetBit(EV_DEBUG_TIMER_STOP, false); break;
+	case /** DTM **/ 0xbcb8: eventTraceMaskSetDefault(); eventTraceMaskSetBit(EV_TIMER, false);  eventTraceMaskSetBit(EV_DEBUG_TIMER_ARM, false); eventTraceMaskSetBit(EV_DEBUG_TIMER_STOP, false); eventTraceMaskSetBit(EV_SENSOR_UPDATE, false); break;
 	case /** ?TM **/ 0x7a03: fori ((COUNT_EV + 15) / 16) consolePrint(CFMT_X, ((uint16_t)eventGetTraceMask()[i*2+1]<<8) | (uint16_t)eventGetTraceMask()[i*2]); break;
 	case /** ??TM **/ 0x3fbc: {
 		fori (COUNT_EV) {

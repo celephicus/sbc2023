@@ -87,6 +87,7 @@ enum {
     	REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS = (int)0x1,
     	REGS_ENABLES_MASK_DUMP_REGS = (int)0x2,
     	REGS_ENABLES_MASK_DUMP_REGS_FAST = (int)0x4,
+    	REGS_ENABLES_MASK_DISABLE_MASTER_RELAY_GUARD = (int)0x4000,
     	REGS_ENABLES_MASK_DISABLE_BLINKY_LED = (int)0x8000,
 };
 
@@ -155,6 +156,7 @@ enum {
     "\n DUMP_MODBUS_EVENTS: 0 (Dump MODBUS event value.)"                               \
     "\n DUMP_REGS: 1 (Enable regs dump to console.)"                                    \
     "\n DUMP_REGS_FAST: 2 (Dump regs at 5/s rather than 1/s.)"                          \
+    "\n DISABLE_MASTER_RELAY_GUARD: 14 (Disable guard to cut relays if no requests from Master for a while.)"\
     "\n DISABLE_BLINKY_LED: 15 (Disable setting Blinky Led from fault states.)"         \
 
 // ]]] Declarations end
