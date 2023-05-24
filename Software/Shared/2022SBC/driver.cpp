@@ -572,7 +572,7 @@ void service_devices() {
 				f_accel_data.accum_samples_prev = f_accel_data.raw_sample_counter;
 
 				// Since components are used as a ratio, no need to divide each by counts. Note that the axes are active, quad, inactive.
-				const float tilt_angle = tilt((float)(int16_t)REGS[REGS_IDX_ACCEL_Y], (float)(int16_t)REGS[REGS_IDX_ACCEL_Z], (float)(int16_t)REGS[REGS_IDX_ACCEL_X]);
+				const float tilt_angle = tilt((float)(int16_t)REGS[REGS_IDX_ACCEL_Y], (float)-(int16_t)REGS[REGS_IDX_ACCEL_X], (float)(int16_t)REGS[REGS_IDX_ACCEL_Z]);
 				int16_t tilt_i16 = (int16_t)(0.5 + tilt_angle);
 				REGS[REGS_IDX_ACCEL_TILT_ANGLE] = (regs_t)utilsFilter(&f_accel_data.tilt_filter_accum, tilt_i16, (uint8_t)REGS[REGS_IDX_ACCEL_TILT_FILTER_K], f_accel_data.reset_filter);
 
@@ -595,9 +595,10 @@ void service_devices_50ms() { /* empty */ }
 
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 
-// MAX4820 relay driver driver.
+// MAX4820 relay driver driver. Note has hardware watchdog that is patted by either edge on input, on timeout (100ms) will pulse o/p at 300ms rate, which clears the relay driver state. 
 // TODO: Made a boo-boo, connected relay driver to SCK/MOSI instead of GPIO_PIN_RDAT/GPIO_PIN_RCLK. Suggest correcting in next board spin. Till then, we use the on-chip SPI.
 // TODO: Fix relay recover from no watchdog as it sets the h/w state to zero. Think this fixes it. 
+// TODO: Really need a little state machine to cope with error state to relay driver.
 //static constexpr int16_t RELAY_DATA_NONE = -1;
 static int16_t f_relay_data;
 static void write_relays(uint8_t v) {

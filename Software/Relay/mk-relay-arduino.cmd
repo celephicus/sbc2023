@@ -1,4 +1,5 @@
 del Relay-Arduino/*.*
+del Relay-Arduino.zip
 
 robocopy Relay 						Relay-Arduino project_config.h regs_local.h gpio.h 
 robocopy ..\Shared\Common\include 	Relay-Arduino console.h modbus.h regs.h utils.h

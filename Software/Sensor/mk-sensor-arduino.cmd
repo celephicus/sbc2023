@@ -1,4 +1,5 @@
 del Sensor-Arduino/*.*
+del Sensor-Arduino.zip
 
 robocopy Sensor Sensor-Arduino  project_config.h regs_local.h gpio.h 
 robocopy ..\Shared\Common\include 	Sensor-Arduino console.h modbus.h regs.h  utils.h

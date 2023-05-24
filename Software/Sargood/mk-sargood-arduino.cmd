@@ -1,4 +1,5 @@
 del Sargood-Arduino/*.*
+del Sargood-Arduino.zip
 
 robocopy Sargood 					Sargood-Arduino app.cpp app.h event.local.h gpio.h project_config.h regs_local.h 
 robocopy ..\Shared\Common\include 	Sargood-Arduino console.h event.h lc2.h modbus.h myprintf.h regs.h sw_scanner.h thread.h utils.h
