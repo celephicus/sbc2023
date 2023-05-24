@@ -877,10 +877,22 @@ void driverPresetClear(uint8_t idx) {
 	fori(CFG_TILT_SENSOR_COUNT)
 		driverPresets(idx)[i] = SBC2022_MODBUS_TILT_FAULT;
 }
-int16_t* driverAxisLimits(uint8_t axis_idx) { return l_nv_data.axis_limits[axis_idx]; }
+int16_t driverAxisLimitGet(uint8_t axis_idx, uint8_t limit_idx) { 
+	ASSERT(limit_idx < 2);
+	if (axis_idx >= CFG_TILT_SENSOR_COUNT)	// May be called for other axes.
+		return SBC2022_MODBUS_TILT_FAULT;
+	return l_nv_data.axis_limits[axis_idx][limit_idx]; 
+}
+void driverAxisLimitSet(uint8_t axis_idx, uint8_t limit_idx, int16_t limit) { 
+	ASSERT(axis_idx < CFG_TILT_SENSOR_COUNT);
+	ASSERT(limit_idx < 2);
+	l_nv_data.axis_limits[axis_idx][limit_idx] = limit;
+}
 void driverAxisLimitsClear() {
-	fori (CFG_TILT_SENSOR_COUNT)
-		driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_LOWER] = driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_UPPER] = SBC2022_MODBUS_TILT_FAULT;
+	fori (CFG_TILT_SENSOR_COUNT) {
+		driverAxisLimitSet(i, DRIVER_AXIS_LIMIT_IDX_LOWER, SBC2022_MODBUS_TILT_FAULT);
+		driverAxisLimitSet(i, DRIVER_AXIS_LIMIT_IDX_UPPER, SBC2022_MODBUS_TILT_FAULT);
+	}
 }
 #endif
 

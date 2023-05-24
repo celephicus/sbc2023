@@ -199,7 +199,7 @@ static bool check_not_awake() {
 void do_save_axis_limit(uint8_t axis_idx, uint8_t limit_idx) {
 	const int16_t tilt = (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx];
 	if (SBC2022_MODBUS_TILT_FAULT != tilt) {
-		driverAxisLimits(axis_idx)[limit_idx] = tilt;
+		driverAxisLimitSet(axis_idx, limit_idx, tilt);
 		driverNvWrite();
 		cmd_done();
 	}
@@ -223,6 +223,17 @@ static bool check_can_save() {
 	}
 	else
 		return true;
+}
+
+// We know which way we are moving, which gives the limit to check against, one of DRIVER_AXIS_LIMIT_IDX_LOWER, DRIVER_AXIS_LIMIT_IDX_UPPER.
+bool check_axis_within_limit(uint8_t axis_idx, uint8_t limit_idx) {
+	const int16_t limit = driverAxisLimitGet(axis_idx, limit_idx);
+	if (SBC2022_MODBUS_TILT_FAULT == limit)		// Either no limit possible on this axis or no limit set.
+		return true;
+		
+	return (DRIVER_AXIS_LIMIT_IDX_LOWER == limit_idx) ?
+	  ((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx] > (limit + (int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND])) :
+	  ((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx] < (limit - (int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]));
 }
 
 static int8_t thread_cmd(void* arg) {
@@ -269,35 +280,30 @@ static int8_t thread_cmd(void* arg) {
 			break;
 
 		// Timed motion commands
-		case APP_CMD_HEAD_UP:	axis_set_drive(AXIS_HEAD, AXIS_DIR_UP);		goto do_manual;
-		case APP_CMD_HEAD_DOWN:	axis_set_drive(AXIS_HEAD, AXIS_DIR_DOWN);	goto do_manual;
-		case APP_CMD_LEG_UP:	axis_set_drive(AXIS_FOOT, AXIS_DIR_UP);		goto do_manual;
-		case APP_CMD_LEG_DOWN:	axis_set_drive(AXIS_FOOT, AXIS_DIR_DOWN);	goto do_manual;
-		case APP_CMD_BED_UP:	axis_set_drive(AXIS_BED, AXIS_DIR_UP);		goto do_manual;
-		case APP_CMD_BED_DOWN:	axis_set_drive(AXIS_BED, AXIS_DIR_DOWN);	goto do_manual;
-		case APP_CMD_TILT_UP:	axis_set_drive(AXIS_TILT, AXIS_DIR_UP);		goto do_manual;
-		case APP_CMD_TILT_DOWN:	axis_set_drive(AXIS_TILT, AXIS_DIR_DOWN);	goto do_manual;
+		case APP_CMD_HEAD_UP:	if (check_not_awake()) break; if (check_axis_within_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_UPPER)) { axis_set_drive(AXIS_HEAD, AXIS_DIR_UP);	goto do_manual; } else { cmd_done(APP_CMD_STATUS_MOTION_LIMIT); break; }
+		case APP_CMD_HEAD_DOWN:	if (check_not_awake()) break; if (check_axis_within_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_LOWER)) { axis_set_drive(AXIS_HEAD, AXIS_DIR_DOWN);	goto do_manual; } else { cmd_done(APP_CMD_STATUS_MOTION_LIMIT); break; }
+		case APP_CMD_LEG_UP:	if (check_not_awake()) break; if (check_axis_within_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_UPPER)) { axis_set_drive(AXIS_FOOT, AXIS_DIR_UP);	goto do_manual; } else { cmd_done(APP_CMD_STATUS_MOTION_LIMIT); break; }
+		case APP_CMD_LEG_DOWN:	if (check_not_awake()) break; if (check_axis_within_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_LOWER)) { axis_set_drive(AXIS_FOOT, AXIS_DIR_DOWN);	goto do_manual; } else { cmd_done(APP_CMD_STATUS_MOTION_LIMIT); break; }
+		// TODO: As above, so below. 
+		case APP_CMD_BED_UP:	if (check_not_awake()) break; axis_set_drive(AXIS_BED, AXIS_DIR_UP);	goto do_manual;
+		case APP_CMD_BED_DOWN:	if (check_not_awake()) break; axis_set_drive(AXIS_BED, AXIS_DIR_DOWN);	goto do_manual;
+		case APP_CMD_TILT_UP:	if (check_not_awake()) break; axis_set_drive(AXIS_TILT, AXIS_DIR_UP);	goto do_manual;
+		case APP_CMD_TILT_DOWN:	if (check_not_awake()) break; axis_set_drive(AXIS_TILT, AXIS_DIR_DOWN);	goto do_manual;
 
-do_manual:	if (check_not_awake()) {
-				axis_stop_all();
-				break;
-			}
-
-			THREAD_START_DELAY();
+do_manual:	THREAD_START_DELAY();
+			// TODO: Check for sensor faults on axes with limits?
 			while ((!check_relay()) && (!THREAD_IS_DELAY_DONE(REGS[REGS_IDX_JOG_DURATION_MS])) && (!check_stop_command())) {
 				int8_t axis = axis_get_active();
 				if (axis < 0)
 					goto jog_done;
 				if (axis_get_dir(axis) == AXIS_DIR_UP) { // Pitch increasing...
-					int16_t upper_limit = driverAxisLimits(axis)[DRIVER_AXIS_LIMIT_IDX_UPPER];
-					if ((SBC2022_MODBUS_TILT_FAULT != upper_limit) && ((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis] > (upper_limit - (int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]))) {
+					if (!check_axis_within_limit(axis, DRIVER_AXIS_LIMIT_IDX_UPPER)) {
 						cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
 						goto jog_done;
 					}
 				}
 				else {
-					int16_t lower_limit = driverAxisLimits(axis)[DRIVER_AXIS_LIMIT_IDX_LOWER];
-					if ((SBC2022_MODBUS_TILT_FAULT != lower_limit) && ((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis] < (lower_limit + (int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]))) {
+					if (!check_axis_within_limit(axis, DRIVER_AXIS_LIMIT_IDX_LOWER)) {
 						cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
 						goto jog_done;
 					}
@@ -369,11 +375,11 @@ jog_done:	axis_stop_all();
 			}
 
 			// Preset good, start slewing...
-			static uint8_t axis_idx;
+			static uint8_t s_axis_idx;
 			regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_DUMP_ENABLE, true);
-			for (axis_idx = 0; axis_idx < CFG_TILT_SENSOR_COUNT; axis_idx += 1) {
-				eventPublish(EV_SLEW_TARGET, axis_idx, driverPresets(preset_idx)[axis_idx]);
-				if (!driverSlaveIsEnabled(axis_idx))		// Do not do disabled axes.
+			for (s_axis_idx = 0; s_axis_idx < CFG_TILT_SENSOR_COUNT; s_axis_idx += 1) {
+				eventPublish(EV_SLEW_TARGET, s_axis_idx, driverPresets(preset_idx)[s_axis_idx]);
+				if (!driverSlaveIsEnabled(s_axis_idx))		// Do not do disabled axes.
 					continue;
 
 				app_timer_start(APP_TIMER_SLEW, REGS[REGS_IDX_SLEW_TIMEOUT]*10U);
@@ -383,30 +389,30 @@ jog_done:	axis_stop_all();
 
 					// Get direction to go, or we might be there anyways.
 					const int16_t* presets = driverPresets(preset_idx);
-					const int16_t delta = presets[axis_idx] - (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx];
+					const int16_t delta = presets[s_axis_idx] - (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_idx];
 
-					if (axis_get_dir(axis_idx) == AXIS_DIR_STOP) {			// If not moving, turn on motors.
-						eventPublish(EV_SLEW_START, axis_idx, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
+					if (axis_get_dir(s_axis_idx) == AXIS_DIR_STOP) {			// If not moving, turn on motors.
+						eventPublish(EV_SLEW_START, s_axis_idx, REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_idx]);
 						const int8_t start_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND]);
 						if (start_dir > 0)
-							axis_set_drive(axis_idx, AXIS_DIR_UP);
+							axis_set_drive(s_axis_idx, AXIS_DIR_UP);
 						else if (start_dir < 0)
-							axis_set_drive(axis_idx, AXIS_DIR_DOWN);
+							axis_set_drive(s_axis_idx, AXIS_DIR_DOWN);
 						else // No slew necessary...
 							break;
 					}
 
 					else {						// If we are moving in one direction, check for position reached. We can't just check for zero as it might overshoot.
 						const int8_t target_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]);
-						if (axis_get_dir(axis_idx) == AXIS_DIR_UP) {
+						if (axis_get_dir(s_axis_idx) == AXIS_DIR_UP) {
 							if (target_dir <= 0) {
-								eventPublish(EV_SLEW_STOP, axis_idx, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
+								eventPublish(EV_SLEW_STOP, s_axis_idx, REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_idx]);
 								break;
 							}
 						}
 						else {		// Or the other...
 							if (target_dir >= 0) {
-								eventPublish(EV_SLEW_STOP, axis_idx, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
+								eventPublish(EV_SLEW_STOP, s_axis_idx, REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_idx]);
 								break;
 							}
 						}
@@ -435,8 +441,8 @@ jog_done:	axis_stop_all();
 				}
 
 				// Report final position after run-on...
-				eventPublish(EV_SLEW_FINAL, axis_idx, REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx]);
-			}	// Closes for (axis_idx...) ...
+				eventPublish(EV_SLEW_FINAL, s_axis_idx, REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_idx]);
+			}	// Closes for (s_axis_idx...) ...
 
 			// Stop and let axis motor rundown if they are moving...
 slew_abort:	if (REGS[REGS_IDX_RELAY_STATE] & (RELAY_HEAD_MASK|RELAY_FOOT_MASK)) {
@@ -524,6 +530,17 @@ static int8_t thread_rs232_cmd(void* arg) {
 	}	// Closes `while (1) '...
 	THREAD_END();
 }
+
+/*
+	A response is sent when a correctly command is received with the correct system code and a correct checksum. The data in the response it as follows:
+	byte 1, 2: System code MSB first.
+	byte 3: command code
+	byte 4: 1 if the controller was not busy and accepted the command, 0 otherwise.
+	byte 5: Checksum of 8 bit addition of all bytes in the message.
+	
+	Note that the response will always be a '1' if the Controller was not busy, even if the command code was not recognised. The only situation where the response will be zero is if the 
+	Controller is moving to a preset position.
+*/
 static void rs232_resp(uint8_t cmd, uint8_t rc) {
 	GPIO_SERIAL_RS232.write((uint8_t)(IR_CODE_ADDRESS>>8));
 	GPIO_SERIAL_RS232.write((uint8_t)IR_CODE_ADDRESS);

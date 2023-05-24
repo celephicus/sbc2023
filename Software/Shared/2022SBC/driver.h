@@ -15,8 +15,11 @@ uint8_t* eventGetTraceMask();
 #define DRIVER_BED_POS_PRESET_COUNT 4
 int16_t* driverPresets(uint8_t idx);
 void driverPresetClear(uint8_t idx);
+
+// Each axis with a sensor has a lower and an upper limit. A value of SBC2022_MODBUS_TILT_FAULT implies no limit.
 enum { DRIVER_AXIS_LIMIT_IDX_LOWER, DRIVER_AXIS_LIMIT_IDX_UPPER };
-int16_t* driverAxisLimits(uint8_t axis_idx);
+int16_t driverAxisLimitGet(uint8_t axis_idx, uint8_t limit_idx);
+void driverAxisLimitSet(uint8_t axis_idx, uint8_t limit_idx, int16_t limit);
 void driverAxisLimitsClear();
 
 bool driverSensorUpdateAvailable();

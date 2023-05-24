@@ -46,11 +46,11 @@ static bool console_cmds_user(char* cmd) {
 		fori (CFG_TILT_SENSOR_COUNT) driverPresets(idx)[CFG_TILT_SENSOR_COUNT-i-1] = consoleStackPop();
 	} break;
 	case /** ?LIM **/ 0xdeb2: fori (CFG_TILT_SENSOR_COUNT) {
-		consolePrint(CFMT_D, (uint16_t)driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_LOWER]); consolePrint(CFMT_D, (uint16_t)driverAxisLimits(i)[DRIVER_AXIS_LIMIT_IDX_UPPER]);
+		consolePrint(CFMT_D, driverAxisLimitGet(i, DRIVER_AXIS_LIMIT_IDX_LOWER)); consolePrint(CFMT_D, driverAxisLimitGet(i, DRIVER_AXIS_LIMIT_IDX_UPPER));
 	}  break;
 	case /** LIM **/ 0xdb0d: {
 		const uint8_t axis_idx = consoleStackPop(); if (axis_idx >= CFG_TILT_SENSOR_COUNT) consoleRaise(CONSOLE_RC_ERROR_USER);
-		driverAxisLimits(axis_idx)[DRIVER_AXIS_LIMIT_IDX_LOWER] = consoleStackPop(); driverAxisLimits(axis_idx)[DRIVER_AXIS_LIMIT_IDX_LOWER] = consoleStackPop();
+		driverAxisLimitSet(axis_idx, DRIVER_AXIS_LIMIT_IDX_UPPER, consoleStackPop()); driverAxisLimitSet(axis_idx, DRIVER_AXIS_LIMIT_IDX_LOWER, consoleStackPop());
 	} break;
 #if 0		
 	case /** LCD **/ 0xdcce: {
