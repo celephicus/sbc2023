@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 '''
 
-import re, sys, os, glob, argparse, functools, collections
+import re, sys, os, glob, argparse, functools, collections, traceback
 
 # TODO: Rewrite with codegen.
 
@@ -128,23 +128,25 @@ def add_test_case(test_func, test_args):
 	add_test(test_stub_name, descr, lineno)
 	test_stubs.append((if_condition, f'static void {test_stub_name}(void) {{ {test_stub_body}; }}'))
 	num_tests += 1
-	
-def add_test_case_vector(test_func, vectors, argc=None, comment='#', arg_proc=None):
+
+def add_test_case_vector(test_func, vectors, split=None, argc=None, comment='#', arg_proc=None):
 	"""Allows a number of test cases to be added with a common test function but args taken from string vectors.
-		The input string is forst split into lines.
+		The input string is first split into lines.
 		If optional arg `comment' is not None (default is `#') then all chars following the comment are removed.
 		Each line is then split on whitespace, with the maximum number of args in `argc'.
 		Blank lines and those starting with a `#' are ignored. """
 	for test_v in vectors.splitlines():
-		if comment:
+		if comment:									# Remove comments if enabled.
 			test_v = test_v.split(comment, 1)[0]
-		if arg_proc:
-			test_v = arg_proc(test_v)
-		nsplits = -1 if argc is None else argc-1
-		test_args = test_v.split(None, nsplits)
-		if test_args and not test_args[0].startswith('#'):
-			add_test_case(test_func, ', '.join(test_args))
-			
+		if not test_v or test_v.isspace():			# Ignore blank lines.
+			continue
+		nsplits = -1 if argc is None else argc-1	# Only split a bit
+		test_args = test_v.split(split, nsplits)
+		if arg_proc:								# Preprocess if desired.
+			test_args = arg_proc(test_args)
+		print(test_args)
+		add_test_case(test_func, ', '.join(test_args))
+
 
 # Returns (macro, list-of-args), ('test-func', [test-func, args]), ('line', line)
 MACRO_PREFIX = 'TT_'
@@ -226,7 +228,11 @@ for fn in input_files:
 				if line_proc != line_proc_test_case_data: exit(f"Unexpected `{macro}'.")
 				line_proc = None
 				script = '\n'.join(test_case_data)
-				exec(script, script_globals)
+				try:
+					exec(script, script_globals)
+				except Exception as e:
+					traceback.print_exception(e)
+					exit(f"Raised by script\n{script}")
 				test_case_data = []
 			elif macro == 'TT_BEGIN_FIXTURE': # Three options: (setUp(, (setUp, dumpContext), (setUp, dumpContext)
 				if len(args) not in range(1,4):
@@ -257,7 +263,7 @@ for fn in input_files:
 					exit(f"Macro {macro} at `{ln}' needs to follow TT_IF(...).")
 				if_condition = None
 				test_run.append(f"#endif")
-				
+
 			else:
 				message(f" Unknown macro {macro}.")
 		elif p == 'test-func':
@@ -354,7 +360,7 @@ static int parse_options(int argc, char** argv)
                     return 1;
             }
         }
-		else 
+		else
 		{
 			UnityPrint("ERROR: Unknown Option: ");
 			UnityPrint(argv[i]);
