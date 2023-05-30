@@ -1,6 +1,7 @@
 #! /usr/bin/python3
 import sys, re, os
 import codegen
+from pprint import pprint
 
 try:
 	infile = sys.argv[1]
@@ -70,41 +71,57 @@ for lineno, lns in llines:
 	if not r_short_desc.endswith('.'): r_short_desc = r_short_desc + '.'
 	#print(r_field, r_name, r_options, r_desc)
 	#continue
-	name = r_name.upper()
-	raw_options = r_options.lower().split() if r_options else [] 	# Normalise options.
+	name = r_name.upper()	# Normalise case of register name to upper case.
+	# Options as whitespace separated list of key[=value] pairs.
+	r_options = dict([(opt.split('=', 1)+[None])[:2] for opt in r_options.split()]) if r_options else {}
 	if not r_field:		# Register declaration...
-		options = {}
 		if name in registers: error(f"{name}: duplicate register name.", lineno)
 		default_value = 0					# Default value has a default value!
-		options['format'] = 'unsigned'		# Format to use when printing.
-		for opt in raw_options:
-			try:
-				default_value = int(opt, 0)
-			except ValueError: 	# Not an int, try other options.
-				if opt in 'nv'.split():		# Simple options.
-					options[opt] = ''
-				elif opt in 'hex signed'.split():
-					options['format'] = opt
-				else:
-					error(f"{name}: illegal option `{opt}'.", lineno)
+		options = {'fmt' :'unsigned'}		# Format to use when printing.
+		for opt in r_options:
+			if opt == 'default':
+				try: default_value = int(r_options[opt], 0)
+				except ValueError: error(f"{name}: bad default option value.", lineno)
+			elif opt == 'nv':
+				options[opt] = ''
+			elif opt == 'fmt':
+				if r_options[opt] not in 'hex signed'.split(): error(f"{name}: bad fmt option value.", lineno)
+				options['fmt'] = r_options[opt]
+			else:
+				error(f"{name}: illegal option `{opt}'.", lineno)
 
-		registers[name] = ({}, default_value, options, r_short_desc, r_long_desc)
+		registers[name] = [{}, default_value, options, r_short_desc, r_long_desc]
 		existing_field_mask = 0		# Used to check fields do not overlap existing fields.
 	else:				# Field declaration...
 		if not registers: error(f"Field {name} has no register.", lineno)
 		reg_name = list(registers)[-1]	# Register is last one defined.
 		if name in registers[reg_name][REG_IDX_FIELDS]: error(f"{reg_name}: duplicate field `{name}'.", lineno)
-		for opt in raw_options:
-			try: bits = [int(x) for x in opt.split('..', 1)]
-			except ValueError: error(f"{reg_name}: field {name} bad option `{opt}'.", lineno)
-			if len(bits) == 1: bits = bits*2		# Normalise bit spec to (start, end) inclusive.
-			if bits[0] > bits[1]: error(f"{reg_name}: field {name} bad value range `{opt}'.", lineno)
-			if bits[0] not in range(16): error(f"{reg_name}: field {name} bad value `{opt}'.", lineno)
-			field_mask = 0
-			for i in range(bits[0], bits[1]+1):	field_mask |= 1<<i # Inefficient...
-			if field_mask & existing_field_mask: error(f"{reg_name}: field {name} value overlap `{opt}'.", lineno)
-			existing_field_mask |= field_mask;
+
+		for opt in r_options:
+			opt_txt = f"{opt}={r_options[opt]}"
+			default_value = 0
+			if opt == 'default':
+				try: default_value = int(r_options[opt], 0)
+				except ValueError: default_value = None
+				if default_value not in (0, 1): error(f"{name}: bad default option value {opt_txt}.", lineno)
+			elif opt == 'bit':
+				try: bits = [int(x) for x in r_options[opt].split('..', 1)]
+				except ValueError: error(f"{reg_name}: field {name} bad option `{opt_txt}'.", lineno)
+				if len(bits) == 1: bits = bits*2		# Normalise bit spec to (start, end) inclusive.
+				if bits[0] > bits[1]: error(f"{reg_name}: field {name} bad value range `{opt_txt}'.", lineno)
+				if bits[0] not in range(16): error(f"{reg_name}: field {name} bad value `{opt_txt}'.", lineno)
+				field_mask = 0
+				for i in range(bits[0], bits[1]+1):	field_mask |= 1<<i # Inefficient...
+				if field_mask & existing_field_mask: error(f"{reg_name}: field {name} value overlap `{opt_txt}'.", lineno)
+				existing_field_mask |= field_mask;
+			else:
+				error(f"{name}: illegal option `{opt_txt}'.", lineno)
+
+		if (bits[0] != bits[1]):
+			error(f"{reg_name}: field {name} only single bit fields supported `{opt_txt}'.", lineno)
 		registers[reg_name][REG_IDX_FIELDS][name] = (bits, field_mask, r_short_desc, r_long_desc)
+		registers[reg_name][REG_IDX_DEFAULT] &= ~field_mask
+		registers[reg_name][REG_IDX_DEFAULT] |= default_value << bits[0]	# Add default value to register.
 
 # Sort register names to have those tagged as `nv' last.
 registers = dict(sorted(registers.items(), key=lambda x: 'nv' in x[1][REG_IDX_OPTIONS]))
@@ -116,9 +133,9 @@ for i, x in enumerate(registers.values()):
 		reg_first_nv = i
 		break
 
-import pprint
-# pprint.pprint(registers, sort_dicts=False)
-# sys.exit()
+#for r in registers:
+#	print(f"{r}: {registers[r]}")
+#sys.exit()
 
 # Generate declarations...
 cg.add(parts[RegionParser.S_LEADER])
@@ -144,7 +161,7 @@ cg.add(f"#define REGS_NV_DEFAULT_VALS {', '.join([str(registers[r][REG_IDX_DEFAU
 
 cg.add_comment('Define how to format the reg when printing.', add_nl=-1)
 FORMATS = {'signed': 'D', 'unsigned': 'U', 'hex': 'X'}
-p_format = [f"CFMT_{FORMATS[r[REG_IDX_OPTIONS]['format']]}" for r in registers.values()]
+p_format = [f"CFMT_{FORMATS[r[REG_IDX_OPTIONS]['fmt']]}" for r in registers.values()]
 cg.add(f"#define REGS_FORMAT_DEF {', '.join(p_format)}")
 
 for f in registers.items():
@@ -182,4 +199,3 @@ for f in registers.items():
 
 cg.add(parts[RegionParser.S_TRAILER], add_nl=-1)
 cg.end()
-sys.exit()
