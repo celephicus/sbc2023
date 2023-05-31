@@ -24,10 +24,8 @@ static int16_t modbus_recv() {
 void test_modbus_setup() {
 	fixture.t_sent = new Buffer(40);
 	fixture.t_recd = new Buffer(40);
-	fixture.t_sent->clear();
-	fixture.t_recd->clear();
 	support_test_set_millis();
-	modbusInit(modbus_send, modbus_recv, 20, 9600, NULL);
+	modbusInit(modbus_send, modbus_recv, 10, 9600, NULL);
 }
 
 TT_BEGIN_FIXTURE(test_modbus_setup)
@@ -49,7 +47,7 @@ TT_TEST_CASE(test_modbus_crc("1103006B0003", 0x8776));	// 11 03 00 6B 00 03 76 8
 void test_modbus_send_raw() {
 	Buffer frame(40);
 	frame.addHexStr("414243");
-	modbusSendRaw(frame, frame.len());
+	modbusSendRaw(frame);
 	TEST_ASSERT_EQUAL(frame.len(), fixture.t_sent->len());
 	TEST_ASSERT_EQUAL_HEX8_ARRAY(frame, *fixture.t_sent, frame.len());
 }
@@ -59,7 +57,7 @@ void test_modbus_send() {
 	Buffer frame_rx(40);
 	frame_rx.addMem(frame, frame.len());
 	frame_rx.addHexStr("7687");
-	modbusMasterSend(frame, frame.len());
+	modbusSend(frame);
 	TEST_ASSERT_EQUAL(frame_rx.len(), fixture.t_sent->len());
 	TEST_ASSERT_EQUAL_HEX8_ARRAY(frame_rx, *fixture.t_sent, frame_rx.len());
 }
@@ -73,25 +71,24 @@ void test_modbus_slave_id_valid() {
 	TEST_ASSERT_FALSE(modbusIsValidSlaveId(255));
 }
 void test_modbus_frame_valid_ovf() {
-	Buffer bf(MODBUS_MAX_RESP_SIZE);
-	uint8_t fovf[MODBUS_MAX_RESP_SIZE+1];
-	bf.addMem(fovf, sizeof(fovf));
-	TEST_ASSERT_EQUAL_UINT8(MODBUS_CB_EVT_MS_INVALID_LEN, modbusVerifyFrameValid(bf));
+	Buffer bf(0);
+	bf.add(0);
+	TEST_ASSERT_EQUAL_UINT8(MODBUS_CB_EVT_MS_ERR_INVALID_LEN, modbusVerifyFrameValid(bf));
 }
 void test_modbus_frame_valid(const char* f, uint8_t rc) {
-	Buffer bf(MODBUS_MAX_RESP_SIZE);
+	Buffer bf(20);
 	bf.addHexStr(f);
 	TEST_ASSERT_EQUAL_UINT8(rc, modbusVerifyFrameValid(bf));
 }
 
 TT_TEST_CASE(test_modbus_frame_valid("1103006B00037687", 0)); /* Good frame (and checking that C-style comments do not result in test case not being seen by grm.py) */
-TT_TEST_CASE(test_modbus_frame_valid("1103006B00038776", MODBUS_CB_EVT_MS_INVALID_CRC));	// CRC swapped.
-TT_TEST_CASE(test_modbus_frame_valid("1103006B00037688", MODBUS_CB_EVT_MS_INVALID_CRC));	// CRC munged.
+TT_TEST_CASE(test_modbus_frame_valid("1103006B00038776", MODBUS_CB_EVT_MS_ERR_INVALID_CRC));	// CRC swapped.
+TT_TEST_CASE(test_modbus_frame_valid("1103006B00037688", MODBUS_CB_EVT_MS_ERR_INVALID_CRC));	// CRC munged.
 TT_TEST_CASE(test_modbus_frame_valid("4142435085", 0));	// Smallest frame.
-TT_TEST_CASE(test_modbus_frame_valid("", MODBUS_CB_EVT_MS_INVALID_LEN));	// Empty frame.
-TT_TEST_CASE(test_modbus_frame_valid("41b1d1", MODBUS_CB_EVT_MS_INVALID_LEN));	// Valid Slave Id & CRC but too small.
+TT_TEST_CASE(test_modbus_frame_valid("", MODBUS_CB_EVT_MS_ERR_INVALID_LEN));	// Empty frame.
+TT_TEST_CASE(test_modbus_frame_valid("41b1d1", MODBUS_CB_EVT_MS_ERR_INVALID_LEN));	// Valid Slave Id & CRC but too small.
 TT_TEST_CASE(test_modbus_frame_valid("0142435151", 0));	// Smallest slave ID.
 TT_TEST_CASE(test_modbus_frame_valid("f74243b163", 0));	// Largest slave ID.
-TT_TEST_CASE(test_modbus_frame_valid("0042430091", MODBUS_CB_EVT_MS_INVALID_ID));	// Invalid slave ID.
-TT_TEST_CASE(test_modbus_frame_valid("f842438160", MODBUS_CB_EVT_MS_INVALID_ID));	// Invalid slave ID.
+TT_TEST_CASE(test_modbus_frame_valid("0042430091", MODBUS_CB_EVT_MS_ERR_INVALID_ID));	// Invalid slave ID.
+TT_TEST_CASE(test_modbus_frame_valid("f842438160", MODBUS_CB_EVT_MS_ERR_INVALID_ID));	// Invalid slave ID.
 

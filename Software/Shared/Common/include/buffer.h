@@ -33,7 +33,6 @@ public:
 	bool ovf() const { return m_ovf; }
 	void clear() { m_p = m_buf; m_ovf = false; }
 	void add(uint8_t c) { if (free() > 0) *m_p++ = c; else m_ovf = true; }
-	void add(char c) { add((uint8_t)c); }
 	void addMem(const uint8_t* buf, uint8_t sz) {
 		if (sz > free()) {
 			sz = free();

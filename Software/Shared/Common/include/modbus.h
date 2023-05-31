@@ -4,26 +4,57 @@
 #include "utils.h"
 #include "buffer.h"
 
-#define MODBUS_MAX_RESP_SIZE 20
+/* Simplified driver.
+
+	Master just sends requests whenever asked to. It will not send if the bus is busy.
+	It does call the callback function with event code MODBUS_CB_EVT_M_REQ_TX but thisis just for logging.
+
+	Master & slaves both receive frames and decode them.
+	They will call the callback function with event code MODBUS_CB_EVT_MS_ERR_xxx on error.
+	The Master will send event MODBUS_CB_EVT_M_RESP_RX for any valid slave ID.
+	The slaves will send event MODBUS_CB_EVT_S_REQ_RX for its slave ID and MODBUS_CB_EVT_S_REQ_X for all others.
+
+	So the master client code just has to handle sending requests periodically.
+	The save client code just has to send a response when it sees a request.
+*/
 
 /* Callback function supplied to modbusInit(). This is how slaves get requests & send responses back, and how the master receives the responses. */
-typedef void (*modbus_response_cb)(uint8_t evt);
+typedef void (*modbus_response_cb)(uint8_t evt, Buffer& frame);
 
-/* Function that writes a buffer to the wire, handling enabling the trnsmitter for the duration of the trsnsmission. */
+// Event IDs sent as callback from driver. Note sorted by generic, slave or master.
+enum {
+	MODBUS_CB_EVT_MS_ERR_INVALID_CRC,			// MASTER/SLAVE, request/response CRC incorrect.
+	MODBUS_CB_EVT_MS_ERR_OVERFLOW,				// MASTER/SLAVE, request/response overflowed internal buffer.
+	MODBUS_CB_EVT_MS_ERR_INVALID_LEN,			// MASTER/SLAVE, request/response length too small.
+	MODBUS_CB_EVT_MS_ERR_INVALID_ID,			// MASTER/SLAVE, request/response slave ID invalid.
+	MODBUS_CB_EVT_MS_ERR_OTHER,					// MASTER/SLAVE, something else invalid.
+
+	MODBUS_CB_EVT_S_REQ_RX,						// SLAVE, request received with our slave ID and correct CRC.
+	MODBUS_CB_EVT_S_REQ_X,						// SLAVE, we have a request for another slave ID.
+
+	MODBUS_CB_EVT_M_REQ_TX,						// MASTER, request SENT.
+	MODBUS_CB_EVT_M_RESP_RX,					// MASTER, valid response received.
+//	MODBUS_CB_EVT_M_NO_RESP = 9,				// MASTER, NO response received, either timeout or new master request initiated.
+//	MODBUS_CB_EVT_M_RESP_BAD_SLAVE_ID = 10,		// MASTER, slave ID in response did not match request, unusual...
+//	MODBUS_CB_EVT_M_RESP_BAD_FUNC_CODE = 11,	// MASTER, response Function Code wrong.
+};
+
+/* Client function that writes a buffer to the wire, handling enabling the transmitter for the duration of the transmission.
+	Note that it will block until transmission is done. */
 typedef void (*modbusSendBufFunc)(const uint8_t* buf, uint8_t sz);
 
-/* Function that receives a character from the wire, returning a negative value on none. */
+/* Client function that receives a character from the wire, returning a negative value on none. */
 typedef int16_t (*modbusReceiveCharFunc)();
 
 /* Initialise the driver. Initially the slave address is set to zero, which is not a valid slave address, so it will not respond to any requests
-	as this is outside the legal address range of 1-247 inclusive. */
-void modbusInit(modbusSendBufFunc send, modbusReceiveCharFunc recv, uint16_t response_timeout, uint32_t baud, modbus_response_cb cb);
+	as this is outside the legal address range of 1-247 inclusive.
+	The baudrate isrequired to compute the timeout for a frame. */
+void modbusInit(modbusSendBufFunc send, modbusReceiveCharFunc recv, uint8_t max_rx_frame, uint32_t baud, modbus_response_cb cb);
 
 // Callback function used for hardware debugging of timing. The `id' argument is event-type, `s' is state.
-enum {
-	MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT,	// Master waiting for a response.
-	MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT,	// Master has started receiving a response and is waiting for a quiet period to signal end of frame.
-	MODBUS_TIMING_DEBUG_EVENT_RX_FRAME,		// Frame received from bus.
+enum {//
+	MODBUS_TIMING_DEBUG_EVENT_RX_FRAME,		// Frame being received from bus.
+	MODBUS_TIMING_DEBUG_EVENT_SERVICE,		// In service function.
 };
 typedef void (*modbus_timing_debug_cb)(uint8_t id, uint8_t s);
 void modbusSetTimingDebugCb(modbus_timing_debug_cb cb);
@@ -38,28 +69,6 @@ enum {
 	MODBUS_FRAME_IDX_FUNCTION,
 	MODBUS_FRAME_IDX_DATA,
 };
-
-// Event IDs sent as callback from driver. Note sorted by generic, slave or master. And IDs assigned to align with 4 bit boundaries for use with a mask.
-enum {
-	MODBUS_CB_EVT_MS_INVALID_CRC = 0,			// MASTER/SLAVE, request/response CRC incorrect.
-	MODBUS_CB_EVT_MS_OVERFLOW = 1,				// MASTER/SLAVE, request/response overflowed internal buffer.
-	MODBUS_CB_EVT_MS_INVALID_LEN = 2,			// MASTER/SLAVE, request/response length too small.
-	MODBUS_CB_EVT_MS_INVALID_ID = 3,			// MASTER/SLAVE, request/response slave ID invalid.
-
-	MODBUS_CB_EVT_S_REQ_OK = 4,					// SLAVE, request received with our slave ID and correct CRC.
-	MODBUS_CB_EVT_S_REQ_X = 5,					// SLAVE, we have a request for another slave ID.
-
-	MODBUS_CB_EVT_M_RESP_OK = 8,				// MASTER, response received with ID & Function Code matching request, with correct CRC.
-	MODBUS_CB_EVT_M_NO_RESP = 9,				// MASTER, NO response received, either timeout or new master request initiated.
-	MODBUS_CB_EVT_M_RESP_BAD_SLAVE_ID = 10,		// MASTER, slave ID in response did not match request, unusual...
-	MODBUS_CB_EVT_M_RESP_BAD_FUNC_CODE = 11,	// MASTER, response Function Code wrong.
-};
-
-// Get response, len set to length of buffer, returns false if overflow. On return len is set to number of bytes copied.
-void modbusGetResponse(Buffer& resp);
-
-// Access data in request. For use by event handler in MASTER mode.
-const Buffer& modbusPeekRequestData();
 
 // MODBUS Function Codes.
 enum {
@@ -77,14 +86,11 @@ enum {
 	MODBUS_FC_WRITE_AND_READ_REGISTERS  = 0x17,
 };
 
-// Send raw data to the line with no CRC or waiting for a response.
-void modbusSendRaw(const uint8_t* buf, uint8_t sz);
+// Send raw data to the line. Does not call callback function.
+void modbusSendRaw(const Buffer& f);
 
-// Send a correctly framed packet with CRC, used by slaves to send a response to the master.
-void modbusSlaveSend(const uint8_t* frame, uint8_t sz);
-
-// Send a correctly framed packet with CRC, and await a response of the specified size, or any size if zero.
-void modbusMasterSend(const uint8_t* frame, uint8_t sz);
+// Append CRC and send frame.
+void modbusSend(Buffer& f);
 
 void modbusHregWrite(uint8_t id, uint16_t address, uint16_t value);
 
@@ -100,6 +106,7 @@ enum {
 };
 void modbusRelayBoardWrite(uint8_t id, uint8_t rly, uint8_t state, uint8_t delay=0);
 
+/* Check if the bus is busy receiving a frame. */
 bool modbusIsBusy();
 
 // Call in mainloop frequently to service the driver.
