@@ -1,25 +1,27 @@
-# We either target myprintf alone or all files by setting to myprintf or all, note lower case. 
+# We either target myprintf alone or all files by setting to myprintf or all, note lower case.
 TARGET = all
 
-# Test case files to be run through grm to generate a test runner `main.cpp'. 
+# Test case files to be run through grm to generate a test runner `main.cpp'.
+TEST_SRCS_modbus = test_modbus.cpp
 TEST_SRCS_myprintf = test_printf.cpp
-TEST_SRCS_buffer = test_buffer.cpp  
-TEST_SRCS_utils = test_utils.cpp  
+TEST_SRCS_buffer = test_buffer.cpp
+TEST_SRCS_utils = test_utils.cpp
 TEST_SRCS_all = $(wildcard test_*.cpp)
 
 # Other src files.
+OTHER_SRCS_modbus = ../src/modbus.cpp ../src/utils.cpp support_test.cpp
 OTHER_SRCS_myprintf = ../src/myprintf.cpp
-OTHER_SRCS_buffer = ../src/buffer.cpp
+OTHER_SRCS_buffer =
 OTHER_SRCS_utils = ../src/utils.cpp
 OTHER_SRCS_all = ../src/myprintf.cpp ../src/event.cpp ../src/modbus.cpp \
 				../src/utils.cpp support_test.cpp
-#console.cpp regs.cpp  sw_scanner.cpp  thread.cpp ../src/buffer.cpp 
+#console.cpp regs.cpp  sw_scanner.cpp  thread.cpp ../src/buffer.cpp
 
-# Select source files, maybe use use local symbols instead. 
+# Select source files, maybe use use local symbols instead.
 TEST_SRCS = $(TEST_SRCS_$(TARGET))
 OTHER_SRCS = $(OTHER_SRCS_$(TARGET))
 
-# Disable built-in rules and variables as they always trip me up. 
+# Disable built-in rules and variables as they always trip me up.
 MAKEFLAGS += --no-builtin-rules
 MAKEFLAGS += --no-builtin-variables
 
@@ -30,9 +32,9 @@ BUILD_DIR = $(BUILD_PREFIX)-$(TARGET)$(BUILD)
 # Extra options for C & C++
 EXTRAS =
 DEFINES = -DUNITY_INCLUDE_CONFIG_H -DTEST -DNO_CRITICAL_SECTIONS -DUSE_PROJECT_CONFIG_H \
-		    -DMYPRINTF_TEST_BINARY=1 
-LINK_FLAGS = 
-INCLUDES = -I. -I../include 
+		    -DMYPRINTF_TEST_BINARY=1
+LINK_FLAGS =
+INCLUDES = -I. -I../include
 LIBS = -lgcov
 LIB_PATH =
 
@@ -42,13 +44,13 @@ VPATH = ../src ../test
 # My current set of warnings.
 WARN_FLAGS := -Wall -Wextra -Wno-unused-parameter -Werror -Wsign-conversion \
 				-Wduplicated-branches -Wduplicated-cond \
-				-Wlogical-op -Wshadow -Wundef -Wswitch-default -Wdouble-promotion -fno-common 
+				-Wlogical-op -Wshadow -Wundef -Wswitch-default -Wdouble-promotion -fno-common
 CXXFLAGS :=  -g -O0 $(WARN_FLAGS) $(DEFINES) $(EXTRAS) -fprofile-arcs -ftest-coverage
 CFLAGS   :=  -g -O0 $(WARN_FLAGS) -Wmissing-prototypes $(DEFINES) $(EXTRAS) -fprofile-arcs -ftest-coverage
 
 
 TEST_MAIN_SRC = t_$(TARGET)
-SRCS = $(TEST_MAIN_SRC).cpp $(OTHER_SRCS) $(TEST_SRCS) unity.c 
+SRCS = $(TEST_MAIN_SRC).cpp $(OTHER_SRCS) $(TEST_SRCS) unity.c
 
 # Commands
 RM 		:= rm -rf
@@ -73,8 +75,8 @@ verify:
 	@echo "SRCS: " $(SRCS)
 	@echo "OBJS: " $(OBJS)
 	@echo $(wildcard test_*.cpp)
-	
-$(EXE) : $(OBJS) 
+
+$(EXE) : $(OBJS)
 	@echo $(OBJS) > $(BUILD_DIR)/obj_files
 	$(LINK) -o $@ @$(BUILD_DIR)/obj_files $(LIB_PATH) $(LIBS) $(LINK_FLAGS)
 
@@ -87,7 +89,7 @@ clean :
 
 clean-all :
 	$(RM) $(BUILD_PREFIX)* t_*.cpp
-	
+
 $(BUILD_DIR)/%.o : %.cpp
 	@$(CXX) $(CXXFLAGS) $(INCLUDES) -MG -MP -MT$@ -MF$(addsuffix .d, $(basename $@)) -MM $<
 	$(CXX) -c $< $(CXXFLAGS) -o $@ $(INCLUDES)
@@ -103,7 +105,7 @@ $(BUILD_DIR)/%.o : %.c
 test-quiet : $(EXE)
 	$(RM) $(BUILD_DIR)/*.gcda
 	$(EXE) -f
-	
+
 # Coverage
 coverage : test-quiet
 	lcov --capture --directory . --output-file $(BUILD_DIR)/coverage.info

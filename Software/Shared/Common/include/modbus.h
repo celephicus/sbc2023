@@ -2,9 +2,9 @@
 #define MODBUS_H__
 
 #include "utils.h"
+#include "buffer.h"
 
 #define MODBUS_MAX_RESP_SIZE 20
-DECLARE_BUFFER_TYPE(Frame, MODBUS_MAX_RESP_SIZE);		// New type BufferFrame.
 
 /* Callback function supplied to modbusInit(). This is how slaves get requests & send responses back, and how the master receives the responses. */
 typedef void (*modbus_response_cb)(uint8_t evt);
@@ -56,11 +56,10 @@ enum {
 };
 
 // Get response, len set to length of buffer, returns false if overflow. On return len is set to number of bytes copied.
-bool modbusGetResponse(uint8_t* len, uint8_t* buf);
+void modbusGetResponse(Buffer& resp);
 
 // Access data in request. For use by event handler in MASTER mode.
-const uint8_t* modbusPeekRequestData();
-uint8_t modbusPeekRequestLen();
+const Buffer& modbusPeekRequestData();
 
 // MODBUS Function Codes.
 enum {
@@ -106,13 +105,10 @@ bool modbusIsBusy();
 // Call in mainloop frequently to service the driver.
 void modbusService();
 
-// Setters/getters for modbus 16 bit format.
-static inline uint16_t modbusGetU16(const void* v)  { return utilsU16_be_to_native(*(uint16_t*)v); }
-static inline void modbusSetU16(void* v, uint16_t x)  { *(uint16_t*)v = utilsU16_native_to_be(x); }
-
 // Functions exposed for testing.
 uint16_t modbusCrc(const uint8_t* buf, uint8_t sz);
-uint8_t modbusVerifyFrameValid(const BufferFrame* f);
+uint8_t modbusVerifyFrameValid(const Buffer& f);
+bool modbusIsValidSlaveId(uint8_t id);
 
 #endif	// MODBUS_H__
 

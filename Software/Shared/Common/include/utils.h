@@ -22,20 +22,20 @@ U utilsMscaleMax(T min, T max, T inc) { return static_cast<U>((max - min) / inc)
 
 // Mscale a value.
 template <typename T, typename U>
-U utilsMscale(T val, T min, T max, T inc) { 
+U utilsMscale(T val, T min, T max, T inc) {
 	if (min < max) {
 		if (val < min)
 			val = min;
 		else if (val > max)
-			val = max;		
+			val = max;
 	}
 	else {
 		if (val < max)
 			val = max;
 		else if (val > min)
-			val = min;		
+			val = min;
 	}
-	return (val - min + inc/2) / inc; 
+	return (val - min + inc/2) / inc;
 }
 
 // Mscale a value.
@@ -103,12 +103,12 @@ bool utilsIsTimerDone(T &then, T timeout) { return ((T)millis() - then) > timeou
 // Plain C version.
 #define CRITICAL(op_) 	do { CRITICAL_START(); op_; CRITICAL_END(); } while(0)
 
-// C++ version, use ... { Critical c; *stuff* }, lock released on leaving block, even with a goto. 
+// C++ version, use ... { Critical c; *stuff* }, lock released on leaving block, even with a goto.
 struct Critical {
 	Critical() { CRITICAL_START(); }
 	~Critical() { CRITICAL_END(); }
 };
-	
+
 // When something must be true at compile time...
 #define UTILS_STATIC_ASSERT(expr_) extern int error_static_assert_fail__[(expr_) ? 1 : -1] __attribute__((unused))
 
@@ -159,31 +159,6 @@ static inline void queue##name_##PutOverwrite(Queue##name_* q, type_* el)  {				
 }																													  	\
 static inline bool queue##name_##Push(Queue##name_* q, type_ *el)  {										  			\
 	if (queue##name_##Full(q)) return false; else { q->fifo[--q->head & queue##name_##Mask()] = *el; return true; }	   	\
-}
-
-// A little "C" implementation of a buffer that can have stuff appended to it without fear of overflowing.
-#define DECLARE_BUFFER_TYPE(name_, size_)																					\
-UTILS_STATIC_ASSERT((size_) <= (uint_least8_t)-1);																			\
-typedef struct {																											\
-	uint8_t buf[size_];																										\
-	uint8_t* p;																												\
-	bool ovf;																												\
-} Buffer##name_;																											\
-static inline void buffer##name_##Reset(Buffer##name_* q_) { q_->p = q_->buf; q_->ovf = false; }								\
-static inline uint_least8_t buffer##name_##Size(const Buffer##name_* q_) { (void)q_; return (uint_least8_t)(size_);	}		\
-static inline bool buffer##name_##Overflow(const Buffer##name_* q_) { return q_->ovf; }										\
-static inline uint_least8_t buffer##name_##Len(const Buffer##name_* q_) { return (uint_least8_t)(q_->p - q_->buf); }			\
-static inline uint_least8_t buffer##name_##Free(const Buffer##name_* q_) { return (uint_least8_t)(&q_->buf[size_] - q_->p); }	\
-static inline void buffer##name_##Add(Buffer##name_* q_, uint8_t x) { 														\
-	if (buffer##name_##Free(q_) >= 1) *q_->p++ = x;																			\
-	else q_->ovf = true;																										\
-}																															\
-static inline void buffer##name_##AddMem(Buffer##name_* q_, const void* m, uint8_t len) { 									\
-	if (len > buffer##name_##Free(q_)) { q_->ovf = true; len = buffer##name_##Free(q_); }										\
-	memcpy(q_->p, m, len); q_->p += len;																						\
-}																															\
-static inline void buffer##name_##AddU16(Buffer##name_* q_, uint16_t x) { 													\
-	buffer##name_##AddMem(q_, (void*)&x, sizeof(uint16_t)); 																	\
 }
 
 // How many elements in an array?
@@ -289,7 +264,7 @@ T utilsAbs(T x)  {
 #define utilsAbsI16 utilsAbs<int16_t>
 #define utilsAbsI32 utilsAbs<int32_t>
 
-// Check if a value is within the limit: low <= x <= high. Note considers both lower AND UPPER as within the limit. Not like a Python range. 
+// Check if a value is within the limit: low <= x <= high. Note considers both lower AND UPPER as within the limit. Not like a Python range.
 template <typename T>
 bool utilsIsInLimit(T x, T low, T high)  {
 	return (x >= low) && (x <= high);
@@ -358,7 +333,7 @@ bool utilsMultiThreshold(const uint16_t* thresholds, uint8_t count, uint16_t hys
 #define UTILS_IS_SIGNED(type_) ((type_)-1 < 0)
 template <typename T, typename U>
 T utilsFilter(U* accum, T input, uint8_t k, bool reset) {
-#if ( (-1 >> 1) != -1 )	// Compiler does not implement arithmetic shift of negative numbers. 
+#if ( (-1 >> 1) != -1 )	// Compiler does not implement arithmetic shift of negative numbers.
 	UTILS_STATIC_ASSERT(!UTILS_IS_SIGNED(T));
 	UTILS_STATIC_ASSERT(!UTILS_IS_SIGNED(U));
 #endif
@@ -371,11 +346,11 @@ T utilsFilter(U* accum, T input, uint8_t k, bool reset) {
 bool utilsStrIsWhitespace(char c);
 void utilsStrScanPastWhitespace(const char** strp);
 
-/* Convert a string into an unsigned int. Digits up to one less than the base are converted and written to n, until the first non-digit character 
-	(including space or nul) is read. 
-	
+/* Convert a string into an unsigned int. Digits up to one less than the base are converted and written to n, until the first non-digit character
+	(including space or nul) is read.
+
 	If no characters are converted then the value UTILS_STRTOUI_RC_NO_CHARS is returned. On overflow the value UTILS_STRTOUI_RC_OVERFLOW, }; is returned.
-	The function only returns the value UTILS_STRTOUI_RC_OK (zero) if at least one number character is seen and there is no overflow. 
+	The function only returns the value UTILS_STRTOUI_RC_OK (zero) if at least one number character is seen and there is no overflow.
 	Note that the function will return true	if the non-converted character was illegal, e.g. `99a' will return true with a base of 10.
 	Endptr must be valid and is set to the first character that was not converted. */
 enum { UTILS_STRTOUI_RC_OK, UTILS_STRTOUI_RC_NO_CHARS, UTILS_STRTOUI_RC_OVERFLOW, };
@@ -398,12 +373,12 @@ int utilsStrtoui(unsigned* n, const char *str, char **endptr, unsigned base);
 
 	bool playIsBusy() { return utilsSeqIsBusy(&f_seq); }
 	void playStart(const PlayDef* def) { utilsSeqStart(&f_seq, def, sizeof(PlayDef), play_action_func); }
-	void playService() { utilsSeqService(&f_seq); }		// Call every so often. 
+	void playService() { utilsSeqService(&f_seq); }		// Call every so often.
 */
 
 /* The header of the action type, defines the action for the sequencer. A struct must have this as the first member, the action function downcasts the
    argument to the derived type and extracts the values.
-   If the last duration value is UTILS_SEQ_END then the action function is called for the associated data, and then the sequence ends. This allows for 
+   If the last duration value is UTILS_SEQ_END then the action function is called for the associated data, and then the sequence ends. This allows for
    example a LED to display a colour sequence, then hold on a colour.
    If the last duration value is UTILS_SEQ_REPEAT then the action function is NOT called for the associated data, and the sequence restarts.
    UTILS_SEQ_LOOP(N) & UTILS_SEQ_LOOP_END allow a bit of the sequence to be repeated N times. */
@@ -414,7 +389,7 @@ const t_utils_seq_duration UTILS_SEQ_LOOP_MASK = 	0x8000;
 #define					   UTILS_SEQ_LOOP(n_) 		(UTILS_SEQ_LOOP_MASK | (n_))
 const t_utils_seq_duration UTILS_SEQ_LOOP_END = 	0xfffe;
 
-// We encode what we want the sequencer to do in the duration member. Note that it cannot have the MSB set. 
+// We encode what we want the sequencer to do in the duration member. Note that it cannot have the MSB set.
 typedef struct {
 	t_utils_seq_duration duration;
 } UtilsSeqHdr;
@@ -422,7 +397,7 @@ typedef struct {
 // Casts UtilsSeqHdr to subtype, extracts values and actions them. If handed a NULL pointer then turn off the thing.
 typedef void (*sequencer_action_func)(const UtilsSeqHdr*);
 
-// Context that holds the current state of a sequencer. 
+// Context that holds the current state of a sequencer.
 typedef struct {
 	const UtilsSeqHdr* base;
 	const UtilsSeqHdr* hdr;
@@ -430,14 +405,14 @@ typedef struct {
 	t_utils_seq_duration loop_counter;
 	uint8_t item_size;		// Size of derived type that has a UtilsSeqHdr as first item.
 	sequencer_action_func action;
-	t_utils_seq_duration timer; // Times duration of steps in sequence. 
+	t_utils_seq_duration timer; // Times duration of steps in sequence.
 	bool init;				// Set to indicate that the sequence has just been set so needs initialisation in utilsSeqService().
 } UtilsSeqCtx;
 
-// Check if the sequencer is running or halted. 
+// Check if the sequencer is running or halted.
 bool utilsSeqIsBusy(const UtilsSeqCtx* seq);
 
-// Start running a sequence. Call with a NULL definition to stop. Note that to restart a sequence it must be stopped first, i.e. calling utilsSeqStart() with the same definition as previously has no effect. 
+// Start running a sequence. Call with a NULL definition to stop. Note that to restart a sequence it must be stopped first, i.e. calling utilsSeqStart() with the same definition as previously has no effect.
 void utilsSeqStart(UtilsSeqCtx* seq, const UtilsSeqHdr* def, uint8_t item_size, sequencer_action_func action);
 
 void utilsSeqService(UtilsSeqCtx* seq);
@@ -448,26 +423,26 @@ void utilsSeqService(UtilsSeqCtx* seq);
 	 with the current t-state to implement hysteresis. */
 
 typedef uint16_t (*thold_scanner_scaler_func_t)(uint16_t value);
-typedef uint8_t (*thold_scanner_threshold_func_t)(uint8_t tstate, uint16_t value); 	// Outputs a t_state, a zero based value. 
-typedef uint16_t (*thold_scanner_action_delay_func_t)();				// Returns number of ticks before update is published. 
+typedef uint8_t (*thold_scanner_threshold_func_t)(uint8_t tstate, uint16_t value); 	// Outputs a t_state, a zero based value.
+typedef uint16_t (*thold_scanner_action_delay_func_t)();				// Returns number of ticks before update is published.
 typedef uint8_t (*thold_scanner_get_tstate_func_t)(const void* arg);
 typedef void (*thold_scanner_set_tstate_func_t)(void* arg, uint8_t value);
 typedef void (*thold_scanner_publish_func_t)(const void* arg, uint8_t value);
 typedef struct {
     const uint16_t* input_reg;              		// Input register, usually ADC.
-    uint16_t* scaled_reg;             				// Output register for scaled value. 
+    uint16_t* scaled_reg;             				// Output register for scaled value.
     thold_scanner_scaler_func_t scaler;         	// Scaling function, if NULL no scaling
     thold_scanner_threshold_func_t do_thold;    	// Thresholding function, returns small zero based value
-    thold_scanner_action_delay_func_t delay_get;  	// Function returning delay before tstate update is published. Null implies no delay. 
+    thold_scanner_action_delay_func_t delay_get;  	// Function returning delay before tstate update is published. Null implies no delay.
     thold_scanner_get_tstate_func_t tstate_get;		// Return the current tstate.
-    thold_scanner_set_tstate_func_t tstate_set; 	// Set the new tstate. 
-    void* tstate_func_arg;        					// Argument supplied to value_set & value_get funcs. 
-    thold_scanner_publish_func_t publish;           // Function called on thresholded value change. 
-	const void* publish_func_arg;    				// Argument supplied to publish func. 
+    thold_scanner_set_tstate_func_t tstate_set; 	// Set the new tstate.
+    void* tstate_func_arg;        					// Argument supplied to value_set & value_get funcs.
+    thold_scanner_publish_func_t publish;           // Function called on thresholded value change.
+	const void* publish_func_arg;    				// Argument supplied to publish func.
 } thold_scanner_def_t;
 
 typedef struct {
-	uint8_t tstate;						
+	uint8_t tstate;
 	uint16_t action_timer;
 	bool init_done;
 } thold_scanner_context_t;
@@ -497,20 +472,20 @@ void debugRuntimeError(int fileno, int lineno, int errorno) __attribute__ ((nore
 
 // Our assert macro does not print the condition that failed, contrary to the usual version. This is intentional, it conserves
 // string space on the target, and the user just has to report the file & line numbers.
-#ifndef NDEBUG  /* A release build defines this macro, a debug build does not. */ 
+#ifndef NDEBUG  /* A release build defines this macro, a debug build does not. */
 #define ASSERT(cond_) do { 			\
     if (!(cond_))  					\
         RUNTIME_ERROR(0); 			\
 } while (0)
-#else   
+#else
     #define ASSERT(cond_) do { /* empty */ } while (0)
 #endif
 
 #if 0
-/* Trace macros, used for printing verbose formatted output, probably not on small targets.  Designed to compile out if required. 
+/* Trace macros, used for printing verbose formatted output, probably not on small targets.  Designed to compile out if required.
    If CFG_DEBUG_GET_TRACE_LEVEL is constant then the optimiser will remove calls. Else it can be made a register.
-   Trace levels are stolen from the Python logging lib. */   
-   
+   Trace levels are stolen from the Python logging lib. */
+
 #if CFG_WANT_DEBUG_TRACE
 #if !defined(CFG_DEBUG_GET_TRACE_LEVEL) || !defined(CFG_DEBUG_TRACE_OUTPUT)
 #error "CFG_DEBUG_GET_TRACE_LEVEL() & CFG_DEBUG_TRACE_OUTPUT() must be defined if using TRACE()"
@@ -519,15 +494,15 @@ void debugRuntimeError(int fileno, int lineno, int errorno) __attribute__ ((nore
 // Dump trace info with no extra text if level >= current level.
 #define TRACE_RAW(_level, _fmt, ...)  \
   do { if (CFG_DEBUG_GET_TRACE_LEVEL() >= (_level)) CFG_DEBUG_TRACE_OUTPUT("\nTRACE: "  _fmt,  ## __VA_ARGS__); } while (0)
-	
+
 // Trace with file number & line info.
 #define TRACE(_level, _type, _fmt, ...) \
-  TRACE_RAW(_level, "%u:" STR(__LINE__) " " _type ": " _fmt, F_NUM, ## __VA_ARGS__); 
+  TRACE_RAW(_level, "%u:" STR(__LINE__) " " _type ": " _fmt, F_NUM, ## __VA_ARGS__);
 
 #else
 #define TRACE(_level, _type, _fmt, ...) 	((void)0)
 #define TRACE_RAW(_fmt, ...)		 	((void)0)
-#endif 
+#endif
 
 enum {
 	DEBUG_TRACE_LEVEL_CRITICAL =	50,		// Something really bad has happened. You will not go to space today.
@@ -537,7 +512,7 @@ enum {
 	DEBUG_TRACE_LEVEL_DEBUG = 		10,		// Something interesting to programmers only...
 };
 
-#define TRACE_XXX(_xxx, _fmt, ...) TRACE(CONCAT(DEBUG_TRACE_LEVEL_, _xxx), #_xxx, _fmt, ## __VA_ARGS__) 
+#define TRACE_XXX(_xxx, _fmt, ...) TRACE(CONCAT(DEBUG_TRACE_LEVEL_, _xxx), #_xxx, _fmt, ## __VA_ARGS__)
 #define TRACE_CRITICAL(_fmt, ...) 	TRACE_XXX(CRITICAL, _fmt, ## __VA_ARGS__)
 #define TRACE_ERROR(_fmt, ...) 		TRACE_XXX(ERROR, _fmt, ## __VA_ARGS__)
 #define TRACE_WARNING(_fmt, ...) 	TRACE_XXX(WARNING, _fmt, ## __VA_ARGS__)

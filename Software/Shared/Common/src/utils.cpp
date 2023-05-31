@@ -18,7 +18,7 @@
 #include "utils.h"
 FILENUM(100);
 
-// One global instance of lock for Critical Sections. 
+// One global instance of lock for Critical Sections.
 UTILS_DECLARE_CRITICAL_MUTEX();
 
 // From https://github.com/brandondahler/retter.
@@ -93,7 +93,7 @@ static void seq_load_timer(UtilsSeqCtx* seq) {	// Load timer with start value.
 	seq->timer = (t_utils_seq_duration)pgm_read_word(&seq->hdr->duration);
 }
 
-static void seq_next_def(UtilsSeqCtx* seq) {	// Advance pointer to next sequence definition. 
+static void seq_next_def(UtilsSeqCtx* seq) {	// Advance pointer to next sequence definition.
 	SEQ_ASSERT(NULL != seq);
 	seq->hdr = (const UtilsSeqHdr*)(((uint8_t*)seq->hdr) + seq->item_size);
 }
@@ -103,11 +103,11 @@ static void seq_update(UtilsSeqCtx* seq) {
 
     if (UTILS_SEQ_END == seq->timer) {
         seq->action(seq->hdr);					// Call action on last item.
-        seq->hdr = NULL;						// Set no more stuff for us to do. 
+        seq->hdr = NULL;						// Set no more stuff for us to do.
     }
     else if (UTILS_SEQ_REPEAT == seq->timer) {	// DO NOT call action on last item. There's no point as the longest it will go for is a tick, and possibly a lot less.
         seq->hdr = seq->base;					// Restart sequence.
-		seq_load_timer(seq);					
+		seq_load_timer(seq);
         seq->action(seq->hdr);					// Do action.
 	}
     else if (UTILS_SEQ_LOOP_END == seq->timer) {
@@ -138,12 +138,12 @@ void utilsSeqStart(UtilsSeqCtx* seq, const UtilsSeqHdr* def, uint8_t item_size, 
 		seq->hdr = NULL;						// Stop immediately.
 		action(NULL);
 	}
-	
+
 	else {										// Not running...
-		if (!(utilsSeqIsBusy(seq) && (def == seq->base))) {	// Don't restart a running sequence. 
+		if (!(utilsSeqIsBusy(seq) && (def == seq->base))) {	// Don't restart a running sequence.
 			seq->hdr = seq->base = seq->loop_start = def;	// Set sequence pointers
 			seq->loop_counter = 0;				// If we see a loop end without a start we'll just go over it.
-			seq->item_size = item_size;			// Set size of items in array. 
+			seq->item_size = item_size;			// Set size of items in array.
 			seq->action = action;				// Set action func.
 			seq->init = true;					// Make utilsSeqService() start the sequence.
 		}
@@ -168,7 +168,7 @@ void utilsSeqService(UtilsSeqCtx* seq) {
 }
 
 #if 0
-// General purpose scaler & thresholder & warning generator. 
+// General purpose scaler & thresholder & warning generator.
 
 void tholdScanInit(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count) {
 	memset(ctxs, 0U, sizeof(thold_scanner_context_t) * count);					// Clear the entire ctx array.
@@ -178,7 +178,7 @@ void tholdScanInit(const thold_scanner_def_t* defs, thold_scanner_context_t* ctx
 		ASSERT(NULL != pgm_read_ptr(&defs[i].input_reg));
 		ASSERT( (NULL == pgm_read_ptr(&defs[i].scaler)) || (NULL != pgm_read_ptr(&defs[i].scaled_reg)) ); // If scaler func set then output reg must be set.
 		ASSERT(NULL != (thold_scanner_threshold_func_t)pgm_read_ptr(&defs[i].do_thold));
-		// delay_get may be NULL for no delay. 
+		// delay_get may be NULL for no delay.
 		ASSERT(NULL != (thold_scanner_get_tstate_func_t)pgm_read_ptr(&defs[i].tstate_get));
 		ASSERT(NULL != (thold_scanner_set_tstate_func_t)pgm_read_ptr(&defs[i].tstate_set));
 		// tstate_func_arg may be NULL.
@@ -189,11 +189,11 @@ void tholdScanInit(const thold_scanner_def_t* defs, thold_scanner_context_t* ctx
 static void thold_scan_publish_update(const thold_scanner_def_t* def, uint8_t tstate) {
 	thold_scanner_publish_func_t publish = (thold_scanner_publish_func_t)pgm_read_ptr(&def->publish);
 	if (NULL != publish)
-		publish((const void*)pgm_read_ptr(&def->publish_func_arg), tstate); 
+		publish((const void*)pgm_read_ptr(&def->publish_func_arg), tstate);
 }
 
 static void thold_scan_set_new_tstate(const thold_scanner_def_t* def, thold_scanner_context_t* ctx, uint8_t ts) {
-	const thold_scanner_set_tstate_func_t tstate_set = (thold_scanner_set_tstate_func_t)pgm_read_word(&def->tstate_set);  
+	const thold_scanner_set_tstate_func_t tstate_set = (thold_scanner_set_tstate_func_t)pgm_read_word(&def->tstate_set);
 	// No need to validate, already done in tholdScanInit().
 	void* const tstate_func_arg = (void*)pgm_read_ptr(&def->tstate_func_arg);
 	tstate_set(tstate_func_arg, ts);        	// Set new state.
@@ -203,38 +203,38 @@ static void thold_scan_set_new_tstate(const thold_scanner_def_t* def, thold_scan
 static void do_update_actions(const thold_scanner_def_t* def, thold_scanner_context_t* ctx, uint8_t ts) {
 	const thold_scanner_action_delay_func_t delay_get = (thold_scanner_action_delay_func_t)pgm_read_ptr(&def->delay_get);
 	ctx->action_timer = (NULL != delay_get) ? delay_get() : 0U;
-	if (0U == ctx->action_timer) 			// Check timer, might be loaded with zero for immediate update. 
+	if (0U == ctx->action_timer) 			// Check timer, might be loaded with zero for immediate update.
 		thold_scan_set_new_tstate(def, ctx, ts);
-	else 
+	else
 		ctx->tstate = ts;
 }
 
 void tholdScanSample(const thold_scanner_def_t* defs, thold_scanner_context_t* ctxs, uint8_t count) {
 	fori (count) {
-		// Read input value from register. 
-		const uint16_t* input_reg = (const uint16_t*)pgm_read_ptr(&defs[i].input_reg);	
+		// Read input value from register.
+		const uint16_t* input_reg = (const uint16_t*)pgm_read_ptr(&defs[i].input_reg);
 		uint16_t input_val;
 		CRITICAL_START();
-		input_val = *input_reg;		// Assume input reg updated by ISR. 
+		input_val = *input_reg;		// Assume input reg updated by ISR.
 		CRITICAL_END();
-		
-		// If we have a scaling function defined, use it to scale the input value (result replaces input) and write result to output register. 
+
+		// If we have a scaling function defined, use it to scale the input value (result replaces input) and write result to output register.
 		thold_scanner_scaler_func_t scaler = (thold_scanner_scaler_func_t)pgm_read_ptr(&defs[i].scaler);
 		if (NULL != scaler) {
 			input_val = scaler(input_val);
-			uint16_t* scaled_reg = (uint16_t*)pgm_read_ptr(&defs[i].scaled_reg);	
+			uint16_t* scaled_reg = (uint16_t*)pgm_read_ptr(&defs[i].scaled_reg);
 			*scaled_reg = input_val;
 		}
-		
-		// Get new state by thresholding the input value with a custom function, which is supplied the old tstate so it can set the threshold hysteresis. 
-		const thold_scanner_get_tstate_func_t tstate_get = (thold_scanner_get_tstate_func_t)pgm_read_ptr(&defs[i].tstate_get);  
+
+		// Get new state by thresholding the input value with a custom function, which is supplied the old tstate so it can set the threshold hysteresis.
+		const thold_scanner_get_tstate_func_t tstate_get = (thold_scanner_get_tstate_func_t)pgm_read_ptr(&defs[i].tstate_get);
 		const void* const tstate_func_arg = (const void*)pgm_read_ptr(&defs[i].tstate_func_arg);
 		const uint8_t current_tstate = tstate_get(tstate_func_arg);	// Get current tstate.
 		const uint8_t new_tstate = ((thold_scanner_threshold_func_t)pgm_read_ptr(&defs[i].do_thold))(current_tstate, input_val);
 
-		// If the initial update flag is clear then we have to fake a change in the tstate to get the initial update of "unknown" to the current tstate. 
+		// If the initial update flag is clear then we have to fake a change in the tstate to get the initial update of "unknown" to the current tstate.
 		if (!ctxs[i].init_done) {										// Are we running for the first time?
-			ctxs[i].init_done = true;									// Set init flag as we've done the initial update. 
+			ctxs[i].init_done = true;									// Set init flag as we've done the initial update.
 			do_update_actions(&defs[i], &ctxs[i], new_tstate);
 		}
 		else { 														// Running normally.
@@ -246,9 +246,9 @@ void tholdScanSample(const thold_scanner_def_t* defs, thold_scanner_context_t* c
 				ASSERT(ctxs[i].action_timer >= 1);
 				if (ctxs[i].tstate != new_tstate)   				// Check if the tstate has changed from last time we started the action timer.
 					do_update_actions(&defs[i], &ctxs[i], new_tstate);
-				else if (0U == --ctxs[i].action_timer) 				// Check for timeout. 
+				else if (0U == --ctxs[i].action_timer) 				// Check for timeout.
 					thold_scan_set_new_tstate(&defs[i], &ctxs[i], new_tstate);
-			}	
+			}
 		}
 	}
 }
@@ -258,12 +258,12 @@ void tholdScanRescan(const thold_scanner_def_t* defs, thold_scanner_context_t* c
 	fori (count) {
 		if (m & mask) {     // Do we have a set bit in mask?
 			const void* const tstate_func_arg = (const void*)pgm_read_ptr(&defs[i].tstate_func_arg);
-			const thold_scanner_get_tstate_func_t tstate_get = (thold_scanner_get_tstate_func_t)pgm_read_ptr(&defs[i].tstate_get);  
+			const thold_scanner_get_tstate_func_t tstate_get = (thold_scanner_get_tstate_func_t)pgm_read_ptr(&defs[i].tstate_get);
 			// No need to validate, already done in tholdScanSample().
 			const uint8_t tstate = tstate_get(tstate_func_arg);
 			thold_scan_publish_update(&defs[i], tstate);
 
-			// Early exit if we've done our mask. 
+			// Early exit if we've done our mask.
 			mask &= ~m;
 			if (0U == mask)
 				break;
@@ -274,7 +274,7 @@ void tholdScanRescan(const thold_scanner_def_t* defs, thold_scanner_context_t* c
 #endif
 
 	// Building block functions for string scanning.
-	bool utilsStrIsWhitespace(char c) { 
+	bool utilsStrIsWhitespace(char c) {
 		return ('\0' != c ) && (NULL != strchr_P(PSTR(" \t\r\n\f"), c));
 	}
 	void utilsStrScanPastWhitespace(const char** strp) {
@@ -289,7 +289,7 @@ char utilsStrGetPrefix(const char** strp) {
 #endif
 
 int utilsStrtoui(unsigned* n, const char* str, char** endptr, unsigned base) {
-	int rc = UTILS_STRTOUI_RC_NO_CHARS;	 
+	int rc = UTILS_STRTOUI_RC_NO_CHARS;
 
 	// Iterate over string.
 	*n = 0;

@@ -11,7 +11,7 @@ TT_END_INCLUDE()
 
 // Mscale.
 
-// Verify Mscale validity function. 
+// Verify Mscale validity function.
 void test_utils_mscale_valid_signed(int8_t exp, int8_t min, int8_t max, int8_t inc) {
 	TEST_ASSERT_EQUAL(exp, utilsMscaleValid<int8_t>(min, max, inc));
 }
@@ -26,13 +26,13 @@ add_test_case_vector('test_utils_mscale_valid_signed', '''\
 	false	0  	10  0 	# Inc = 0
 	false 	10 	0	5	# Min > max.
 	true	10	0	-5	# Min > max, inc < 0.
-	false	10	0	5	# Min > max.	
+	false	10	0	5	# Min > max.
   ''')
 TT_END_SCRIPT()
 */
 TT_TEST_CASE(test_utils_mscale_valid_unsigned(false, 10, 0, 5));	// Min > max.
 
-// Verify Mscale max function. 
+// Verify Mscale max function.
 void test_utils_mscale_max_signed(int8_t exp, int8_t min, int8_t max, int8_t inc) {
 	TEST_ASSERT(utilsMscaleValid<int8_t>(min, max, inc));
  	TEST_ASSERT_EQUAL_UINT8(exp, (utilsMscaleMax<int8_t, uint8_t>)(min, max, inc));
@@ -80,24 +80,24 @@ add_test_case_vector('test_utils_mscale_signed', '''\
 	2	11	0	10	5
 	2	111	0	10	5
 
-	# Reversed range. 
+	# Reversed range.
 	2	-10	10	0	-5
 	2	0	10	0	-5
 	1	5	10	0	-5
 	0	10	10	0	-5
 	0	20	10	0	-5
 
-	# Between multiples of inc. 
-	1	-3	-10	10	5		
-	2	-2	-10	10	5		
-	0	2	0	10	5		
-	1	3	0	10	5		
-	0	2	0	12	6		
-	1	3	0	12	6		
+	# Between multiples of inc.
+	1	-3	-10	10	5
+	2	-2	-10	10	5
+	0	2	0	10	5
+	1	3	0	10	5
+	0	2	0	12	6
+	1	3	0	12	6
 
-	# Between multiples of inc & reversed range. 
-	2	2	10	0	-5		
-	1	3	10	0	-5		
+	# Between multiples of inc & reversed range.
+	2	2	10	0	-5
+	1	3	10	0	-5
   ''')
 TT_END_SCRIPT()
 */
@@ -128,11 +128,11 @@ void test_utils_endianness() {
 	UU u32_le = { 0x78, 0x56, 0x34, 0x12 };
 
 	const bool LE = (u16_le.u16[0] == 0x1234);
-	
-	// These always swap. 
+
+	// These always swap.
 	TEST_ASSERT_EQUAL_HEX16(u16_le.u16[0], utilsU16_bswap(u16_be.u16[0]));
 	TEST_ASSERT_EQUAL_HEX32(u32_le.u32, utilsU32_bswap(u32_be.u32));
-	
+
 	const uint16_t u16 = LE ? u16_le.u16[0] : u16_be.u16[0];
 	const uint32_t u32 = LE ? u32_le.u32 : u32_be.u32;
 
@@ -314,115 +314,6 @@ void testCleared() {	// Queue init() also clears.
 	verify_full_empty_len(0);
 }
 
-// Test our non-overflowing buffer type.
-//
-
-TT_BEGIN_INCLUDE()
-#define TEST_UTILS_BUF_SIZE 4
-TT_END_INCLUDE()
-DECLARE_BUFFER_TYPE(Buf, TEST_UTILS_BUF_SIZE)
-BufferBuf b;
-
-void testUtilsBufferSetup() {
-	bufferBufReset(&b);
-	memset(b.buf, 0xee, sizeof(b.buf));
-}
-TT_BEGIN_FIXTURE(testUtilsBufferSetup);
-
-static void verify_buffer_reset() {
-	TEST_ASSERT_EQUAL_UINT8(TEST_UTILS_BUF_SIZE, bufferBufFree(&b));
-	TEST_ASSERT_EQUAL_UINT8(0, bufferBufLen(&b));
-	TEST_ASSERT_FALSE(bufferBufOverflow(&b));
-}
-
-void testBufferInit() {
-	verify_buffer_reset();
-}
-
-// Add single chars.
-void testBufferAddChar(int n) {
-	fori (n) {
-		bufferBufAdd(&b, 'a'+i);
-		TEST_ASSERT_EQUAL_UINT8(TEST_UTILS_BUF_SIZE-(i+1), bufferBufFree(&b));
-		TEST_ASSERT_EQUAL_UINT8(i+1, bufferBufLen(&b));
-		TEST_ASSERT_FALSE(bufferBufOverflow(&b));
-	}
-	fori (n)
-		TEST_ASSERT_EQUAL_UINT8('a'+i, b.buf[i]);
-}
-TT_TEST_CASE(testBufferAddChar(1));
-TT_TEST_CASE(testBufferAddChar(TEST_UTILS_BUF_SIZE-1));
-TT_TEST_CASE(testBufferAddChar(TEST_UTILS_BUF_SIZE));
-
-void testBufferAddCharOverflow() {
-	fori (TEST_UTILS_BUF_SIZE)
-		bufferBufAdd(&b, 'a'+i);
-	TEST_ASSERT_EQUAL_UINT8(0, bufferBufFree(&b));
-	TEST_ASSERT_FALSE(bufferBufOverflow(&b));
-
-	bufferBufAdd(&b, 'z');
-	TEST_ASSERT_EQUAL_UINT8(0, bufferBufFree(&b));
-	TEST_ASSERT_EQUAL_UINT8(TEST_UTILS_BUF_SIZE, bufferBufLen(&b));
-	TEST_ASSERT(bufferBufOverflow(&b));
-	fori (TEST_UTILS_BUF_SIZE)
-		TEST_ASSERT_EQUAL_UINT8('a'+i, b.buf[i]);
-}
-
-// Add U16s.
-void testBufferAddU16(int n) {
-	fori (n) {
-		bufferBufAddU16(&b, 0xfedc+i);
-		const int size_exp = (i+1)*2;
-		TEST_ASSERT_EQUAL_UINT8(TEST_UTILS_BUF_SIZE-size_exp, bufferBufFree(&b));
-		TEST_ASSERT_EQUAL_UINT8(size_exp, bufferBufLen(&b));
-		TEST_ASSERT_FALSE(bufferBufOverflow(&b));
-	}
-	fori (n)
-		TEST_ASSERT_EQUAL_UINT16(0xfedc+i, ((uint16_t*)(b.buf))[i]);
-}
-TT_TEST_CASE(testBufferAddU16(1));
-TT_TEST_CASE(testBufferAddU16(TEST_UTILS_BUF_SIZE/2-1));
-TT_TEST_CASE(testBufferAddU16(TEST_UTILS_BUF_SIZE/2));
-
-void testBufferAddU16Overflow() {
-	fori (TEST_UTILS_BUF_SIZE)
-		bufferBufAdd(&b, 'a'+i);
-
-	bufferBufAddU16(&b, 0x1234);
-	TEST_ASSERT_EQUAL_UINT8(0, bufferBufFree(&b));
-	TEST_ASSERT_EQUAL_UINT8(TEST_UTILS_BUF_SIZE, bufferBufLen(&b));
-	TEST_ASSERT(bufferBufOverflow(&b));
-	fori (TEST_UTILS_BUF_SIZE)
-		TEST_ASSERT_EQUAL_UINT8('a'+i, b.buf[i]);
-}
-
-// Add memory.
-void testBufferAddMem() {
-	const uint8_t t[] = { 12, 34, 56 };
-
-	bufferBufAddMem(&b, t, sizeof(t));
-	TEST_ASSERT_EQUAL_UINT8(TEST_UTILS_BUF_SIZE-sizeof(t), bufferBufFree(&b));
-	TEST_ASSERT_EQUAL_UINT8(sizeof(t), bufferBufLen(&b));
-	TEST_ASSERT_FALSE(bufferBufOverflow(&b));
-
-	bufferBufAddMem(&b, t, sizeof(t));
-	TEST_ASSERT_EQUAL_UINT8(0, bufferBufFree(&b));
-	TEST_ASSERT_EQUAL_UINT8(TEST_UTILS_BUF_SIZE, bufferBufLen(&b));
-	TEST_ASSERT(bufferBufOverflow(&b));
-
-	TEST_ASSERT_EQUAL_MEMORY(t, b.buf, sizeof(t));
-	TEST_ASSERT_EQUAL_MEMORY(t, b.buf+sizeof(t), TEST_UTILS_BUF_SIZE-sizeof(t));
-}
-
-void testUtilsBufferReset() {
-	fori (TEST_UTILS_BUF_SIZE+1)
-		bufferBufAdd(&b, 'a'+i);
-	TEST_ASSERT(bufferBufOverflow(&b));
-
-	bufferBufReset(&b);
-	verify_buffer_reset();
-}
-
 // Test string processing...
 
 void test_utils_str_is_wsp() {
@@ -471,7 +362,7 @@ void testUtilsStrtoui(const char *fmtstr, unsigned long long nn, unsigned base, 
 	unsigned n;
 	char *endp = NULL;
 	char str[40];
-	TEST_ASSERT(sizeof(unsigned long long) > sizeof(unsigned));		// Else we can't test for unsigned max. 
+	TEST_ASSERT(sizeof(unsigned long long) > sizeof(unsigned));		// Else we can't test for unsigned max.
 	sprintf(str, fmtstr, nn);
 
 	TEST_ASSERT_EQUAL(rc_exp, utilsStrtoui(&n, str, &endp, base));
