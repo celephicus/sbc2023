@@ -106,6 +106,9 @@ test-quiet : $(EXE)
 	$(RM) $(BUILD_DIR)/*.gcda
 	$(EXE) -f
 
+test : $(EXE)
+	$(EXE)
+
 # Coverage
 coverage : test-quiet
 	lcov --capture --directory . --output-file $(BUILD_DIR)/coverage.info
