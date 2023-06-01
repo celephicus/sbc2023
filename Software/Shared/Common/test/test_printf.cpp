@@ -51,15 +51,15 @@ const char* test_myprintf_str_max_b(uint8_t sz) {
 const char* test_myprintf_str_max_i(uint8_t sz) {
 	if (sz == 2) return "+32767";
 	if (sz == 4) return "+2147483647";
-	if (sz == 8) return "+9223372036854775807"; 
-	if (sz == 16) return "+170141183460469231731687303715884105727"; 
+	if (sz == 8) return "+9223372036854775807";
+	if (sz == 16) return "+170141183460469231731687303715884105727";
 	return NULL;
 }
 const char* test_myprintf_str_min_i(uint8_t sz) {
 	if (sz == 2) return "-32768";
 	if (sz == 4) return "-2147483648";
 	if (sz == 8) return "-9223372036854775808";
-	if (sz == 16) return "-170141183460469231731687303715884105728"; 
+	if (sz == 16) return "-170141183460469231731687303715884105728";
 	return NULL;
 }
 
@@ -130,23 +130,23 @@ TT_BEGIN_SCRIPT()
 add_test_case_vector('test_printf_format', '''
 	# No formatting.
     ""    		""
-    "x"   		"x" 
+    "x"   		"x"
 
 	# Literal percent width ignored.
     "x%%x"    	"x%x"
-    "x%3%x"   	"x%x" 
+    "x%3%x"   	"x%x"
     "x%0%x"    	"x%x"
     "x%03%x"    "x%x"
     "x%-3%x"    "x%x"
 
-	# Bad format ignored. Not important,just to check that it doesn't catch fire. 
+	# Bad format ignored. Not important,just to check that it doesn't catch fire.
 	"x%zx%dx" 	123    	"xx123x"
 
 	# Character.
 	"x%cx" 		'z'  	"xzx"
 	"x%1cx" 	'z' 	"xzx"
 	"x%2cx" 	'z'  	"x zx"
-	"x%-2cx" 	'z'    	"xz x" 
+	"x%-2cx" 	'z'    	"xz x"
 
 	# String
 	"x%sx" 		""    	"xx"
@@ -154,16 +154,16 @@ add_test_case_vector('test_printf_format', '''
 	"x%1sx" 	""    	"x x"
 	"x%-1sx" 	""    	"x x"
 	"x%sx"		NULL  	"x)ovmm*x"   # `(null)' + 1.
-	"x%3sx" 	"z" 	"x  zx"    
-	"x%-3sx" 	"z"    	"xz  x" 
+	"x%3sx" 	"z" 	"x  zx"
+	"x%-3sx" 	"z"    	"xz  x"
 
-	# String in PGM space. 
+	# String in PGM space.
 	"x%Sx" 		""    	"xx"
-	"x%Sx" 		"y"    	"xzx" 
+	"x%Sx" 		"y"    	"xzx"
 	"x%Sx" 		NULL   	"x)ovmm*x"  # `(null)' + 1.
-	"x%3Sx" 	"y"    	"x  zx" 
-    "x%-3Sx" 	"y"    	"xz  x" 
-''', arg_proc=lambda x: [x[-1]]+x[:-1])
+	"x%3Sx" 	"y"    	"x  zx"
+    "x%-3Sx" 	"y"    	"xz  x"
+''', argc=3, arg_proc=lambda x: [x[-1]]+x[:-1])
 TT_END_SCRIPT()
 */
 
@@ -200,7 +200,7 @@ TT_TEST_CASE(test_printf_format(test_myprintf_str_max_i(sizeof(CFG_MYPRINTF_T_IN
 TT_TEST_CASE(test_printf_format(test_myprintf_str_min_i(sizeof(CFG_MYPRINTF_T_INT)), "%d", MIN_PRINTF_I));
 TT_TEST_CASE(test_printf_format(test_myprintf_str_max_i(sizeof(CFG_MYPRINTF_T_L_INT)) + 1, "%ld", MAX_PRINTF_IL));
 TT_TEST_CASE(test_printf_format(test_myprintf_str_max_i(sizeof(CFG_MYPRINTF_T_L_INT)), "%+ld", MAX_PRINTF_IL));
-TT_TEST_CASE(test_printf_format(test_myprintf_str_min_i(sizeof(CFG_MYPRINTF_T_L_INT)), "%ld", MIN_PRINTF_IL)); 
+TT_TEST_CASE(test_printf_format(test_myprintf_str_min_i(sizeof(CFG_MYPRINTF_T_L_INT)), "%ld", MIN_PRINTF_IL));
 
 // Hex integer.
 TT_TEST_CASE(test_printf_format("x0x", "x%xx", 0));

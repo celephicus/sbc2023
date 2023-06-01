@@ -7,32 +7,32 @@ const uint16_t REGS_DEF_VERSION = 7;
 
 /* [[[ Definition start...
 
-FLAGS [hex] "Various flags.
+FLAGS [fmt=hex] "Various flags.
 	A register with a number of boolean flags that represent various conditions. They may be set only at at startup, or as the
 	result of variouys conditions."
-- DC_LOW [0] "External DC power volts low.
+- DC_LOW [bit=0] "External DC power volts low.
 	The DC volts suppliting power to the slave from the bus cable is low indicating a possible problem."
-- SENSOR_FAULT [1] "Fault state of all _enabled_ Sensor modules."
-- RELAY_FAULT [2] "Fault state for Relay module _if_ enabled."
-- SW_TOUCH_LEFT [4] "Touch sw LEFT."
-- SW_TOUCH_RIGHT [5] "Touch sw RIGHT."
-- SW_TOUCH_MENU [6] "Touch sw MENU."
-- SW_TOUCH_RET [7] "Touch sw RET."
-- SENSOR_DUMP_ENABLE [8] "Send SENSOR_UPDATE events."
-- AWAKE [9] "Controller awake"
-- ABORT_REQ [10] "Abort running command."
-- EEPROM_READ_BAD_0 [13] "EEPROM bank 0 corrupt.
+- SENSOR_FAULT [bit=1] "Fault state of all _enabled_ Sensor modules."
+- RELAY_FAULT [bit=2] "Fault state for Relay module _if_ enabled."
+- SW_TOUCH_LEFT [bit=4] "Touch sw LEFT."
+- SW_TOUCH_RIGHT [bit=5] "Touch sw RIGHT."
+- SW_TOUCH_MENU [bit=6] "Touch sw MENU."
+- SW_TOUCH_RET [bit=7] "Touch sw RET."
+- SENSOR_DUMP_ENABLE [bit=8] "Send SENSOR_UPDATE events."
+- AWAKE [bit=9] "Controller awake"
+- ABORT_REQ [bit=10] "Abort running command."
+- EEPROM_READ_BAD_0 [bit=13] "EEPROM bank 0 corrupt.
 	EEPROM bank 0 corrupt. If bank 1 is corrupt too then a default set of values has been written. Flag written at startup only."
-- EEPROM_READ_BAD_1 [14] "EEPROM bank 1 corrupt.
+- EEPROM_READ_BAD_1 [bit=14] "EEPROM bank 1 corrupt.
 	EEPROM bank 1 corrupt. If bank 0 is corrupt too then a default set of values has been written. Flag written at startup only."
-- WATCHDOG_RESTART [15] "Device has restarted from a watchdog timeout."
-RESTART [hex] "MCUSR in low byte, wdog in high byte.
+- WATCHDOG_RESTART [bit=15] "Device has restarted from a watchdog timeout."
+RESTART [fmt=hex] "MCUSR in low byte, wdog in high byte.
 	The processor MCUSR register is copied into the low byte. The watchdog reset source is copied to the high byte. For details
 	refer to devWatchdogInit()."
 ADC_VOLTS_MON_BUS "Raw ADC (unscaled) voltage on Bus."
 VOLTS_MON_BUS "Bus volts /mV."
-TILT_SENSOR_0 [signed] "Tilt angle sensor 0 scaled 1000/90Deg."
-TILT_SENSOR_1 [signed] "Tilt angle sensor 1 scaled 1000/90Deg."
+TILT_SENSOR_0 [fmt=signed] "Tilt angle sensor 0 scaled 1000/90Deg."
+TILT_SENSOR_1 [fmt=signed] "Tilt angle sensor 1 scaled 1000/90Deg."
 SENSOR_STATUS_0 "Status from Sensor Module 0."
 SENSOR_STATUS_1 "Status from Sensor Module 1."
 RELAY_STATUS "Status from Relay Module."
@@ -43,35 +43,35 @@ RELAY_STATE "Value written to relays."
 UPDATE_COUNT "Incremented on each update cycle."
 CMD_ACTIVE "Current running command."
 CMD_STATUS "Status from previous command."
-SLEW_TIMEOUT [nv 30] "Timeout for axis slew in seconds."
-JOG_DURATION_MS [nv 500] "Jog duration for single axis in ms."
-MAX_SLAVE_ERRORS [nv 3] "Max number of consecutive slave errors before flagging."
+SLEW_TIMEOUT [nv default=30] "Timeout for axis slew in seconds."
+JOG_DURATION_MS [nv default=500] "Jog duration for single axis in ms."
+MAX_SLAVE_ERRORS [nv default=3] "Max number of consecutive slave errors before flagging."
 
-ENABLES [nv hex 0x0100] "Non-volatile enable flags.
+ENABLES [nv fmt=hex] "Non-volatile enable flags.
 	A number of flags that are rarely written by the code, but control the behaviour of the system."
-- DUMP_MODBUS_EVENTS [0] "Dump MODBUS event value.
+- DUMP_MODBUS_EVENTS [bit=0] "Dump MODBUS event value.
 	Set to dump MODBUS events. Note that the MODBUS dump is also further controlled by other registers, but if this flag is
 	false no dump takes place. Also note that if too many events are dumped it can cause MODBUS errors as it
 	may delay reponses to the master."
-- DUMP_REGS [1] "Enable regs dump to console.
+- DUMP_REGS [bit=1] "Enable regs dump to console.
 	If set then registers are dumped at a set rate."
-- DUMP_REGS_FAST [2] "Dump regs at 5/s rather than 1/s."
-- SENSOR_DISABLE_0 [4] "Disable Sensor 0."
-- SENSOR_DISABLE_1 [5] "Disable Sensor 1."
-- SENSOR_DISABLE_2 [6] "Disable Sensor 2."
-- SENSOR_DISABLE_3 [7] "Disable Sensor 3."
-- TOUCH_DISABLE [8] "Disable touch buttons."
-- TRACE_FORMAT_BINARY [13] "Dump trace in binary format."
-- TRACE_FORMAT_CONCISE [14] "Dump trace in concise text format."
-- DISABLE_BLINKY_LED [15] "Disable setting Blinky Led from fault states.
+- DUMP_REGS_FAST [bit=2] "Dump regs at 5/s rather than 1/s."
+- SENSOR_DISABLE_0 [bit=4] "Disable Sensor 0."
+- SENSOR_DISABLE_1 [bit=5] "Disable Sensor 1."
+- SENSOR_DISABLE_2 [bit=6] "Disable Sensor 2."
+- SENSOR_DISABLE_3 [bit=7] "Disable Sensor 3."
+- TOUCH_DISABLE [bit=8 default=1] "Disable touch buttons."
+- TRACE_FORMAT_BINARY [bit=13] "Dump trace in binary format."
+- TRACE_FORMAT_CONCISE [bit=14] "Dump trace in concise text format."
+- DISABLE_BLINKY_LED [bit=15] "Disable setting Blinky Led from fault states.
 	Used for testing the blinky LED, if set then the system will not set the LED pattern, allowing it to be set by the console
 	for testing the driver."
-MODBUS_DUMP_EVENT_MASK [nv hex 0x0000] "Dump MODBUS events mask, refer MODBUS_CB_EVT_xxx.
+MODBUS_DUMP_EVENT_MASK [nv fmt=hex default=0x0000] "Dump MODBUS events mask, refer MODBUS_CB_EVT_xxx.
 	If MODBUS dump events is enabled, only events matching the bitmask in this register are dumped."
-MODBUS_DUMP_SLAVE_ID [nv 0] "For master, only dump MODBUS events from this slave ID.
+MODBUS_DUMP_SLAVE_ID [nv default=0] "For master, only dump MODBUS events from this slave ID.
 	Event must be from this slave ID."
-SLEW_STOP_DEADBAND [30 nv] "Stop slew when within this deadband."
-SLEW_START_DEADBAND [50 nv] "Only start slew if delta tilt less than start-deadband.
+SLEW_STOP_DEADBAND [default=30 nv] "Stop slew when within this deadband."
+SLEW_START_DEADBAND [default=50 nv] "Only start slew if delta tilt less than start-deadband.
 	If the tilt error is less than this value then slew is not started."
 
 >>>  Definition end, declaration start... */
