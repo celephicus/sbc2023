@@ -37,6 +37,7 @@ enum {
 //	MODBUS_CB_EVT_M_NO_RESP = 9,				// MASTER, NO response received, either timeout or new master request initiated.
 //	MODBUS_CB_EVT_M_RESP_BAD_SLAVE_ID = 10,		// MASTER, slave ID in response did not match request, unusual...
 //	MODBUS_CB_EVT_M_RESP_BAD_FUNC_CODE = 11,	// MASTER, response Function Code wrong.
+	MODBUS_CB_EVT_NONE = 255					// Nil event, never sent, used in test harness to indicate no event received.
 };
 
 /* Client function that writes a buffer to the wire, handling enabling the transmitter for the duration of the transmission.
@@ -88,9 +89,11 @@ enum {
 
 // Send raw data to the line. Does not call callback function.
 void modbusSendRaw(const Buffer& f);
+void modbusSendRaw(const uint8_t* f, uint8_t sz);
 
-// Append CRC and send frame.
+// Append CRC and send frame. Note that there must be space in the buffer else the frame will be truncated.
 void modbusSend(Buffer& f);
+void modbusSend(uint8_t* f, uint8_t sz);
 
 void modbusHregWrite(uint8_t id, uint16_t address, uint16_t value);
 

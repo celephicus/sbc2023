@@ -144,36 +144,36 @@ static uint8_t write_holding_register(uint16_t address, uint16_t value) {
 
 // MODBUS handlers for slave or master.
 #if (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR) || (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY)
+static Buffer response(MAX_MODBUS_FRAME_SIZE);
 
-static void do_handle_modbus_cb(uint8_t evt, const uint8_t* frame, uint8_t frame_len) {
+static void do_handle_modbus_cb(uint8_t evt, const Buffer& frame) {
 	switch (evt) {
-		case MODBUS_CB_EVT_S_REQ_OK: 					// Slaves only respond if we get a request. This will have our slave ID.
+		case MODBUS_CB_EVT_S_REQ_RX: 					// Slaves only respond if we get a request. This will have our slave ID.
 		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
 			case MODBUS_FC_WRITE_SINGLE_REGISTER: {	// REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
-				if (8 == frame_len) {
-					const uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
-					const uint16_t value   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
+				if (8 == frame.len()) {
+					const uint16_t address = frame.getU16_be(MODBUS_FRAME_IDX_DATA);
+					const uint16_t value   = frame.getU16_be(MODBUS_FRAME_IDX_DATA + 2);
 					write_holding_register(address, value);
-					modbusSlaveSend(frame, frame_len - 2);	// Send request back less 2 for CRC as send appends it.
+					modbusSendRaw(frame);	// Send request back as is as response.
 				}
 			} break;
 			case MODBUS_FC_READ_HOLDING_REGISTERS: { // REQ: [ID FC=3 addr:16 count:16(max 125)] RESP: [ID FC=3 byte-count value-0:16, ...]
-				if (8 == frame_len) {
-					BufferFrame response;
-					uint16_t address = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA]);
-					uint16_t count   = modbusGetU16(&frame[MODBUS_FRAME_IDX_DATA + 2]);
-					bufferFrameReset(&response);
-					bufferFrameAddMem(&response, frame, 2);		// Copy ID & Function Code from request frame.
-					uint16_t byte_count = count * 2;			// Count sent as 16 bits, but bytecount only 8 bits.
-					if (byte_count <= (uint16_t)bufferFrameFree(&response) - 2) { // Is space for data and CRC?
-						bufferFrameAdd(&response, (uint8_t)byte_count);
-						while (count--) {
-							uint16_t value;
-							read_holding_register(address++, &value);
-							bufferFrameAddU16(&response, utilsU16_native_to_be(value));
-						}
-						modbusSlaveSend(response.buf, bufferFrameLen(&response));
+				if (8 == frame.len()) {
+					const uint16_t address = frame.getU16_be(MODBUS_FRAME_IDX_DATA);
+					const uint16_t count   = frame.getU16_be(MODBUS_FRAME_IDX_DATA + 2);
+					uint16_t byte_count = count * 2;								// Count sent as 16 bits, but bytecount only 8 bits.
+					response.clear();
+					response.addMem(frame, 2);										// Copy ID & Function Code from request frame.
+					response.add((uint8_t)byte_count);
+					while (count--) {
+						uint16_t value;
+						read_holding_register(address++, &value);
+						response.addU16_be(value);
+						if (response.ovf())
+							return;
 					}
+					modbusSend(response);
 				}
 			} break;
 		}			// Closes `switch(frame[MODBUS_FRAME_IDX_FUNCTION])'
@@ -332,22 +332,38 @@ static void do_handle_modbus_cb(uint8_t evt, const uint8_t* frame, uint8_t frame
 
 #endif
 
-void modbus_cb(uint8_t evt) {
+void modbus_cb(uint8_t evt, const Buffer& b) {
 	uint8_t frame[MODBUS_MAX_RESP_SIZE];
 	uint8_t frame_len = MODBUS_MAX_RESP_SIZE;	// Must call modbusGetResponse() with buffer length set.
 	const bool resp_ok = modbusGetResponse(&frame_len, frame);
 	const bool master = (modbusGetSlaveId() == 0);
 	const uint8_t req_slave_id = modbusPeekRequestData()[MODBUS_FRAME_IDX_SLAVE_ID]; // Only valid if we are master.
 
-	// Dump MODBUS...
+	/* Dump MODBUS events, logic is we only dump events if:
+	  * dump events enabled in ENABLES reg. This allows us to keep a mask of events set and turn off dump without losing it. 
+	  * the event mask is set in the _DUMP_EVENT_MASK reg. This is a bitmask that follows MODBUS_CB_EVT_xxx.
+	*/
+	/*
+	MODBUS_CB_EVT_MS_ERR_INVALID_CRC,			// MASTER/SLAVE, request/response CRC incorrect.
+	MODBUS_CB_EVT_MS_ERR_OVERFLOW,				// MASTER/SLAVE, request/response overflowed internal buffer.
+	MODBUS_CB_EVT_MS_ERR_INVALID_LEN,			// MASTER/SLAVE, request/response length too small.
+	MODBUS_CB_EVT_MS_ERR_INVALID_ID,			// MASTER/SLAVE, request/response slave ID invalid.
+	MODBUS_CB_EVT_MS_ERR_OTHER,					// MASTER/SLAVE, something else invalid.
+
+	MODBUS_CB_EVT_S_REQ_RX,						// SLAVE, request received with our slave ID and correct CRC.
+	MODBUS_CB_EVT_S_REQ_X,						// SLAVE, we have a request for another slave ID.
+
+	MODBUS_CB_EVT_M_REQ_TX,						// MASTER, request SENT.
+	MODBUS_CB_EVT_M_RESP_RX,					// MASTER, valid response received.
+	*/
 	if (
 	  (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS) &&		// Master enable.
-	  (REGS[REGS_IDX_MODBUS_DUMP_EVENT_MASK] & _BV(evt)) &&						// event matches mask.
-	  (
+	  (REGS[REGS_IDX_MODBUS_DUMP_EVENT_MASK] & _BV(evt))						// event matches mask.
+	  /* && (
 	    (!master) ||															// Either NOT master or...
 	    (0 == REGS[REGS_IDX_MODBUS_DUMP_SLAVE_ID]) ||							// Slave ID to dump is set to zero, so all, or...
 		(req_slave_id == REGS[REGS_IDX_MODBUS_DUMP_SLAVE_ID])					// Slave ID in request matches.
-	  )
+	  ) */
 	) {
 		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("M:"));
 		uint32_t timestamp = millis();
@@ -358,16 +374,15 @@ void modbus_cb(uint8_t evt) {
 			consolePrint(CFMT_C, ')');
 		}
 		consolePrint(CFMT_D, evt);
-		const uint8_t* p = frame;
-		fori (frame_len)
-			consolePrint(CFMT_X2|CFMT_M_NO_SEP, *p++);
-		if (!resp_ok)
+		fori (b.len())
+			consolePrint(CFMT_X2|CFMT_M_NO_SEP, b[i]);
+		if (b.ovf())
 			consolePrint(CFMT_STR_P, (console_cell_t)PSTR(" OVF"));
 		consolePrint(CFMT_NL, 0);
 	}
 
 	CRO_DEBUG_MODBUS_HANDLER(true);					// Debug that we are in handler.
-	do_handle_modbus_cb(evt, frame, frame_len);
+	do_handle_modbus_cb(evt, b);
 	CRO_DEBUG_MODBUS_HANDLER(false);
 }
 
@@ -392,14 +407,14 @@ static void modbus_send_buf(const uint8_t* buf, uint8_t sz) {
 
 // Take care to change SLAVE_QUERY_PERIOD to MODBUS_RESPONSE_TIMEOUT_MILLIS + longest TX frame + margin.
 // TODO? Make MODBUS driver send a timeout if a new frame TX interrupts a wait for a previous response.
-static const uint32_t MODBUS_BAUDRATE = 38400UL;
-static const uint16_t MODBUS_RESPONSE_TIMEOUT_MILLIS = 7U;
+static constexpr uint32_t MODBUS_BAUDRATE = 38400UL;
+static constexpr uint8_t MAX_MODBUS_FRAME_SIZE = 20;
 static void modbus_init() {
 	GPIO_SERIAL_RS485.begin(MODBUS_BAUDRATE);
 	digitalWrite(GPIO_PIN_RS485_TX_EN, LOW);
 	pinMode(GPIO_PIN_RS485_TX_EN, OUTPUT);
 	while(GPIO_SERIAL_RS485.available() > 0) GPIO_SERIAL_RS485.read();		// Flush any received chars from buffer.
-	modbusInit(modbus_send_buf, modbus_recv, MODBUS_RESPONSE_TIMEOUT_MILLIS, MODBUS_BAUDRATE, modbus_cb);
+	modbusInit(modbus_send_buf, modbus_recv, MAX_MODBUS_FRAME_SIZE, MODBUS_BAUDRATE, modbus_cb);
 
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 	modbusSetSlaveId(SBC2022_MODBUS_SLAVE_ID_RELAY);

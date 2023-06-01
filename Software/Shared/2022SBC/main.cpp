@@ -84,29 +84,23 @@ static bool console_cmds_user(char* cmd) {
         uint8_t* d = (uint8_t*)consoleStackPop(); uint8_t sz = *d; modbusSendRaw(d + 1, sz);
       } break;
     case /** SEND **/ 0x76f9: {
-        uint8_t* d = (uint8_t*)consoleStackPop(); uint8_t sz = *d; modbusMasterSend(d + 1, sz);
+        uint8_t* d = (uint8_t*)consoleStackPop(); uint8_t sz = *d; modbusSend(d + 1, sz);
       } break;
-    case /** RELAY **/ 0x1da6: { // (state relay slave -- )
-        uint8_t slave_id = consoleStackPop();
-        uint8_t rly = consoleStackPop();
-        modbusRelayBoardWrite(slave_id, rly, consoleStackPop());
-      } break;
-
     case /** WRITE **/ 0xa8f8: { // (val addr sl -) REQ: [FC=6 addr:16 value:16] -- RESP: [FC=6 addr:16 value:16]
-		uint8_t req[MODBUS_MAX_RESP_SIZE];
-		req[MODBUS_FRAME_IDX_SLAVE_ID] = consoleStackPop();
-		req[MODBUS_FRAME_IDX_FUNCTION] = MODBUS_FC_WRITE_SINGLE_REGISTER;
-		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 0], consoleStackPop());
-		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 2], consoleStackPop());
-		modbusMasterSend(req, 6);
+		Buffer rf(10);
+		rf.add(consoleStackPop());
+		rf.add(MODBUS_FC_WRITE_SINGLE_REGISTER);
+		rf.addU16_be((uint16_t)consoleStackPop());	
+		rf.addU16_be((uint16_t)consoleStackPop());
+		modbusSend(rf);
       } break;
     case /** READ **/ 0xd8b7: { // (count addr sl -) REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
-		uint8_t req[MODBUS_MAX_RESP_SIZE];
-		req[MODBUS_FRAME_IDX_SLAVE_ID] = consoleStackPop();
-		req[MODBUS_FRAME_IDX_FUNCTION] = MODBUS_FC_READ_HOLDING_REGISTERS;
-		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 0], consoleStackPop());
-		modbusSetU16(&req[MODBUS_FRAME_IDX_DATA + 2], consoleStackPop());
-		modbusMasterSend(req, 6);
+		Buffer rf(10);
+		rf.add(consoleStackPop());
+		rf.add(MODBUS_FC_READ_HOLDING_REGISTERS);
+		rf.addU16_be((uint16_t)consoleStackPop());	
+		rf.addU16_be((uint16_t)consoleStackPop());
+		modbusSend(rf);
 	  } break;
 
 	// Regs

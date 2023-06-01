@@ -51,8 +51,20 @@ void modbusInit(modbusSendBufFunc send, modbusReceiveCharFunc recv, uint8_t max_
 }
 
 void modbusSendRaw(const Buffer& b) { f_modbus_ctx.send(b, b.len()); }
+void modbusSendRaw(const uint8_t* f, uint8_t sz) { f_modbus_ctx.send(f, sz); }
 
-void modbusSend(Buffer& b) {
+// TODO: Fix duplicated code.
+void modbusSend(uint8_t* f, uint8_t sz);
+	const uint16_t crc_le = utilsU16_native_to_le(modbusCrc(b, b.len()));
+	memcpy(F + sz, &crc_le, sizeof(uint16_t));
+
+	while (modbusIsBusy()) 	// If we are receiving then keep doing it.
+		modbusService();
+
+	f_modbus_ctx.cb_resp(MODBUS_CB_EVT_M_REQ_TX, b);
+	modbusSendRaw(F, sz);
+}
+void modbusSend(Buffer& b) { 
 	// TODO: keep master busy for interframe time after tx done.
 
 	// CRC is added in LITTLE ENDIAN!!
@@ -115,30 +127,6 @@ static void TIMER_STOP_WITH_CB(uint16_t* then, uint8_t cb_id) {
 	timer_stop(then);
 	timing_debug(cb_id, false);
 }
-
-
-#if 0
-
-// Helpers to send actual frames.
-
-void modbusRelayBoardWrite(uint8_t id, uint8_t rly, uint8_t state, uint8_t delay) {
-	uint16_t value = ((uint16_t)state << 8)	| (uint16_t)delay;
-	modbusHregWrite(id, (uint16_t)rly, value);
-}
-
-void modbusHregWrite(uint8_t id, uint16_t address, uint16_t value) {
-	uint8_t frame[] = {
-		id,									// Slave ID
-		MODBUS_FC_WRITE_SINGLE_REGISTER,	// Function Code
-		(uint8_t)(address >> 8),			// Channel MSB
-		(uint8_t)(address & 0xff),			// Channel LSB
-		(uint8_t)(value >> 8),				// Value MSB.
-		(uint8_t)(value & 0xff),			// Value LSB.
-	};
-	modbusMasterSend(frame, sizeof(frame));
-}
-
-#endif
 
 bool modbusIsBusy() {
 	return timer_is_active(&f_modbus_ctx.rx_frame_timer_micros);
