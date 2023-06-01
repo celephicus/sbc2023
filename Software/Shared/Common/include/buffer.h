@@ -14,11 +14,24 @@ class Buffer {
 	uint8_t* m_p;
 	bool m_ovf;
 public:
+	Buffer() : m_size(0), m_buf(NULL) { clear(); }
 	Buffer(uint8_t size) : m_size(size), m_buf(new uint8_t[size]) { clear(); }
 	/* Buffer(const Buffer& b) : m_size(b.size()), m_buf(new uint8_t[m_size]), m_p(m_buf + b.len()), m_ovf(b.m_ovf) {
 		memcpy(m_buf, b.m_buf, b.len());
 	} */
 	Buffer(const Buffer& b) = delete;
+	void resize(uint8_t newsize) {
+		if (newsize != size()) {
+			const uint8_t* const old_buf = m_buf;
+			m_size = newsize;
+			m_ovf = (len() > newsize);
+			const uint8_t newlen = m_ovf ? newsize : len();
+			m_buf = new uint8_t[newsize];
+			memcpy(m_buf, old_buf, newlen);
+			m_p = m_buf + newlen;
+			delete old_buf;
+		}
+	}
 	Buffer& operator = (const Buffer& rhs) {
 		if (rhs.size() != size()) { delete m_buf; m_buf = new uint8_t[rhs.size()]; m_size = rhs.size(); }
 		memcpy(m_buf, rhs.m_buf, rhs.len());

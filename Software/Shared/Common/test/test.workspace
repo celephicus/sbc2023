@@ -1,26 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CodeLite_Workspace Name="test" Database="" Version="10.0.0">
-  <Project Name="test" Path="test.project" Active="Yes"/>
+  <Project Name="test" Path="test/test.project" Active="Yes"/>
   <BuildMatrix>
     <WorkspaceConfiguration Name="&lt;Edit...&gt;" Selected="no">
       <Environment/>
-      <Project Name="test" ConfigName=""/>
+      <Project Name="test" ConfigName="Debug"/>
+      <Project Name="test" ConfigName="Debug"/>
     </WorkspaceConfiguration>
     <WorkspaceConfiguration Name="D1" Selected="no">
       <Environment/>
-      <Project Name="test" ConfigName="D1"/>
+      <Project Name="test" ConfigName="Debug"/>
+      <Project Name="test" ConfigName="Debug"/>
     </WorkspaceConfiguration>
     <WorkspaceConfiguration Name="D2" Selected="no">
       <Environment/>
-      <Project Name="test" ConfigName="D2"/>
+      <Project Name="test" ConfigName="Debug"/>
+      <Project Name="test" ConfigName="Debug"/>
     </WorkspaceConfiguration>
     <WorkspaceConfiguration Name="D3" Selected="no">
       <Environment/>
-      <Project Name="test" ConfigName="D3"/>
+      <Project Name="test" ConfigName="Debug"/>
+      <Project Name="test" ConfigName="Debug"/>
     </WorkspaceConfiguration>
     <WorkspaceConfiguration Name="D0" Selected="yes">
       <Environment/>
-      <Project Name="test" ConfigName="D0"/>
+      <Project Name="test" ConfigName="Debug"/>
+      <Project Name="test" ConfigName="Debug"/>
     </WorkspaceConfiguration>
   </BuildMatrix>
 </CodeLite_Workspace>

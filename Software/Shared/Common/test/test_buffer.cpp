@@ -26,7 +26,7 @@ void verify_buffer_s(const Buffer& b, uint8_t size_exp, bool ovf_exp, const char
 	TEST_ASSERT_EQUAL_MEMORY(data_exp, b, len_exp);
 }
 
-// Verify constructor, note even a buffer of size zero is not overflow.
+// Verify constructor with size, note even a buffer of size zero is not overflow.
 void test_buffer_new(uint8_t size) {
 	Buffer b(size);
 	verify_buffer(b, size, false, 0);
@@ -34,6 +34,12 @@ void test_buffer_new(uint8_t size) {
 TT_TEST_CASE(test_buffer_new(0));
 TT_TEST_CASE(test_buffer_new(1));
 TT_TEST_CASE(test_buffer_new(2));
+
+// Verify default constructor with zero size.
+void test_buffer_default() {
+	Buffer b;
+	verify_buffer(b, 0, false, 0);
+}
 
 // Adding bytes up to size works.
 void test_buffer_add_byte(uint8_t size, int n) {
@@ -135,6 +141,7 @@ void test_buffer_add_u16_ovf_be(int n) {
 TT_TEST_CASE(test_buffer_add_u16_ovf_be(3));
 TT_TEST_CASE(test_buffer_add_u16_ovf_be(4));
 
+// Assignment operator and resize are very similar.
 void test_buffer_assign(uint8_t sz1, uint8_t sz2) {
 	Buffer b(sz1);
 	b.add('a');
@@ -145,12 +152,30 @@ void test_buffer_assign(uint8_t sz1, uint8_t sz2) {
 	c = b;
 	TEST_ASSERT_EQUAL(sz1, c.size());
 	verify_buffer(c, b.size(), b.ovf(), b.len());
-	TEST_ASSERT_EQUAL(0, memcmp((const uint8_t*)b, (const uint8_t*)c, b.len()));
+	TEST_ASSERT_EQUAL_MEMORY(b, c, b.len());		// (const uint8_t*)
 }
 
 TT_TEST_CASE(test_buffer_assign(4, 2));
 TT_TEST_CASE(test_buffer_assign(2, 2));
 TT_TEST_CASE(test_buffer_assign(1, 2));
+
+// Test resize function.
+void test_buffer_resize(uint8_t sz1, uint8_t sz2) {
+	Buffer b(sz1);
+	b.add('a');
+	b.add('b');
+	const bool ovf_exp = (b.len() > sz2);
+	const uint8_t len_exp = b.len();
+
+	b.resize(sz2);
+	verify_buffer(b, sz2, ovf_exp, ovf_exp ? sz2 : len_exp);
+}
+
+TT_TEST_CASE(test_buffer_resize(4, 2));
+TT_TEST_CASE(test_buffer_resize(2, 2));
+TT_TEST_CASE(test_buffer_resize(1, 2));
+TT_TEST_CASE(test_buffer_resize(4, 1));
+TT_TEST_CASE(test_buffer_resize(4, 0));
 
 // Handy hex string added for testing. Should have done this first.
 void test_buffer_hex_bad(const char* s, uint8_t len) {

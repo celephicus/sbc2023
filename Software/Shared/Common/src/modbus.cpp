@@ -50,7 +50,7 @@ void modbusInit(modbusSendBufFunc send, modbusReceiveCharFunc recv, uint8_t max_
 	f_modbus_ctx.rx_frame_timeout_micros = utilsLimitMin<uint16_t>(15U * char_micros / 10U, 750U);	// Timeout 1.5 character times minimum 750us.
 }
 
-void modbusSendRaw(const Buffer& b) { f_modbus_ctx.send(b, b.size()); }
+void modbusSendRaw(const Buffer& b) { f_modbus_ctx.send(b, b.len()); }
 
 void modbusSend(Buffer& b) {
 	// TODO: keep master busy for interframe time after tx done.
