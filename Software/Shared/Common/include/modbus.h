@@ -18,8 +18,15 @@
 	The save client code just has to send a response when it sees a request.
 */
 
-/* Callback function supplied to modbusInit(). This is how slaves get requests & send responses back, and how the master receives the responses. */
-typedef void (*modbus_response_cb)(uint8_t evt, Buffer& frame);
+/* Callback function supplied to modbusInit(). This is how slaves get requests & send responses back, and how the master receives
+	the responses. The handler can call modbusTxFrame() & modbusRxFrame() to examine the data. */
+typedef void (*modbus_response_cb)(uint8_t evt);
+
+// Return last frame sent.
+const Buffer& modbusTxFrame();
+
+//Return last frame received. Ifcalled whendriver is busy it will be incomplete.
+const Buffer& modbusRxFrame();
 
 // Event IDs sent as callback from driver. Note sorted by generic, slave or master.
 enum {
@@ -52,10 +59,14 @@ typedef int16_t (*modbusReceiveCharFunc)();
 	The baudrate isrequired to compute the timeout for a frame. */
 void modbusInit(modbusSendBufFunc send, modbusReceiveCharFunc recv, uint8_t max_rx_frame, uint32_t baud, modbus_response_cb cb);
 
+/* Set a new baudrate. Will recompute internal timeouts. */
+void modbusSetBaudrate(uint32_t baud);
+
 // Callback function used for hardware debugging of timing. The `id' argument is event-type, `s' is state.
-enum {//
+enum {
 	MODBUS_TIMING_DEBUG_EVENT_RX_FRAME,		// Frame being received from bus.
 	MODBUS_TIMING_DEBUG_EVENT_SERVICE,		// In service function.
+	MODBUS_TIMING_DEBUG_EVENT_INTERFRAME,	// Timing interframe periodfor no TX.
 };
 typedef void (*modbus_timing_debug_cb)(uint8_t id, uint8_t s);
 void modbusSetTimingDebugCb(modbus_timing_debug_cb cb);
@@ -87,13 +98,12 @@ enum {
 	MODBUS_FC_WRITE_AND_READ_REGISTERS  = 0x17,
 };
 
-// Send raw data to the line. Does not call callback function.
-void modbusSendRaw(const Buffer& f);
-void modbusSendRaw(const uint8_t* f, uint8_t sz);
-
-// Append CRC and send frame. Note that there must be space in the buffer else the frame will be truncated.
-void modbusSend(Buffer& f);
-void modbusSend(uint8_t* f, uint8_t sz);
+/* Send raw data to the line. If add_crc is false it does not append a CRC.
+	Note that there must be space in the buffer else the frame will be truncated.
+	If called when driver is busy then the data will be transmitted but as it will be in the
+	middle of a frame it will probably be corrupted and will not be received. */
+void modbusSend(Buffer& f, bool add_crc=true);
+void modbusSend(uint8_t* f, uint8_t sz, bool add_crc=true);
 
 void modbusHregWrite(uint8_t id, uint16_t address, uint16_t value);
 
@@ -110,7 +120,10 @@ enum {
 void modbusRelayBoardWrite(uint8_t id, uint8_t rly, uint8_t state, uint8_t delay=0);
 
 /* Check if the bus is busy receiving a frame. */
-bool modbusIsBusy();
+bool modbusIsBusyRx();
+
+// Check if bus is busy following last data on bus.
+bool modbusIsBusyBus();
 
 // Call in mainloop frequently to service the driver.
 void modbusService();
