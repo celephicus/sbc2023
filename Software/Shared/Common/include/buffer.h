@@ -85,17 +85,17 @@ public:
 		}
 		return !cc;		// Fail if odd number of hex chars.
 	}
-	void addU16_le(uint16_t u16) {
-		const uint16_t u16_x = utilsU16_native_to_le(u16);
-		addMem((const uint8_t*)&u16_x, sizeof(uint16_t));
+	void addU16_le(uint16_t x) {
+		const uint16_t x_le = utilsU16_native_to_le(x);
+		addMem((const uint8_t*)&x_le, sizeof(uint16_t));
 	}
-	void addU16_be(uint16_t u16) {
-		const uint16_t u16_x = utilsU16_native_to_be(u16);
-		addMem((const uint8_t*)&u16_x, sizeof(uint16_t));
+	void addU16_be(uint16_t x) {
+		const uint16_t x_be = utilsU16_native_to_be(x);
+		addMem((const uint8_t*)&x_be, sizeof(uint16_t));
 	}
 	uint16_t getU16_le(uint8_t idx) const { return utilsU16_le_to_native(*(const uint16_t*)&m_buf[idx]); }
 	uint16_t getU16_be(uint8_t idx) const { return utilsU16_be_to_native(*(const uint16_t*)&m_buf[idx]); }
-	uint8_t operator [](uint8_t idx) const { return m_buf[idx]; }
+	//uint8_t operator [](uint8_t idx) const { return m_buf[idx]; }
 	operator const uint8_t*() const { return m_buf; }
 };
 

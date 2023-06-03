@@ -56,7 +56,7 @@ typedef int16_t (*modbusReceiveCharFunc)();
 
 /* Initialise the driver. Initially the slave address is set to zero, which is not a valid slave address, so it will not respond to any requests
 	as this is outside the legal address range of 1-247 inclusive.
-	The baudrate isrequired to compute the timeout for a frame. */
+	The baudrate is required to compute the timeout for a frame. */
 void modbusInit(modbusSendBufFunc send, modbusReceiveCharFunc recv, uint8_t max_rx_frame, uint32_t baud, modbus_response_cb cb);
 
 /* Set a new baudrate. Will recompute internal timeouts. */

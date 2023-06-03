@@ -205,6 +205,10 @@ build.cmd
       <SubType>compile</SubType>
       <Link>Shared\AVR\dev.cpp</Link>
     </Compile>
+    <Compile Include="..\..\Shared\Common\include\buffer.h">
+      <SubType>compile</SubType>
+      <Link>Shared\Common\buffer.h</Link>
+    </Compile>
     <Compile Include="..\..\Shared\Common\include\console.h">
       <SubType>compile</SubType>
       <Link>Shared\Common\console.h</Link>

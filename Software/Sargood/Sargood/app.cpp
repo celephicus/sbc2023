@@ -138,7 +138,7 @@ static void cmd_done(uint16_t status=APP_CMD_STATUS_OK) {
 }
 
 static bool check_relay() {		// If relay fault set fail status.
-	if (regsFlags() & REGS_FLAGS_MASK_RELAY_FAULT) {
+	if (REGS[REGS_IDX_RELAY_STATE] < SBC2022_MODBUS_STATUS_SLAVE_OK) {
 		cmd_done(APP_CMD_STATUS_RELAY_FAIL);
 		return true;
 	}
@@ -154,7 +154,7 @@ static bool check_sensors() {		// If sensor fault set fail status.
 }
 static bool is_preset_valid(uint8_t idx) { // Can we use this preset?
 	fori(CFG_TILT_SENSOR_COUNT) {
-		if (driverSlaveIsEnabled(i) && (SBC2022_MODBUS_TILT_FAULT == driverPresets(idx)[i]))
+		if (driverSensorIsEnabled(i) && (SBC2022_MODBUS_TILT_FAULT == driverPresets(idx)[i]))
 			return false;
 	}
 	return true;
@@ -242,8 +242,8 @@ static int8_t thread_cmd(void* arg) {
 
 	const bool avail = driverSensorUpdateAvailable();	// Check for new sensor data every time thread is run.
 	if (avail && (regsFlags() & REGS_FLAGS_MASK_SENSOR_DUMP_ENABLE)) {
-		fori(2) {
-			if (driverSlaveIsEnabled(i))
+		fori(CFG_TILT_SENSOR_COUNT) {
+			if (driverSensorIsEnabled(i))
 				eventPublish(EV_SENSOR_UPDATE, i, REGS[REGS_IDX_TILT_SENSOR_0 + i]);
 		}
 	}
@@ -350,7 +350,7 @@ jog_done:	axis_stop_all();
 				preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_SAVE_POS_1;
 				if (!check_sensors()) {		// All _enabled_ sensors OK.
 					fori (CFG_TILT_SENSOR_COUNT) // Read sensor value or force it to invalid is not enabled.
-						driverPresets(preset_idx)[i] = driverSlaveIsEnabled(i) ?  REGS[REGS_IDX_TILT_SENSOR_0 + i] : SBC2022_MODBUS_TILT_FAULT;
+						driverPresets(preset_idx)[i] = driverSensorIsEnabled(i) ?  REGS[REGS_IDX_TILT_SENSOR_0 + i] : SBC2022_MODBUS_TILT_FAULT;
 					driverNvWrite();
 				}
 				cmd_done();
@@ -379,7 +379,7 @@ jog_done:	axis_stop_all();
 			regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_DUMP_ENABLE, true);
 			for (s_axis_idx = 0; s_axis_idx < CFG_TILT_SENSOR_COUNT; s_axis_idx += 1) {
 				eventPublish(EV_SLEW_TARGET, s_axis_idx, driverPresets(preset_idx)[s_axis_idx]);
-				if (!driverSlaveIsEnabled(s_axis_idx))		// Do not do disabled axes.
+				if (!driverSensorIsEnabled(s_axis_idx))		// Do not do disabled axes.
 					continue;
 
 				app_timer_start(APP_TIMER_SLEW, REGS[REGS_IDX_SLEW_TIMEOUT]*10U);
@@ -1000,7 +1000,7 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 			if (event_p8(ev) == TIMER_MSG)
 				eventSmPostSelf(context);
 			if (event_p8(ev) == TIMER_UPDATE_INFO) {
-				lcd_printf(0, PSTR("R %S"), (regsFlags() & REGS_FLAGS_MASK_RELAY_FAULT) ? PSTR("FAIL") : PSTR("OK"));
+				lcd_printf(0, PSTR("R %S"), (REGS[REGS_IDX_RELAY_STATE] < SBC2022_MODBUS_STATUS_SLAVE_OK) ? PSTR("FAIL") : PSTR("OK"));
 				//lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("    Ready..."));
 				lcd_printf(1, PSTR("H%+-6d T%+-6d"), REGS[REGS_IDX_TILT_SENSOR_0], REGS[REGS_IDX_TILT_SENSOR_1]);
 				eventSmTimerStart(TIMER_UPDATE_INFO, UPDATE_INFO_PERIOD_MS/100U);

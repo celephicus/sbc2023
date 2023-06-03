@@ -116,8 +116,7 @@ enum {
 // Flags/masks for register FLAGS.
 enum {
     	REGS_FLAGS_MASK_DC_LOW = (int)0x1,
-    	REGS_FLAGS_MASK_SENSOR_FAULT = (int)0x2,
-    	REGS_FLAGS_MASK_RELAY_FAULT = (int)0x4,
+    	REGS_FLAGS_MASK_SLAVE_FAULT = (int)0x2,
     	REGS_FLAGS_MASK_SW_TOUCH_LEFT = (int)0x10,
     	REGS_FLAGS_MASK_SW_TOUCH_RIGHT = (int)0x20,
     	REGS_FLAGS_MASK_SW_TOUCH_MENU = (int)0x40,
@@ -258,8 +257,7 @@ enum {
  static const char REGS_HELPS[] PROGMEM =                                               \
     "\nFlags:"                                                                          \
     "\n DC_LOW: 0 (External DC power volts low.)"                                       \
-    "\n SENSOR_FAULT: 1 (Fault state of all _enabled_ Sensor modules.)"                 \
-    "\n RELAY_FAULT: 2 (Fault state for Relay module _if_ enabled.)"                    \
+    "\n SLAVE_FAULT: 1 (Fault state of all _enabled_ slaves.)"                          \
     "\n SW_TOUCH_LEFT: 4 (Touch sw LEFT.)"                                              \
     "\n SW_TOUCH_RIGHT: 5 (Touch sw RIGHT.)"                                            \
     "\n SW_TOUCH_MENU: 6 (Touch sw MENU.)"                                              \

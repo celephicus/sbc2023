@@ -146,8 +146,9 @@ static uint8_t write_holding_register(uint16_t address, uint16_t value) {
 #if (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR) || (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY)
 static Buffer response(MAX_MODBUS_FRAME_SIZE);
 
-static void do_handle_modbus_cb(uint8_t evt, const Buffer& frame) {
+static void do_handle_modbus_cb(uint8_t evt) {
 	if (MODBUS_CB_EVT_S_REQ_RX == evt) {			// Slaves only respond if we get a request. This will have our slave ID.
+		const Buffer& frame = modbusRxFrame();
 		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
 			case MODBUS_FC_WRITE_SINGLE_REGISTER: {	// REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
 				if (8 == frame.len()) {
@@ -193,25 +194,24 @@ typedef void (*build_slave_request_func)(Buffer& f_request, uint8_t modbus_id);
 typedef bool (*handle_slave_response_func)(const Buffer& f_response, const Buffer& f_request, uint8_t idx);
 
 // Set an error for the slave.
-typedef bool (*set_error_func)(uint8_t idx);
+typedef void (*set_error_func)(uint8_t idx);
 
 //Check if the device is enabled
 typedef bool (*is_enabled_func)(uint8_t idx);
 
 static void build_request_relay(Buffer& f_request, uint8_t modbus_id) {
-	(void)idx;
 	f_request.add(modbus_id);
 	f_request.add(MODBUS_FC_WRITE_SINGLE_REGISTER);
 	f_request.addU16_be(SBC2022_MODBUS_REGISTER_RELAY);
 	f_request.addU16_be(REGS[REGS_IDX_RELAY_STATE]);
 }
-static void handle_response_relay(const Buffer& f_response, const Buffer& f_request, uint8_t idx) {
+static bool handle_response_relay(const Buffer& f_response, const Buffer& f_request, uint8_t idx) {
 	(void)idx;
 	// REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
-	if ((8 == frame_len) && (MODBUS_FC_WRITE_SINGLE_REGISTER == frame[MODBUS_FRAME_IDX_FUNCTION])) {
+	if ((8 == f_response.len()) && (MODBUS_FC_WRITE_SINGLE_REGISTER == f_response[MODBUS_FRAME_IDX_FUNCTION])) {
 		uint16_t address = f_request.getU16_be(MODBUS_FRAME_IDX_DATA);
 		if (SBC2022_MODBUS_REGISTER_RELAY == address) {
-			REGS[REGS_IDX_RELAY_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_OK);
+			REGS[REGS_IDX_RELAY_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_OK;
 			return true;
 		}
 	}
@@ -219,16 +219,16 @@ static void handle_response_relay(const Buffer& f_response, const Buffer& f_requ
 }
 static void set_error_relay(uint8_t idx) {
 	REGS[REGS_IDX_RELAY_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_NOT_PRESENT;
-	REGS[REGS_IDX_RELAY] += 1;
+	REGS[REGS_IDX_RELAY_FAULTS] += 1;
 }
-static void is_enabled_sensor(uint8_t idx) { return true; }
+static bool is_enabled_relay(uint8_t idx) { return true; }
 
 static void build_request_sensor(Buffer& f_request, uint8_t modbus_id) {
 	f_request.add(modbus_id);
 	f_request.add(MODBUS_FC_READ_HOLDING_REGISTERS);
-	f_request.addU16_be(SBC2022_MODBUS_REGISTER_SENSOR_TILT));
+	f_request.addU16_be(SBC2022_MODBUS_REGISTER_SENSOR_TILT);
 	// TODO: only need two registers here, but we request 3 for debugging.
-	req.addU16_be(3);
+	f_request.addU16_be(3);
 }
 static bool handle_response_sensor(const Buffer& f_response, const Buffer& f_request, uint8_t idx) {
 // REQ: [ID FC=3 addr:16 count:16(max 125)] RESP: [ID FC=3 byte-count value-0:16, ...]
@@ -239,7 +239,7 @@ static bool handle_response_sensor(const Buffer& f_response, const Buffer& f_req
 			if ((byte_count >= 4) && (SBC2022_MODBUS_REGISTER_SENSOR_TILT == address)) { 	// We expect to read _AT_LEAST_ two registers from this address...
 				const int16_t tilt = (int16_t)f_response.getU16_be(MODBUS_FRAME_IDX_DATA + 1 + 0);
 				REGS[REGS_IDX_TILT_SENSOR_0 + idx] = (regs_t)(tilt);
-				REGS[REGS_IDX_SENSOR_STATUS_0 + idx] = frame.getU16_be(MODBUS_FRAME_IDX_DATA + 1 + 2);
+				REGS[REGS_IDX_SENSOR_STATUS_0 + idx] = f_response.getU16_be(MODBUS_FRAME_IDX_DATA + 1 + 2);
 				return true;
 			}
 		}
@@ -251,7 +251,7 @@ static void set_error_sensor(uint8_t idx) {
 	REGS[REGS_IDX_TILT_SENSOR_0 + idx] = SBC2022_MODBUS_TILT_FAULT;
 	REGS[REGS_IDX_SENSOR_0_FAULTS + idx] += 1;
 }
-static void is_enabled_sensor(uint8_t idx) {
+static bool is_enabled_sensor(uint8_t idx) {
 	return !(REGS[REGS_IDX_ENABLES] & (REGS_ENABLES_MASK_SENSOR_DISABLE_0 << idx));
 }
 
@@ -266,22 +266,25 @@ typedef struct {
 } SlaveDef;
 static const SlaveDef PROGMEM SLAVES[] = {
 	{
-		SBC2022_MODBUS_SLAVE_ID_RELAY, 0,
+		SBC2022_MODBUS_SLAVE_ID_RELAY, 0, REGS_IDX_RELAY_STATUS,
 		build_request_relay, handle_response_relay,
-	}
+		set_error_relay, is_enabled_relay,
+	},
 	{
-		SBC2022_MODBUS_SLAVE_ID_SENSOR_0, 0,
+		SBC2022_MODBUS_SLAVE_ID_SENSOR_0, 0, REGS_IDX_SENSOR_STATUS_0,
 		build_request_sensor, handle_response_sensor,
-	}
+		set_error_sensor, is_enabled_sensor,
+	},
 	{
-		SBC2022_MODBUS_SLAVE_ID_SENSOR_0 + 1, 1,
+		SBC2022_MODBUS_SLAVE_ID_SENSOR_0 + 1, 1, REGS_IDX_SENSOR_STATUS_1,
 		build_request_sensor, handle_response_sensor,
-	}
-}
+		set_error_sensor, is_enabled_sensor,
+	},
+};
 UTILS_STATIC_ASSERT(UTILS_ELEMENT_COUNT(SLAVES) == (CFG_TILT_SENSOR_COUNT+1));
 
 static int8_t get_slave_def(uint8_t modbus_id) {
-	fori (UTILS_ELEMENT_COUNT(SLAVES) {
+	fori (UTILS_ELEMENT_COUNT(SLAVES)) {
 		if (pgm_read_byte(&SLAVES[i].modbus_id) == modbus_id)
 			return i;
 	}
@@ -308,7 +311,7 @@ static struct {
 	bool schedule_done;
 } f_slave_status;
 
-static void slave_record_response_ok(uint8_t slave_idx) { f_slave_error_counts[slave_idx] = 0U; }
+static void slave_record_response_ok(uint8_t slave_idx) { f_slave_status.error_counts[slave_idx] = 0U; }
 static void slave_record_request_sent(uint8_t slave_idx) { if (f_slave_status.error_counts[slave_idx] < 255) f_slave_status.error_counts[slave_idx] += 1; }
 static bool slave_too_many_errors(uint8_t slave_idx) { return f_slave_status.error_counts[slave_idx] > REGS[REGS_IDX_MAX_SLAVE_ERRORS]; }
 
@@ -321,7 +324,8 @@ bool driverSensorUpdateAvailable() { const bool f = f_slave_status.schedule_done
  * Any slave can just not reply, or the response can be garbled. Additionally a Sensor can be in error if something goes awry with the accelerometer.
  * MODBUS errors are normally transient, so they are ignored until there are more than a set number in a row.
  */
-static const uint16_t SLAVE_QUERY_PERIOD = 12U;
+static constexpr uint16_t SLAVE_QUERY_PERIOD = 12U;
+static constexpr uint8_t MAX_MODBUS_FRAME_SIZE = 20;
 
 static void modbus_query_slave_flag_start() {
 	// Clear any set debug outputs.
@@ -335,7 +339,7 @@ static void modbus_query_slave_flag_start() {
 }
 
 static int8_t thread_query_slaves(void* arg) {
-	static Buffer req(MAX);
+	static Buffer req(MAX_MODBUS_FRAME_SIZE);
 
 	THREAD_BEGIN();
 	while (1) {
@@ -347,42 +351,34 @@ static int8_t thread_query_slaves(void* arg) {
 				CRO_DEBUG_MODBUS_SCHED_START(true);
 			modbus_query_slave_flag_start();
 			THREAD_START_DELAY();
-			const SlaveDef slave_def = &SLAVES[slave_idx];
-			const uint8_t index = pgm_read_byte(&def->index);
-			const build_slave_request_func build_request = dynamic_cast<const build_slave_request_func>(pgm_read_func(&slave_def->build_request));
+			const SlaveDef* slave_def = &SLAVES[slave_idx];
+			const uint8_t idx = pgm_read_byte(&slave_def->idx);
+			const build_slave_request_func build_request = reinterpret_cast<const build_slave_request_func>(pgm_read_ptr(&slave_def->build_request));
 			req.clear();
-			build_request(req, index);
+			build_request(req, idx);
 			slave_record_request_sent(slave_idx);
-			THREAD_WAIT_UNTIL(!modbusIsBusBusy());
-			modbusMasterSend(req);
+			THREAD_WAIT_UNTIL(!modbusIsBusyBus());
+			modbusSend(req);
 			THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(SLAVE_QUERY_PERIOD));
 			CRO_DEBUG_MODBUS_SCHED_START(false);		// Width is length of 1 part of schedule.
 		}
 
 		// Should have all responses or timeouts by now so check all used and enabled slaves for fault state.
-		fori (UTILS_ELEMENT_COUNT(SLAVES)) {
-			if (slave_too_many_errors(i)) {
-				const SlaveDef slave_def = &SLAVES[i];
-				const uint8_t index = pgm_read_byte(&def->index);
-				const set_error_func set_error = dynamic_cast<const set_error_func>(pgm_read_func(&slave_def->set_error));
-				set_error(index)
-			}
-		}
-
-		// Update error flags that drive the Blinky LED.
 		bool fault = false;
 		fori (UTILS_ELEMENT_COUNT(SLAVES)) {
-			const SlaveDef slave_def = &SLAVES[i];
-			const uint8_t regs_idx_status = pgm_read_byte(&def->regs_idx_status);
-			const uint8_t index = pgm_read_byte(&def->index);
-			const is_enabled_func is_enabled = dynamic_cast<const is_enabled_func>(pgm_read_func(&slave_def->is_enabled));
-			if ((is_enabled(index)) && (REGS[regs_idx_status] < SBC2022_MODBUS_STATUS_SLAVE_OK)) {
-				fault = true;
-				break;
+			const SlaveDef* slave_def = &SLAVES[i];
+			const uint8_t regs_idx_status = pgm_read_byte(&slave_def->regs_idx_status);
+			const uint8_t idx = pgm_read_byte(&slave_def->idx);
+			const is_enabled_func is_enabled = reinterpret_cast<const is_enabled_func>(pgm_read_ptr(&slave_def->is_enabled));
+			if (slave_too_many_errors(i)) {
+				const set_error_func set_error = reinterpret_cast<const set_error_func>(pgm_read_ptr(&slave_def->set_error));
+				set_error(idx);
 			}
+
+			// Update error flags that drive the Blinky LED.
+			fault |= ((is_enabled(idx)) && (REGS[regs_idx_status] < SBC2022_MODBUS_STATUS_SLAVE_OK));
 		}
 		regsWriteMaskFlags(REGS_FLAGS_MASK_SLAVE_FAULT, fault);
-
 
 		set_schedule_done();			// Flag new data available to command thread.
 		REGS[REGS_IDX_UPDATE_COUNT] += 1;
@@ -390,43 +386,35 @@ static int8_t thread_query_slaves(void* arg) {
 	THREAD_END();
 }
 
-/*
-// Change to driverSensorIsEnabled().
-bool driverSlaveIsEnabled(uint8_t slave_idx) {
-	return !(REGS[REGS_IDX_ENABLES] & (REGS_ENABLES_MASK_SENSOR_DISABLE_0 << slave_idx));
+bool driverSensorIsEnabled(uint8_t sensor_idx) {
+	return !(REGS[REGS_IDX_ENABLES] & (REGS_ENABLES_MASK_SENSOR_DISABLE_0 << sensor_idx));
 }
 
 int8_t driverGetFaultySensor() {
 	fori (CFG_TILT_SENSOR_COUNT) {
-		if (driverSlaveIsEnabled(i) && slave_too_many_errors(i))
+		if (driverSensorIsEnabled(i) &&  (REGS[REGS_IDX_SENSOR_STATUS_0 + 1] < SBC2022_MODBUS_STATUS_SLAVE_OK))
 			return i;
 	}
 	return -1;
 }
-*/
-static void do_handle_modbus_cb(uint8_t evt, const Buffer& frame) {
+
+static void do_handle_modbus_cb(uint8_t evt) {
 	if (MODBUS_CB_EVT_M_RESP_RX == evt) {  // Good response from slave...
+		const Buffer& frame = modbusRxFrame();
 		const int8_t slave_idx = get_slave_def(frame[MODBUS_FRAME_IDX_SLAVE_ID]);	// Do we have a definition?
 		if (slave_idx >= 0) {	// Yes!
-			const SlaveDef slave_def = &SLAVES[slave_idx];
-			const uint8_t index = pgm_read_byte(&def->index);
-			const handle_slave_response_func handle_response = dynamic_cast<const handle_slave_response_func>(pgm_read_func(&slave_def->handle_response));
-			if (handle_response(frame, modbusTxFrame(), index)) {	// Try handling it, return false on failure
-				slave_record_response_ok();
-			}
+			const SlaveDef* slave_def = &SLAVES[slave_idx];
+			const uint8_t idx = pgm_read_byte(&slave_def->idx);
+			const handle_slave_response_func handle_response = reinterpret_cast<const handle_slave_response_func>(pgm_read_ptr(&slave_def->handle_response));
+			if (handle_response(frame, modbusTxFrame(), idx)) 	// Try handling it, return false on failure
+				slave_record_response_ok(slave_idx);
 		}
 	}
 }
 
 #endif
 
-void modbus_cb(uint8_t evt, const Buffer& b) {
-	uint8_t frame[MODBUS_MAX_RESP_SIZE];
-	uint8_t frame_len = MODBUS_MAX_RESP_SIZE;	// Must call modbusGetResponse() with buffer length set.
-	const bool resp_ok = modbusGetResponse(&frame_len, frame);
-	const bool master = (modbusGetSlaveId() == 0);
-	const uint8_t req_slave_id = modbusPeekRequestData()[MODBUS_FRAME_IDX_SLAVE_ID]; // Only valid if we are master.
-
+void modbus_cb(uint8_t evt) {
 	/* Dump MODBUS events, logic is we only dump events if:
 	  * dump events enabled in ENABLES reg. This allows us to keep a mask of events set and turn off dump without losing it.
 	  * the event mask is set in the _DUMP_EVENT_MASK reg. This is a bitmask that follows MODBUS_CB_EVT_xxx.
@@ -453,33 +441,33 @@ void modbus_cb(uint8_t evt, const Buffer& b) {
 		(req_slave_id == REGS[REGS_IDX_MODBUS_DUMP_SLAVE_ID])					// Slave ID in request matches.
 	  ) */
 	) {
-		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("M:"));
 		uint32_t timestamp = millis();
+		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("M:"));
 		consolePrint(CFMT_U_D|CFMT_M_NO_LEAD, (console_cell_t)&timestamp);
-		if (master) {								// For master print request ID as well.
+		if (modbusGetSlaveId() == 0) {								// For master print request ID as well.
 			consolePrint(CFMT_C|CFMT_M_NO_SEP, '(');
-			consolePrint(CFMT_D|CFMT_M_NO_SEP, req_slave_id);
+			consolePrint(CFMT_D|CFMT_M_NO_SEP, modbusTxFrame()[MODBUS_FRAME_IDX_SLAVE_ID]);
 			consolePrint(CFMT_C, ')');
 		}
 		consolePrint(CFMT_D, evt);
-		fori (b.len())
-			consolePrint(CFMT_X2|CFMT_M_NO_SEP, b[i]);
-		if (b.ovf())
+		fori (modbusRxFrame().len())
+			consolePrint(CFMT_X2|CFMT_M_NO_SEP, modbusRxFrame()[i]);
+		if (modbusRxFrame().ovf())
 			consolePrint(CFMT_STR_P, (console_cell_t)PSTR(" OVF"));
 		consolePrint(CFMT_NL, 0);
 	}
 
 	CRO_DEBUG_MODBUS_HANDLER(true);					// Debug that we are in handler.
-	do_handle_modbus_cb(evt, b);
+	do_handle_modbus_cb(evt);
 	CRO_DEBUG_MODBUS_HANDLER(false);
 }
 
 // Stuff for debugging MODBUS timing.
 void modbus_timing_debug(uint8_t id, uint8_t s) {
 	switch (id) {
-		case MODBUS_TIMING_DEBUG_EVENT_MASTER_WAIT: gpioSp0Write(s); break;
-		case MODBUS_TIMING_DEBUG_EVENT_RX_TIMEOUT: 	gpioSp1Write(s); break;
-		case MODBUS_TIMING_DEBUG_EVENT_RX_FRAME: 	gpioSp2Write(s); break;
+		case MODBUS_TIMING_DEBUG_EVENT_RX_FRAME:	gpioSp0Write(s); break;
+		case MODBUS_TIMING_DEBUG_EVENT_SERVICE: 	gpioSp1Write(s); break;
+		case MODBUS_TIMING_DEBUG_EVENT_INTERFRAME: 	gpioSp2Write(s); break;
 	}
 }
 
@@ -494,7 +482,6 @@ static void modbus_send_buf(const uint8_t* buf, uint8_t sz) {
 }
 
 static constexpr uint32_t MODBUS_BAUDRATE = 38400UL;
-static constexpr uint8_t MAX_MODBUS_FRAME_SIZE = 20;
 static void modbus_init() {
 	GPIO_SERIAL_RS485.begin(MODBUS_BAUDRATE);
 	digitalWrite(GPIO_PIN_RS485_TX_EN, LOW);
@@ -787,7 +774,7 @@ static thread_control_t tcb_query_slaves;
 static void setup_devices() {
 	ir_setup();
 	threadInit(&tcb_query_slaves);
-	regsWriteMaskFlags(REGS_FLAGS_MASK_COMMS_FAULT, true);
+	regsWriteMaskFlags(REGS_FLAGS_MASK_SLAVE_FAULT, true);
 	driverSetLcdBacklight(0);
 }
 static void service_devices() {

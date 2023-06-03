@@ -81,7 +81,7 @@ static bool console_cmds_user(char* cmd) {
     case /** SL **/ 0x74fa: modbusSetSlaveId(consoleStackPop()); break;
     case /** ?SL **/ 0x79e5: consolePrint(CFMT_D, modbusGetSlaveId()); break;
     case /** SEND-RAW **/ 0xf690: {
-        uint8_t* d = (uint8_t*)consoleStackPop(); uint8_t sz = *d; modbusSendRaw(d + 1, sz);
+        uint8_t* d = (uint8_t*)consoleStackPop(); uint8_t sz = *d; modbusSend(d + 1, sz, false);
       } break;
     case /** SEND **/ 0x76f9: {
         uint8_t* d = (uint8_t*)consoleStackPop(); uint8_t sz = *d; modbusSend(d + 1, sz);
@@ -227,7 +227,7 @@ static const BlinkyLedWarningDef BLINKY_LED_WARNING_DEFS[] PROGMEM = {
 #endif
 
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
-	{ REGS_FLAGS_MASK_SENSOR_FAULT | REGS_FLAGS_MASK_RELAY_FAULT,	DRIVER_LED_PATTERN_NO_COMMS },
+	{ REGS_FLAGS_MASK_SLAVE_FAULT,									DRIVER_LED_PATTERN_NO_COMMS },
 	{ REGS_FLAGS_MASK_DC_LOW,										DRIVER_LED_PATTERN_DC_LOW },
 #endif
 
