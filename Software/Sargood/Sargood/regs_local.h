@@ -12,8 +12,7 @@ FLAGS [fmt=hex] "Various flags.
 	result of variouys conditions."
 - DC_LOW [bit=0] "External DC power volts low.
 	The DC volts suppliting power to the slave from the bus cable is low indicating a possible problem."
-- SENSOR_FAULT [bit=1] "Fault state of all _enabled_ Sensor modules."
-- RELAY_FAULT [bit=2] "Fault state for Relay module _if_ enabled."
+- SLAVE_FAULT [bit=1] "Fault state of all _enabled_ slaves."
 - SW_TOUCH_LEFT [bit=4] "Touch sw LEFT."
 - SW_TOUCH_RIGHT [bit=5] "Touch sw RIGHT."
 - SW_TOUCH_MENU [bit=6] "Touch sw MENU."

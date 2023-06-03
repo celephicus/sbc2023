@@ -53,6 +53,14 @@ public:
 		}
 		memcpy(m_p, buf, sz); m_p += sz;
 	}
+	void assignMem(const uint8_t* buf, uint8_t sz) {
+		if (sz > size()) {
+			sz = size();
+			m_ovf = true;
+		}
+		memcpy(m_buf, buf, sz); m_p = m_buf + sz;
+	}
+
 	bool addHexStr(const char* str) {
 		uint8_t cc = 0U;
 		uint8_t v, c;

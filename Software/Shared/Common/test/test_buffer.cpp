@@ -177,6 +177,19 @@ TT_TEST_CASE(test_buffer_resize(1, 2));
 TT_TEST_CASE(test_buffer_resize(4, 1));
 TT_TEST_CASE(test_buffer_resize(4, 0));
 
+// Another utility method, assign an array to the buffer. Replaces clear() then addMem().
+void test_buffer_assign_array(int n, int len_exp, bool ovf) {
+	Buffer b(4);
+	b.add('z');
+
+	const char* mem = "abcdef";
+	b.assignMem((const uint8_t*)mem, n);
+	verify_buffer(b, 4, ovf, len_exp);
+}
+TT_TEST_CASE(test_buffer_assign_array(0, 0, false));
+TT_TEST_CASE(test_buffer_assign_array(4, 4, false));
+TT_TEST_CASE(test_buffer_assign_array(5, 4, true));
+
 // Handy hex string added for testing. Should have done this first.
 void test_buffer_hex_bad(const char* s, uint8_t len) {
 	Buffer b(16);
