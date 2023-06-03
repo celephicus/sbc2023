@@ -187,6 +187,16 @@ static void do_handle_modbus_cb(uint8_t evt) {
 	* If no response, log a timeout, which is handled later.
    So we define these in a table rather than a lump of code. */
 
+/* Helper to handle setting a new status. It counts errors when they transition from good to error, or from error to a different error.
+	No need to call it when setting a known good status. */
+static void set_slave_status(uint8_t regs_idx_status, uint8_t new_status, uint8_t regs_idx_error_counter) {
+	if (new_status != REGS[regs_idx_status]) {		// Status is changing...
+		REGS[regs_idx_status] = new_status;
+		if (isSlaveStatusFault(REGS[regs_idx_status])	// Count when we transition to fault.
+			REGS[regs_idx_error_counter] += 1;
+	}
+}
+
 // Construct a request for the given MODBUS slave ID.
 typedef void (*build_slave_request_func)(Buffer& f_request, uint8_t modbus_id);
 
@@ -206,20 +216,19 @@ static void build_request_relay(Buffer& f_request, uint8_t modbus_id) {
 	f_request.addU16_be(REGS[REGS_IDX_RELAY_STATE]);
 }
 static bool handle_response_relay(const Buffer& f_response, const Buffer& f_request, uint8_t idx) {
-	(void)idx;
+	(void)idx;		// Not used, only one Relay.
 	// REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
 	if ((8 == f_response.len()) && (MODBUS_FC_WRITE_SINGLE_REGISTER == f_response[MODBUS_FRAME_IDX_FUNCTION])) {
 		uint16_t address = f_request.getU16_be(MODBUS_FRAME_IDX_DATA);
 		if (SBC2022_MODBUS_REGISTER_RELAY == address) {
-			REGS[REGS_IDX_RELAY_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_OK;
+			set_slave_status(REGS_IDX_RELAY_STATUS, SBC2022_MODBUS_STATUS_SLAVE_OK, REGS_IDX_RELAY_FAULTS);
 			return true;
 		}
 	}
 	return false;
 }
 static void set_error_relay(uint8_t idx) {
-	REGS[REGS_IDX_RELAY_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_NOT_PRESENT;
-	REGS[REGS_IDX_RELAY_FAULTS] += 1;
+	set_slave_status(REGS_IDX_RELAY_STATUS, SBC2022_MODBUS_STATUS_SLAVE_NOT_PRESENT, REGS_IDX_RELAY_FAULTS);
 }
 static bool is_enabled_relay(uint8_t idx) { return true; }
 
@@ -239,7 +248,8 @@ static bool handle_response_sensor(const Buffer& f_response, const Buffer& f_req
 			if ((byte_count >= 4) && (SBC2022_MODBUS_REGISTER_SENSOR_TILT == address)) { 	// We expect to read _AT_LEAST_ two registers from this address...
 				const int16_t tilt = (int16_t)f_response.getU16_be(MODBUS_FRAME_IDX_DATA + 1 + 0);
 				REGS[REGS_IDX_TILT_SENSOR_0 + idx] = (regs_t)(tilt);
-				REGS[REGS_IDX_SENSOR_STATUS_0 + idx] = f_response.getU16_be(MODBUS_FRAME_IDX_DATA + 1 + 2);
+				set_slave_status(REGS_IDX_SENSOR_STATUS_0 + idx, f_response.getU16_be(MODBUS_FRAME_IDX_DATA + 1 + 2),
+				  REGS_IDX_SENSOR_0_FAULTS + idx);
 				return true;
 			}
 		}
@@ -247,9 +257,8 @@ static bool handle_response_sensor(const Buffer& f_response, const Buffer& f_req
 	return false;
 }
 static void set_error_sensor(uint8_t idx) {
-	REGS[REGS_IDX_SENSOR_STATUS_0 + idx] = SBC2022_MODBUS_STATUS_SLAVE_NOT_PRESENT;
+	set_slave_status(REGS_IDX_SENSOR_STATUS_0 + idx, SBC2022_MODBUS_STATUS_SLAVE_NOT_PRESENT, REGS_IDX_SENSOR_0_FAULTS + idx);
 	REGS[REGS_IDX_TILT_SENSOR_0 + idx] = SBC2022_MODBUS_TILT_FAULT;
-	REGS[REGS_IDX_SENSOR_0_FAULTS + idx] += 1;
 }
 static bool is_enabled_sensor(uint8_t idx) {
 	return !(REGS[REGS_IDX_ENABLES] & (REGS_ENABLES_MASK_SENSOR_DISABLE_0 << idx));
@@ -376,7 +385,7 @@ static int8_t thread_query_slaves(void* arg) {
 			}
 
 			// Update error flags that drive the Blinky LED.
-			fault |= ((is_enabled(idx)) && (REGS[regs_idx_status] < SBC2022_MODBUS_STATUS_SLAVE_OK));
+			fault |= ((is_enabled(idx)) && driverIsSlaveFaulty(regs_idx_status));
 		}
 		regsWriteMaskFlags(REGS_FLAGS_MASK_SLAVE_FAULT, fault);
 
@@ -390,9 +399,15 @@ bool driverSensorIsEnabled(uint8_t sensor_idx) {
 	return !(REGS[REGS_IDX_ENABLES] & (REGS_ENABLES_MASK_SENSOR_DISABLE_0 << sensor_idx));
 }
 
+// Check if a slave is faulty.
+bool driverIsSlaveFaulty(uint8_t regs_idx_status) {
+	return isSlaveStatusFault(REGS[regs_idx_status]);
+}
+
+// Return index of first faulty AND enabled sensor, else -1;
 int8_t driverGetFaultySensor() {
 	fori (CFG_TILT_SENSOR_COUNT) {
-		if (driverSensorIsEnabled(i) &&  (REGS[REGS_IDX_SENSOR_STATUS_0 + 1] < SBC2022_MODBUS_STATUS_SLAVE_OK))
+		if (driverSensorIsEnabled(i) &&  driverIsSlaveFaulty(REGS_IDX_SENSOR_STATUS_0 + i))
 			return i;
 	}
 	return -1;
@@ -779,7 +794,8 @@ static void setup_devices() {
 }
 static void service_devices() {
 	ir_service();
-	threadRun(&tcb_query_slaves, thread_query_slaves, NULL);
+	if (!(REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_SLAVE_UPDATE_DISABLE))
+		threadRun(&tcb_query_slaves, thread_query_slaves, NULL);
 }
 void service_devices_50ms() {
 	if (f_lcd_bl_current > f_lcd_bl_demand)

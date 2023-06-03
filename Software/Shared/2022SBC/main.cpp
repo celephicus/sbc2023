@@ -22,8 +22,8 @@ static void print_banner() { consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CFG_B
 static bool console_cmds_user(char* cmd) {
   switch (console_hash(cmd)) {
 	case /** ?VER **/ 0xc33b: print_banner(); break;
-	case /** F **/ 0xb5e3:  { static int32_t f_acc; const uint8_t k = static_cast<uint8_t>(consoleStackPop()); consolePrint(CFMT_D, utilsFilter(&f_acc, static_cast<int16_t>(consoleStackPop()), k, false)); } break; 
-		
+	case /** F **/ 0xb5e3:  { static int32_t f_acc; const uint8_t k = static_cast<uint8_t>(consoleStackPop()); consolePrint(CFMT_D, utilsFilter(&f_acc, static_cast<int16_t>(consoleStackPop()), k, false)); } break;
+
 	// Command processor.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
     case /** CMD **/ 0xd00f: appCmdRun(consoleStackPop()); break;
@@ -37,7 +37,7 @@ static bool console_cmds_user(char* cmd) {
     case /** RLY **/ 0x07a2: REGS[REGS_IDX_RELAYS] = consoleStackPop(); break;
     case /** ?RLY **/ 0xb21d: consolePrint(CFMT_D, REGS[REGS_IDX_RELAYS]); break;
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
-	case /** ?S **/ 0x6889: fori (CFG_TILT_SENSOR_COUNT) consolePrint(CFMT_D, REGS[REGS_IDX_TILT_SENSOR_0 + i]); break; 
+	case /** ?S **/ 0x6889: fori (CFG_TILT_SENSOR_COUNT) consolePrint(CFMT_D, REGS[REGS_IDX_TILT_SENSOR_0 + i]); break;
 	case /** ?PR **/ 0x7998: fori (DRIVER_BED_POS_PRESET_COUNT) {
 		forj (CFG_TILT_SENSOR_COUNT) consolePrint(CFMT_D, driverPresets(i)[j]);
 	}  break;
@@ -52,13 +52,13 @@ static bool console_cmds_user(char* cmd) {
 		const uint8_t axis_idx = consoleStackPop(); if (axis_idx >= CFG_TILT_SENSOR_COUNT) consoleRaise(CONSOLE_RC_ERROR_USER);
 		driverAxisLimitSet(axis_idx, DRIVER_AXIS_LIMIT_IDX_UPPER, consoleStackPop()); driverAxisLimitSet(axis_idx, DRIVER_AXIS_LIMIT_IDX_LOWER, consoleStackPop());
 	} break;
-#if 0		
+#if 0
 	case /** LCD **/ 0xdcce: {
 		const char* msg = (const char*)consoleStackPop();
 		const uint8_t timeout = (uint8_t)consoleStackPop();
 		lcdDriverWrite(consoleStackPop(), timeout, PSTR("%s"), msg);
 		} break;
-#endif		
+#endif
 	case /** BL **/ 0x728b: driverSetLcdBacklight(consoleStackPop()); break;
 	// Events & trace...
 	case /** EVENT **/ 0x8a29: eventPublish(consoleStackPop()); break;
@@ -81,7 +81,7 @@ static bool console_cmds_user(char* cmd) {
     case /** SL **/ 0x74fa: modbusSetSlaveId(consoleStackPop()); break;
     case /** ?SL **/ 0x79e5: consolePrint(CFMT_D, modbusGetSlaveId()); break;
     case /** SEND-RAW **/ 0xf690: {
-        uint8_t* d = (uint8_t*)consoleStackPop(); uint8_t sz = *d; modbusSend(d + 1, sz, false);
+        uint8_t* d = (uint8_t*)consoleStackPop(); uint8_t sz = *d; modbusSendRaw(d + 1, sz);
       } break;
     case /** SEND **/ 0x76f9: {
         uint8_t* d = (uint8_t*)consoleStackPop(); uint8_t sz = *d; modbusSend(d + 1, sz);
@@ -90,7 +90,7 @@ static bool console_cmds_user(char* cmd) {
 		Buffer rf(10);
 		rf.add(consoleStackPop());
 		rf.add(MODBUS_FC_WRITE_SINGLE_REGISTER);
-		rf.addU16_be((uint16_t)consoleStackPop());	
+		rf.addU16_be((uint16_t)consoleStackPop());
 		rf.addU16_be((uint16_t)consoleStackPop());
 		modbusSend(rf);
       } break;
@@ -98,7 +98,7 @@ static bool console_cmds_user(char* cmd) {
 		Buffer rf(10);
 		rf.add(consoleStackPop());
 		rf.add(MODBUS_FC_READ_HOLDING_REGISTERS);
-		rf.addU16_be((uint16_t)consoleStackPop());	
+		rf.addU16_be((uint16_t)consoleStackPop());
 		rf.addU16_be((uint16_t)consoleStackPop());
 		modbusSend(rf);
 	  } break;
@@ -171,9 +171,9 @@ static SoftwareSerial GPIO_SERIAL_CONSOLE(GPIO_PIN_CONS_RX, GPIO_PIN_CONS_TX); /
 #endif
 
 static void console_init() {
-#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD	
+#if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 	GPIO_SERIAL_CONSOLE.begin(115200);
-#else	
+#else
 	GPIO_SERIAL_CONSOLE.begin(38400);
 #endif
 	consoleInit(console_cmds_user, GPIO_SERIAL_CONSOLE, 0U);

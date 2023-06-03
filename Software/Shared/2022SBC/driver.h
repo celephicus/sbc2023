@@ -27,10 +27,13 @@ bool driverSensorUpdateAvailable();
 // Return index of first faulty _AND_ enabled sensor, else -1.
 int8_t driverGetFaultySensor();
 
+// Check if a slave is faulty. Requires REGS_IDX_STATUS_xxx.
+bool driverIsSlaveFaulty(uint8_t regs_idx_status);
+
 bool driverSensorIsEnabled(uint8_t sensor_idx);
 
 // Console output.
-// 
+//
 
 // Send a character to the console port.
 void putc_s(char c);

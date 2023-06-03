@@ -20,6 +20,9 @@ enum {
 	SBC2022_MODBUS_STATUS_SLAVE_MOTION_NEG = 102,				// Sensor moving down.
 };
 
+// Predicate to test for a faulty status code.
+static inline bool isSlaveStatusFault(uint8_t status) { return status < SBC2022_MODBUS_STATUS_SLAVE_OK); }
+
 // Slave IDs (addresses).
 enum {
 	SBC2022_MODBUS_SLAVE_ID_RELAY = 16,
