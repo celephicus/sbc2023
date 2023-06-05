@@ -138,7 +138,7 @@ static void cmd_done(uint16_t status=APP_CMD_STATUS_OK) {
 }
 
 static bool check_relay() {		// If relay fault set fail status.
-	if (driverIsSlaveFaulty(REGS_IDX_RELAY_STATE)) {
+	if (driverIsSlaveFaulty(REGS_IDX_RELAY_STATUS)) {
 		cmd_done(APP_CMD_STATUS_RELAY_FAIL);
 		return true;
 	}

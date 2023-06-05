@@ -66,7 +66,8 @@ void modbusSetBaudrate(uint32_t baud);
 enum {
 	MODBUS_TIMING_DEBUG_EVENT_RX_FRAME,		// Frame being received from bus.
 	MODBUS_TIMING_DEBUG_EVENT_SERVICE,		// In service function.
-	MODBUS_TIMING_DEBUG_EVENT_INTERFRAME,	// Timing interframe periodfor no TX.
+	MODBUS_TIMING_DEBUG_EVENT_INTERFRAME,	// Timing interframe period for no TX.
+	MODBUS_TIMING_DEBUG_EVENTS_COUNT		// Number of events, also next free event. 
 };
 typedef void (*modbus_timing_debug_cb)(uint8_t id, uint8_t s);
 void modbusSetTimingDebugCb(modbus_timing_debug_cb cb);
@@ -99,11 +100,10 @@ enum {
 };
 
 /* Send raw data to the line. If add_crc is false it does not append a CRC.
-	Note that there must be space in the buffer else the frame will be truncated.
 	If called when driver is busy then the data will be transmitted but as it will be in the
 	middle of a frame it will probably be corrupted and will not be received. */
-void modbusSend(Buffer& f, bool add_crc=true);
-void modbusSend(uint8_t* f, uint8_t sz, bool add_crc=true);
+void modbusSend(const Buffer& f, bool add_crc=true);
+void modbusSend(const uint8_t* f, uint8_t sz, bool add_crc=true);
 
 void modbusHregWrite(uint8_t id, uint16_t address, uint16_t value);
 

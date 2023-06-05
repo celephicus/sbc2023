@@ -128,13 +128,12 @@ enum {
 #define REGS_NV_DEFAULT_VALS 30, 500, 3, 256, 0, 0, 30, 50
 
 // Define how to format the reg when printing.
-#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_U
+#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_U
 
 // Flags/masks for register FLAGS.
 enum {
     	REGS_FLAGS_MASK_DC_LOW = (int)0x1,
-    	REGS_FLAGS_MASK_SENSOR_FAULT = (int)0x2,
-    	REGS_FLAGS_MASK_RELAY_FAULT = (int)0x4,
+    	REGS_FLAGS_MASK_SLAVE_FAULT = (int)0x2,
     	REGS_FLAGS_MASK_SW_TOUCH_LEFT = (int)0x10,
     	REGS_FLAGS_MASK_SW_TOUCH_RIGHT = (int)0x20,
     	REGS_FLAGS_MASK_SW_TOUCH_MENU = (int)0x40,
@@ -157,6 +156,7 @@ enum {
     	REGS_ENABLES_MASK_SENSOR_DISABLE_2 = (int)0x40,
     	REGS_ENABLES_MASK_SENSOR_DISABLE_3 = (int)0x80,
     	REGS_ENABLES_MASK_TOUCH_DISABLE = (int)0x100,
+    	REGS_ENABLES_MASK_SLAVE_UPDATE_DISABLE = (int)0x200,
     	REGS_ENABLES_MASK_TRACE_FORMAT_BINARY = (int)0x2000,
     	REGS_ENABLES_MASK_TRACE_FORMAT_CONCISE = (int)0x4000,
     	REGS_ENABLES_MASK_DISABLE_BLINKY_LED = (int)0x8000,
@@ -222,8 +222,8 @@ enum {
  static const char REGS_DESCRS_1[] PROGMEM = "MCUSR in low byte, wdog in high byte.";   \
  static const char REGS_DESCRS_2[] PROGMEM = "Raw ADC (unscaled) voltage on Bus.";      \
  static const char REGS_DESCRS_3[] PROGMEM = "Bus volts /mV.";                          \
- static const char REGS_DESCRS_4[] PROGMEM = "Tilt angle sensor 0 scaled 1000/90Deg.";  \
- static const char REGS_DESCRS_5[] PROGMEM = "Tilt angle sensor 1 scaled 1000/90Deg.";  \
+ static const char REGS_DESCRS_4[] PROGMEM = "Tilt angle sensor 0.";                    \
+ static const char REGS_DESCRS_5[] PROGMEM = "Tilt angle sensor 1.";                    \
  static const char REGS_DESCRS_6[] PROGMEM = "Status from Sensor Module 0.";            \
  static const char REGS_DESCRS_7[] PROGMEM = "Status from Sensor Module 1.";            \
  static const char REGS_DESCRS_8[] PROGMEM = "Status from Relay Module.";               \
@@ -275,13 +275,12 @@ enum {
  static const char REGS_HELPS[] PROGMEM =                                               \
     "\nFlags:"                                                                          \
     "\n DC_LOW: 0 (External DC power volts low.)"                                       \
-    "\n SENSOR_FAULT: 1 (Fault state of all _enabled_ Sensor modules.)"                 \
-    "\n RELAY_FAULT: 2 (Fault state for Relay module _if_ enabled.)"                    \
+    "\n SLAVE_FAULT: 1 (Fault state of all _enabled_ slaves.)"                          \
     "\n SW_TOUCH_LEFT: 4 (Touch sw LEFT.)"                                              \
     "\n SW_TOUCH_RIGHT: 5 (Touch sw RIGHT.)"                                            \
     "\n SW_TOUCH_MENU: 6 (Touch sw MENU.)"                                              \
     "\n SW_TOUCH_RET: 7 (Touch sw RET.)"                                                \
-    "\n SENSOR_DUMP_ENABLE: 8 (Send SENSOR_UPDATE events.)"                             \
+    "\n SENSOR_DUMP_ENABLE: 8 (Send SENSOR_UPDATE events during slew.)"                 \
     "\n AWAKE: 9 (Controller awake.)"                                                   \
     "\n ABORT_REQ: 10 (Abort running command.)"                                         \
     "\n EEPROM_READ_BAD_0: 13 (EEPROM bank 0 corrupt.)"                                 \
@@ -296,6 +295,7 @@ enum {
     "\n SENSOR_DISABLE_2: 6 (Disable Sensor 2.)"                                        \
     "\n SENSOR_DISABLE_3: 7 (Disable Sensor 3.)"                                        \
     "\n TOUCH_DISABLE: 8 (Disable touch buttons.)"                                      \
+    "\n SLAVE_UPDATE_DISABLE: 9 (Disable slave MODBUS schedule.)"                       \
     "\n TRACE_FORMAT_BINARY: 13 (Dump trace in binary format.)"                         \
     "\n TRACE_FORMAT_CONCISE: 14 (Dump trace in concise text format.)"                  \
     "\n DISABLE_BLINKY_LED: 15 (Disable setting Blinky Led from fault states.)"         \

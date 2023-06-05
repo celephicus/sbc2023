@@ -34,10 +34,11 @@ static struct {
 	modbus_timing_debug_cb debug_timing_cb;	// Callback function for debugging timing.
 
 	// TX: Holds last sent frame, used by Master response handler to make sense of responses.
-	Buffer buf_tx;
+	Buffer buf_txed;
 
 	// RX: Master waits for response after sending request, slaves receive requests.
 	Buffer buf_rx;							// Buffer used for receiving, requests if a slave, responses if a master.
+	Buffer buf_recd;						// Holds received frame for client to read at leisure.
 	uint16_t rx_frame_timer_micros;			// Timer for end of frame.
 	uint16_t rx_frame_timeout_micros;		// Timeout for end of frame.
 	uint16_t interframe_timer_micros;			// Timer for end of frame.
@@ -98,40 +99,41 @@ void modbusInit(modbusSendBufFunc send, modbusReceiveCharFunc recv, uint8_t max_
 	f_modbus_ctx.cb_resp = cb;
 	f_modbus_ctx.debug_timing_cb = NULL;
 	f_modbus_ctx.buf_rx.resize(max_rx_frame);
-	f_modbus_ctx.buf_tx.resize(max_rx_frame);
+	f_modbus_ctx.buf_recd.resize(max_rx_frame);
+	f_modbus_ctx.buf_txed.resize(max_rx_frame);
 	modbusSetBaudrate(baud);
 }
 void modbusSetBaudrate(uint32_t baud) {
 	const uint16_t char_micros = (uint16_t)(1000UL*1000UL*10UL / baud);	// 10 bit times for one character.
-	f_modbus_ctx.rx_frame_timeout_micros = utilsLimitMin<uint16_t>(1U*char_micros + char_micros/2U, 750U);	// Timeout 1.5 character times minimum 750us.
+	f_modbus_ctx.rx_frame_timeout_micros = utilsLimitMin<uint16_t>(1U*char_micros + char_micros/2U, 750U);	// Timeout 1.5 character times; minimum 750us.
 	TIMER_STOP_WITH_CB(&f_modbus_ctx.rx_frame_timer_micros, MODBUS_TIMING_DEBUG_EVENT_RX_FRAME);
-	f_modbus_ctx.interframe_timeout_micros = utilsLimitMin<uint16_t>(3U*char_micros + char_micros/2U, 1750U);	// Timeout 3.5 character times minimum 1750us.
+	f_modbus_ctx.interframe_timeout_micros = utilsLimitMin<uint16_t>(3U*char_micros + char_micros/2U, 1750U);	// Timeout 3.5 character times; minimum 1750us.
 	TIMER_STOP_WITH_CB(&f_modbus_ctx.interframe_timer_micros, MODBUS_TIMING_DEBUG_EVENT_RX_FRAME);
 }
 
-const Buffer& modbusTxFrame() { return f_modbus_ctx.buf_tx; }
-const Buffer& modbusRxFrame() { return f_modbus_ctx.buf_rx; }
+const Buffer& modbusTxFrame() { return f_modbus_ctx.buf_txed; }
+const Buffer& modbusRxFrame() { return f_modbus_ctx.buf_recd; }
 
 // Helper for sending, assumes payloadcopied to TX buffer.
 static void do_send(bool add_crc) {
 	if (add_crc) {
 		// CRC is added in LITTLE ENDIAN!!
-		const uint16_t crc = modbusCrc(f_modbus_ctx.buf_tx, f_modbus_ctx.buf_tx.len());
-		f_modbus_ctx.buf_tx.addU16_le(crc);
+		const uint16_t crc = modbusCrc(f_modbus_ctx.buf_txed, f_modbus_ctx.buf_txed.len());
+		f_modbus_ctx.buf_txed.addU16_le(crc);
 	}
 
+	f_modbus_ctx.buf_recd.clear();		// Clear any previous response. Not really necessary, but stops a client printing rubbish if it dumps the SEND event. 
 	f_modbus_ctx.cb_resp(MODBUS_CB_EVT_M_REQ_TX);
-	f_modbus_ctx.send(f_modbus_ctx.buf_tx, f_modbus_ctx.buf_tx.len());
+	f_modbus_ctx.send(f_modbus_ctx.buf_txed, f_modbus_ctx.buf_txed.len());
 	TIMER_START_WITH_CB((uint16_t)micros(), &f_modbus_ctx.interframe_timer_micros, MODBUS_TIMING_DEBUG_EVENT_INTERFRAME);
 }
 
-void modbusSend(uint8_t* f, uint8_t sz, bool add_crc /*=true*/) {
-	f_modbus_ctx.buf_tx.clear();
-	f_modbus_ctx.buf_tx.addMem(f, sz);
+void modbusSend(const uint8_t* f, uint8_t sz, bool add_crc /*=true*/) {
+	f_modbus_ctx.buf_txed.assignMem(f, sz);
 	do_send(add_crc);
 }
-void modbusSend(Buffer& f, bool add_crc /*=true*/) {
-	f_modbus_ctx.buf_tx = f;
+void modbusSend(const Buffer& f, bool add_crc /*=true*/) {
+	f_modbus_ctx.buf_txed = f;
 	do_send(add_crc);
 }
 
@@ -158,19 +160,19 @@ void modbusService() {
 	}
 
 	// Service interframe timer. We don't actually do anything on timeout. The client shouldn't transmit when it is active, that's all.
-	(void)TIMER_IS_TIMEOUT_WITH_CB((uint16_t)micros(), &f_modbus_ctx.interframe_timer_micros,
-	  f_modbus_ctx.interframe_timeout_micros, MODBUS_TIMING_DEBUG_EVENT_RX_FRAME);
+	(void)TIMER_IS_TIMEOUT_WITH_CB((uint16_t)micros(), &f_modbus_ctx.interframe_timer_micros, f_modbus_ctx.interframe_timeout_micros, MODBUS_TIMING_DEBUG_EVENT_INTERFRAME);
 
 	// Service RX timer, timeout with data is a frame.
-	if (TIMER_IS_TIMEOUT_WITH_CB((uint16_t)micros(), &f_modbus_ctx.rx_frame_timer_micros,
-	  f_modbus_ctx.rx_frame_timeout_micros, MODBUS_TIMING_DEBUG_EVENT_RX_FRAME)) {
-		const uint8_t rx_frame_valid = modbusVerifyFrameValid(*f_modbus_ctx.buf_rx);		// Basic validity checks.
+	if (TIMER_IS_TIMEOUT_WITH_CB((uint16_t)micros(), &f_modbus_ctx.rx_frame_timer_micros, f_modbus_ctx.rx_frame_timeout_micros, MODBUS_TIMING_DEBUG_EVENT_RX_FRAME)) {
+		f_modbus_ctx.buf_recd = f_modbus_ctx.buf_rx;
+		f_modbus_ctx.buf_rx.clear();
+		const uint8_t rx_frame_valid = modbusVerifyFrameValid(f_modbus_ctx.buf_recd);		// Basic validity checks.
 		if (0U != rx_frame_valid)		// Some basic error in the frame...
 			f_modbus_ctx.cb_resp(rx_frame_valid);
 		else { 	// We got one!
 			if (0 == modbusGetSlaveId())	// We are master: flag response from slave to client.
 				f_modbus_ctx.cb_resp(MODBUS_CB_EVT_M_RESP_RX);
-			else if (modbusGetSlaveId() == f_modbus_ctx.buf_rx[MODBUS_FRAME_IDX_SLAVE_ID])	// We are a slave and it's for us...
+			else if (modbusGetSlaveId() == f_modbus_ctx.buf_recd[MODBUS_FRAME_IDX_SLAVE_ID])	// We are a slave and it's for us...
 				f_modbus_ctx.cb_resp(MODBUS_CB_EVT_S_REQ_RX);
 			else		// For another slave.
 				f_modbus_ctx.cb_resp(MODBUS_CB_EVT_S_REQ_X);
