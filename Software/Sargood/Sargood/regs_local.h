@@ -17,7 +17,7 @@ FLAGS [fmt=hex] "Various flags.
 - SW_TOUCH_RIGHT [bit=5] "Touch sw RIGHT."
 - SW_TOUCH_MENU [bit=6] "Touch sw MENU."
 - SW_TOUCH_RET [bit=7] "Touch sw RET."
-- SENSOR_DUMP_ENABLE [bit=8] "Send SENSOR_UPDATE events."
+- SENSOR_DUMP_ENABLE [bit=8] "Send SENSOR_UPDATE events during slew."
 - AWAKE [bit=9] "Controller awake"
 - ABORT_REQ [bit=10] "Abort running command."
 - EEPROM_READ_BAD_0 [bit=13] "EEPROM bank 0 corrupt.
@@ -30,15 +30,30 @@ RESTART [fmt=hex] "MCUSR in low byte, wdog in high byte.
 	refer to devWatchdogInit()."
 ADC_VOLTS_MON_BUS "Raw ADC (unscaled) voltage on Bus."
 VOLTS_MON_BUS "Bus volts /mV."
-TILT_SENSOR_0 [fmt=signed] "Tilt angle sensor 0 scaled 1000/90Deg."
-TILT_SENSOR_1 [fmt=signed] "Tilt angle sensor 1 scaled 1000/90Deg."
-SENSOR_STATUS_0 "Status from Sensor Module 0."
-SENSOR_STATUS_1 "Status from Sensor Module 1."
-RELAY_STATUS "Status from Relay Module."
-SENSOR_0_FAULTS "Number of Sensor 0 faults."
-SENSOR_1_FAULTS "Number of Sensor 1 faults."
-RELAY_FAULTS "Counts number of Relay faults."
-RELAY_STATE "Value written to relays."
+TILT_SENSOR_0 [fmt=signed] "Tilt angle sensor 0.
+	Value zero for horizontal, can measure nearly a full circle."
+TILT_SENSOR_1 [fmt=signed] "Tilt angle sensor 1.
+	Value zero for horizontal, can measure nearly a full circle."
+SENSOR_STATUS_0 "Status from Sensor Module 0.
+	Generally values >= 100 are good.
+	Values: 0 = no response, 1 = responding but faulty, 2 = invalid response.
+	100 = not moving, 101 = angle increasing towards vertical, 102 = angle decreasing."
+SENSOR_STATUS_1 "Status from Sensor Module 1.
+	Generally values >= 100 are good.
+		Generally values >= 100 are good.
+	Values: 0 = no response, 1 = responding but faulty, 2 = invalid response.
+	100 = not moving, 101 = angle increasing towards vertical, 102 = angle decreasing."
+RELAY_STATUS "Status from Relay Module.
+	Generally values >= 100 are good.
+	Values: 0 = no response, 1 = responding but faulty, 2 = invalid response.
+	100 = OK."
+SENSOR_0_FAULTS "Number of Sensor 0 faults.
+	Count increments only when status changes from good to fault, or from one fault to another."
+SENSOR_1_FAULTS "Number of Sensor 1 faults.
+	Count increments only when status changes from good to fault, or from one fault to another."
+RELAY_FAULTS "Counts number of Relay faults.
+	Count increments only when status changes from good to fault, or from one fault to another."
+RELAY_STATE [fmt=hex] "Value written to relays."
 UPDATE_COUNT "Incremented on each update cycle."
 CMD_ACTIVE "Current running command."
 CMD_STATUS "Status from previous command."
@@ -60,6 +75,8 @@ ENABLES [nv fmt=hex] "Non-volatile enable flags.
 - SENSOR_DISABLE_2 [bit=6] "Disable Sensor 2."
 - SENSOR_DISABLE_3 [bit=7] "Disable Sensor 3."
 - TOUCH_DISABLE [bit=8 default=1] "Disable touch buttons."
+- SLAVE_UPDATE_DISABLE [bit=9] "Disable slave MODBUS schedule.
+	Disable the schedule that reads Sensors and writes the Relay. For testing onlyas all slaves will go to fault state."
 - TRACE_FORMAT_BINARY [bit=13] "Dump trace in binary format."
 - TRACE_FORMAT_CONCISE [bit=14] "Dump trace in concise text format."
 - DISABLE_BLINKY_LED [bit=15] "Disable setting Blinky Led from fault states.
@@ -68,7 +85,7 @@ ENABLES [nv fmt=hex] "Non-volatile enable flags.
 MODBUS_DUMP_EVENT_MASK [nv fmt=hex default=0x0000] "Dump MODBUS events mask, refer MODBUS_CB_EVT_xxx.
 	If MODBUS dump events is enabled, only events matching the bitmask in this register are dumped."
 MODBUS_DUMP_SLAVE_ID [nv default=0] "For master, only dump MODBUS events from this slave ID.
-	Event must be from this slave ID."
+	Event must be from this slave ID. If zero then events from all slaves are dumped."
 SLEW_STOP_DEADBAND [default=30 nv] "Stop slew when within this deadband."
 SLEW_START_DEADBAND [default=50 nv] "Only start slew if delta tilt less than start-deadband.
 	If the tilt error is less than this value then slew is not started."
@@ -116,7 +133,8 @@ enum {
 // Flags/masks for register FLAGS.
 enum {
     	REGS_FLAGS_MASK_DC_LOW = (int)0x1,
-    	REGS_FLAGS_MASK_SLAVE_FAULT = (int)0x2,
+    	REGS_FLAGS_MASK_SENSOR_FAULT = (int)0x2,
+    	REGS_FLAGS_MASK_RELAY_FAULT = (int)0x4,
     	REGS_FLAGS_MASK_SW_TOUCH_LEFT = (int)0x10,
     	REGS_FLAGS_MASK_SW_TOUCH_RIGHT = (int)0x20,
     	REGS_FLAGS_MASK_SW_TOUCH_MENU = (int)0x40,
@@ -257,7 +275,8 @@ enum {
  static const char REGS_HELPS[] PROGMEM =                                               \
     "\nFlags:"                                                                          \
     "\n DC_LOW: 0 (External DC power volts low.)"                                       \
-    "\n SLAVE_FAULT: 1 (Fault state of all _enabled_ slaves.)"                          \
+    "\n SENSOR_FAULT: 1 (Fault state of all _enabled_ Sensor modules.)"                 \
+    "\n RELAY_FAULT: 2 (Fault state for Relay module _if_ enabled.)"                    \
     "\n SW_TOUCH_LEFT: 4 (Touch sw LEFT.)"                                              \
     "\n SW_TOUCH_RIGHT: 5 (Touch sw RIGHT.)"                                            \
     "\n SW_TOUCH_MENU: 6 (Touch sw MENU.)"                                              \

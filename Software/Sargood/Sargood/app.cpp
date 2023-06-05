@@ -138,7 +138,7 @@ static void cmd_done(uint16_t status=APP_CMD_STATUS_OK) {
 }
 
 static bool check_relay() {		// If relay fault set fail status.
-	if (REGS[REGS_IDX_RELAY_STATE] < SBC2022_MODBUS_STATUS_SLAVE_OK) {
+	if (driverIsSlaveFaulty(REGS_IDX_RELAY_STATE)) {
 		cmd_done(APP_CMD_STATUS_RELAY_FAIL);
 		return true;
 	}
@@ -230,7 +230,7 @@ bool check_axis_within_limit(uint8_t axis_idx, uint8_t limit_idx) {
 	const int16_t limit = driverAxisLimitGet(axis_idx, limit_idx);
 	if (SBC2022_MODBUS_TILT_FAULT == limit)		// Either no limit possible on this axis or no limit set.
 		return true;
-		
+
 	return (DRIVER_AXIS_LIMIT_IDX_LOWER == limit_idx) ?
 	  ((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx] > (limit + (int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND])) :
 	  ((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx] < (limit - (int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]));
@@ -284,7 +284,7 @@ static int8_t thread_cmd(void* arg) {
 		case APP_CMD_HEAD_DOWN:	if (check_not_awake()) break; if (check_axis_within_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_LOWER)) { axis_set_drive(AXIS_HEAD, AXIS_DIR_DOWN);	goto do_manual; } else { cmd_done(APP_CMD_STATUS_MOTION_LIMIT); break; }
 		case APP_CMD_LEG_UP:	if (check_not_awake()) break; if (check_axis_within_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_UPPER)) { axis_set_drive(AXIS_FOOT, AXIS_DIR_UP);	goto do_manual; } else { cmd_done(APP_CMD_STATUS_MOTION_LIMIT); break; }
 		case APP_CMD_LEG_DOWN:	if (check_not_awake()) break; if (check_axis_within_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_LOWER)) { axis_set_drive(AXIS_FOOT, AXIS_DIR_DOWN);	goto do_manual; } else { cmd_done(APP_CMD_STATUS_MOTION_LIMIT); break; }
-		// TODO: As above, so below. 
+		// TODO: As above, so below.
 		case APP_CMD_BED_UP:	if (check_not_awake()) break; axis_set_drive(AXIS_BED, AXIS_DIR_UP);	goto do_manual;
 		case APP_CMD_BED_DOWN:	if (check_not_awake()) break; axis_set_drive(AXIS_BED, AXIS_DIR_DOWN);	goto do_manual;
 		case APP_CMD_TILT_UP:	if (check_not_awake()) break; axis_set_drive(AXIS_TILT, AXIS_DIR_UP);	goto do_manual;
@@ -537,8 +537,8 @@ static int8_t thread_rs232_cmd(void* arg) {
 	byte 3: command code
 	byte 4: 1 if the controller was not busy and accepted the command, 0 otherwise.
 	byte 5: Checksum of 8 bit addition of all bytes in the message.
-	
-	Note that the response will always be a '1' if the Controller was not busy, even if the command code was not recognised. The only situation where the response will be zero is if the 
+
+	Note that the response will always be a '1' if the Controller was not busy, even if the command code was not recognised. The only situation where the response will be zero is if the
 	Controller is moving to a preset position.
 */
 static void rs232_resp(uint8_t cmd, uint8_t rc) {
@@ -549,7 +549,7 @@ static void rs232_resp(uint8_t cmd, uint8_t rc) {
 	GPIO_SERIAL_RS232.write((uint8_t)((IR_CODE_ADDRESS>>8) + IR_CODE_ADDRESS + cmd + rc));
 }
 
-// For binary format we emit ESC ID, then the event from memory, escaping an ESC with ESC 00. So data 123456fe is sent fe01123456fe00 
+// For binary format we emit ESC ID, then the event from memory, escaping an ESC with ESC 00. So data 123456fe is sent fe01123456fe00
 enum {
 	BINARY_FMT_ID_EVENT = 1,
 };
@@ -571,7 +571,7 @@ static void emit_binary_trace(uint8_t id, const uint8_t* m, uint8_t sz) {
 static void service_trace_log() {
 	EventTraceItem evt;
 	if (eventTraceRead(&evt)) {
-		if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TRACE_FORMAT_BINARY) 
+		if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TRACE_FORMAT_BINARY)
 			emit_binary_trace(BINARY_FMT_ID_EVENT, reinterpret_cast<const uint8_t*>(&evt), sizeof(evt));
 		else {
 			const uint8_t id = event_id(evt.event);
@@ -1000,7 +1000,7 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 			if (event_p8(ev) == TIMER_MSG)
 				eventSmPostSelf(context);
 			if (event_p8(ev) == TIMER_UPDATE_INFO) {
-				lcd_printf(0, PSTR("R %S"), (REGS[REGS_IDX_RELAY_STATE] < SBC2022_MODBUS_STATUS_SLAVE_OK) ? PSTR("FAIL") : PSTR("OK"));
+				lcd_printf(0, PSTR("R %S"), driverIsSlaveFaulty(REGS_IDX_RELAY_STATE) ? PSTR("FAIL") : PSTR("OK"));
 				//lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("    Ready..."));
 				lcd_printf(1, PSTR("H%+-6d T%+-6d"), REGS[REGS_IDX_TILT_SENSOR_0], REGS[REGS_IDX_TILT_SENSOR_1]);
 				eventSmTimerStart(TIMER_UPDATE_INFO, UPDATE_INFO_PERIOD_MS/100U);
