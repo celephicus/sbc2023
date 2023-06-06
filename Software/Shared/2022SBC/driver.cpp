@@ -280,17 +280,17 @@ typedef struct {
 } SlaveDef;
 static const SlaveDef PROGMEM SLAVES[] = {
 	{
-		SBC2022_MODBUS_SLAVE_ID_RELAY, 0, REGS_IDX_RELAY_STATUS, REGS_FAULT_FLAGS_MASK_RELAY,
+		SBC2022_MODBUS_SLAVE_ID_RELAY, 0, REGS_IDX_RELAY_STATUS, REGS_FLAGS_MASK_FAULT_RELAY,
 		build_request_relay, handle_response_relay,
 		set_error_relay, is_enabled_relay,
 	},
 	{
-		SBC2022_MODBUS_SLAVE_ID_SENSOR_0, 0, REGS_IDX_SENSOR_STATUS_0, REGS_FAULT_FLAGS_MASK_SENSOR_0,
+		SBC2022_MODBUS_SLAVE_ID_SENSOR_0, 0, REGS_IDX_SENSOR_STATUS_0, REGS_FLAGS_MASK_FAULT_SENSOR_0,
 		build_request_sensor, handle_response_sensor,
 		set_error_sensor, is_enabled_sensor,
 	},
 	{
-		SBC2022_MODBUS_SLAVE_ID_SENSOR_0 + 1, 1, REGS_IDX_SENSOR_STATUS_1, REGS_FAULT_FLAGS_MASK_SENSOR_1,
+		SBC2022_MODBUS_SLAVE_ID_SENSOR_0 + 1, 1, REGS_IDX_SENSOR_STATUS_1, REGS_FLAGS_MASK_FAULT_SENSOR_1,
 		build_request_sensor, handle_response_sensor,
 		set_error_sensor, is_enabled_sensor,
 	},
@@ -377,8 +377,7 @@ static int8_t thread_query_slaves(void* arg) {
 
 			// Update error flags that are used by Command Processor and that drive the Blinky LED.
 			const is_enabled_func is_enabled = reinterpret_cast<const is_enabled_func>(pgm_read_ptr(&slave_def->is_enabled));
-			regsWriteMask(REGS_IDX_FAULT_FLAGS, pgm_read_word(&slave_def->fault_flags_mask),
-			  (is_enabled(idx) && driverIsSlaveFaulty(pgm_read_byte(&slave_def->regs_idx_status)));
+			regsWriteMaskFlags(pgm_read_word(&slave_def->fault_flags_mask), (is_enabled(idx) && driverIsSlaveFaulty(pgm_read_byte(&slave_def->regs_idx_status))));
 		}
 
 		set_schedule_done();			// Flag new data available to command thread.
@@ -772,7 +771,6 @@ static thread_control_t tcb_query_slaves;
 static void setup_devices() {
 	ir_setup();
 	threadInit(&tcb_query_slaves);
-	regsWriteMaskFlags(REGS_FLAGS_MASK_SLAVE_FAULT, true);
 	driverSetLcdBacklight(0);
 }
 static void service_devices() {

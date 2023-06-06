@@ -50,8 +50,8 @@ enum {
 	APP_CMD_JOG_LEG_DOWN = 13,
 	APP_CMD_JOG_BED_UP = 14,
 	APP_CMD_JOG_BED_DOWN = 15,
-	APP_CMD_TILT_UP = 16,
-	APP_CMD_TILT_DOWN = 17,
+	APP_CMD_JOG_TILT_UP = 16,
+	APP_CMD_JOG_TILT_DOWN = 17,
 
 	// Save current position as a preset. Error codes NOT_AWAKE, SAVE_PRESET_FAIL, SENSOR_FAIL_x.
 	APP_CMD_POS_SAVE_1 = 100,
@@ -63,10 +63,10 @@ enum {
 	APP_CMD_LIMIT_CLEAR_ALL = 110,
 
 	// Save axis limit. Error codes NOT_AWAKE, SAVE_PRESET_FAIL, SENSOR_FAIL_x.
-	APP_CMD_LIMIT_SAVE_HEAD_LOWER = 111,
-	APP_CMD_LIMIT_SAVE_HEAD_UPPER = 112,
-	APP_CMD_LIMIT_SAVE_FOOT_LOWER = 113,
-	APP_CMD_LIMIT_SAVE_FOOT_UPPER = 114,
+	APP_CMD_LIMIT_SAVE_HEAD_DOWN = 111,
+	APP_CMD_LIMIT_SAVE_HEAD_UP = 112,
+	APP_CMD_LIMIT_SAVE_FOOT_DOWN = 113,
+	APP_CMD_LIMIT_SAVE_FOOT_UP = 114,
 
 	// Slew axes to preset position. Error codes NOT_AWAKE, RELAY_FAIL, SENSOR_FAIL_x, PRESET_INVALID, ABORT, NO_MOTION.
 	APP_CMD_RESTORE_POS_1 = 200,
@@ -84,9 +84,13 @@ enum {
 	APP_CMD_STATUS_RELAY_FAIL = 4,			// Relay module offline, cannot command motors.
 	APP_CMD_STATUS_PRESET_INVALID = 5,		// Preset in NV was invalid.
 	APP_CMD_STATUS_SLEW_TIMEOUT = 6,		// Timeout on slew to position.
-	APP_CMD_STATUS_SAVE_PRESET_FAIL = 7,	// Save preset needs to be repeated 3 times before it will work.
+	APP_CMD_STATUS_SAVE_FAIL = 7,			// Save preset/limits & clear limits needs to be repeated 3 times before it will work.
 	APP_CMD_STATUS_MOTION_LIMIT = 8,		// Axis at limit for jog.
 	APP_CMD_STATUS_ABORT = 9,				// Motion aborted with IR code or RS232 data.
+	APP_CMD_STATUS_BUSY = 10,				// Cannot start command as busy.
+	
+	APP_CMD_STATUS_ERROR_UNKNOWN = 99,		// Something has gone wrong, but we don't know what.
+	
 	APP_CMD_STATUS_SENSOR_FAIL_0 = 100,		// Tilt sensor 0 offline or failed.
 	APP_CMD_STATUS_SENSOR_FAIL_1 = 101,		// Tilt sensor 1 offline or failed.
 

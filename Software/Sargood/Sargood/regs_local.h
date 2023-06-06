@@ -8,29 +8,26 @@ const uint16_t REGS_DEF_VERSION = 7;
 /* [[[ Definition start...
 
 FLAGS [fmt=hex] "Various flags.
-	A register with a number of boolean flags that represent various conditions. They may be set only at at startup, or as the
-	result of variouys conditions."
+	A register with a number of boolean flags that represent various conditions. They may be set as the	result of various conditions.
+	The App command processor uses these to decide if the command can be run."
 - DC_LOW [bit=0] "External DC power volts low.
-	The DC volts suppliting power to the slave from the bus cable is low indicating a possible problem."
-- SW_TOUCH_LEFT [bit=4] "Touch sw LEFT."
-- SW_TOUCH_RIGHT [bit=5] "Touch sw RIGHT."
-- SW_TOUCH_MENU [bit=6] "Touch sw MENU."
-- SW_TOUCH_RET [bit=7] "Touch sw RET."
-- SENSOR_DUMP_ENABLE [bit=8] "Send SENSOR_UPDATE events during slew."
+	The DC volts supplying power to the slave from the bus cable is low indicating a possible problem."
+- FAULT_NOT_AWAKE [bit=1] "Controller not awake"
+- ABORT_REQ [bit=2] "Abort running command."
+- FAULT_RELAY [bit=3] "Any fault on Relay."
+- FAULT_SENSOR_0 [bit=4] "Any fault on Sensor 0 if enabled."
+- FAULT_SENSOR_1 [bit=5] "Any fault on Sensor 1 if enabled."
+- FAULT_SENSOR_2 [bit=6] "Any fault on Sensor 2 if enabled."
+- FAULT_SENSOR_3 [bit=7] "Any fault on Sensor 3 if enabled."
+- SW_TOUCH_LEFT [bit=8] "Touch sw LEFT."
+- SW_TOUCH_RIGHT [bit=9] "Touch sw RIGHT."
+- SW_TOUCH_MENU [bit=10] "Touch sw MENU."
+- SW_TOUCH_RET [bit=11] "Touch sw RET."
 - EEPROM_READ_BAD_0 [bit=13] "EEPROM bank 0 corrupt.
 	EEPROM bank 0 corrupt. If bank 1 is corrupt too then a default set of values has been written. Flag written at startup only."
 - EEPROM_READ_BAD_1 [bit=14] "EEPROM bank 1 corrupt.
 	EEPROM bank 1 corrupt. If bank 0 is corrupt too then a default set of values has been written. Flag written at startup only."
 - WATCHDOG_RESTART [bit=15] "Device has restarted from a watchdog timeout."
-FAULT_FLAGS [fmt=hex] "Flags used by command processor to check for faults.
-	Set implies fault, so all clear is OK. Also convenient for masks to select specific flags."
-- NOT_AWAKE [bit=0] "Controller not awake"
-- ABORT_REQ [bit=1] "Abort running command."
-- SENSOR_0 [bit=4] "Any fault on Sensor 0 if enabled."
-- SENSOR_1 [bit=5] "Any fault on Sensor 1 if enabled."
-- SENSOR_2 [bit=6] "Any fault on Sensor 2 if enabled."
-- SENSOR_3 [bit=7] "Any fault on Sensor 3 if enabled."
-- RELAY [bit=8] "Any fault on Relay."
 RESTART [fmt=hex] "MCUSR in low byte, wdog in high byte.
 	The processor MCUSR register is copied into the low byte. The watchdog reset source is copied to the high byte. For details
 	refer to devWatchdogInit()."
@@ -139,14 +136,17 @@ enum {
 // Flags/masks for register FLAGS.
 enum {
     	REGS_FLAGS_MASK_DC_LOW = (int)0x1,
-    	REGS_FLAGS_MASK_SLAVE_FAULT = (int)0x2,
-    	REGS_FLAGS_MASK_SW_TOUCH_LEFT = (int)0x10,
-    	REGS_FLAGS_MASK_SW_TOUCH_RIGHT = (int)0x20,
-    	REGS_FLAGS_MASK_SW_TOUCH_MENU = (int)0x40,
-    	REGS_FLAGS_MASK_SW_TOUCH_RET = (int)0x80,
-    	REGS_FLAGS_MASK_SENSOR_DUMP_ENABLE = (int)0x100,
-    	REGS_FLAGS_MASK_AWAKE = (int)0x200,
-    	REGS_FLAGS_MASK_ABORT_REQ = (int)0x400,
+    	REGS_FLAGS_MASK_FAULT_NOT_AWAKE = (int)0x2,
+    	REGS_FLAGS_MASK_ABORT_REQ = (int)0x4,
+    	REGS_FLAGS_MASK_FAULT_RELAY = (int)0x8,
+    	REGS_FLAGS_MASK_FAULT_SENSOR_0 = (int)0x10,
+    	REGS_FLAGS_MASK_FAULT_SENSOR_1 = (int)0x20,
+    	REGS_FLAGS_MASK_FAULT_SENSOR_2 = (int)0x40,
+    	REGS_FLAGS_MASK_FAULT_SENSOR_3 = (int)0x80,
+    	REGS_FLAGS_MASK_SW_TOUCH_LEFT = (int)0x100,
+    	REGS_FLAGS_MASK_SW_TOUCH_RIGHT = (int)0x200,
+    	REGS_FLAGS_MASK_SW_TOUCH_MENU = (int)0x400,
+    	REGS_FLAGS_MASK_SW_TOUCH_RET = (int)0x800,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_0 = (int)0x2000,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_1 = (int)0x4000,
     	REGS_FLAGS_MASK_WATCHDOG_RESTART = (int)0x8000,
@@ -281,14 +281,17 @@ enum {
  static const char REGS_HELPS[] PROGMEM =                                               \
     "\nFlags:"                                                                          \
     "\n DC_LOW: 0 (External DC power volts low.)"                                       \
-    "\n SLAVE_FAULT: 1 (Fault state of all _enabled_ slaves.)"                          \
-    "\n SW_TOUCH_LEFT: 4 (Touch sw LEFT.)"                                              \
-    "\n SW_TOUCH_RIGHT: 5 (Touch sw RIGHT.)"                                            \
-    "\n SW_TOUCH_MENU: 6 (Touch sw MENU.)"                                              \
-    "\n SW_TOUCH_RET: 7 (Touch sw RET.)"                                                \
-    "\n SENSOR_DUMP_ENABLE: 8 (Send SENSOR_UPDATE events during slew.)"                 \
-    "\n AWAKE: 9 (Controller awake.)"                                                   \
-    "\n ABORT_REQ: 10 (Abort running command.)"                                         \
+    "\n FAULT_NOT_AWAKE: 1 (Controller not awake.)"                                     \
+    "\n ABORT_REQ: 2 (Abort running command.)"                                          \
+    "\n FAULT_RELAY: 3 (Any fault on Relay.)"                                           \
+    "\n FAULT_SENSOR_0: 4 (Any fault on Sensor 0 if enabled.)"                          \
+    "\n FAULT_SENSOR_1: 5 (Any fault on Sensor 1 if enabled.)"                          \
+    "\n FAULT_SENSOR_2: 6 (Any fault on Sensor 2 if enabled.)"                          \
+    "\n FAULT_SENSOR_3: 7 (Any fault on Sensor 3 if enabled.)"                          \
+    "\n SW_TOUCH_LEFT: 8 (Touch sw LEFT.)"                                              \
+    "\n SW_TOUCH_RIGHT: 9 (Touch sw RIGHT.)"                                            \
+    "\n SW_TOUCH_MENU: 10 (Touch sw MENU.)"                                             \
+    "\n SW_TOUCH_RET: 11 (Touch sw RET.)"                                               \
     "\n EEPROM_READ_BAD_0: 13 (EEPROM bank 0 corrupt.)"                                 \
     "\n EEPROM_READ_BAD_1: 14 (EEPROM bank 1 corrupt.)"                                 \
     "\n WATCHDOG_RESTART: 15 (Device has restarted from a watchdog timeout.)"           \
