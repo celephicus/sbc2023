@@ -12,19 +12,25 @@ FLAGS [fmt=hex] "Various flags.
 	result of variouys conditions."
 - DC_LOW [bit=0] "External DC power volts low.
 	The DC volts suppliting power to the slave from the bus cable is low indicating a possible problem."
-- SLAVE_FAULT [bit=1] "Fault state of all _enabled_ slaves."
 - SW_TOUCH_LEFT [bit=4] "Touch sw LEFT."
 - SW_TOUCH_RIGHT [bit=5] "Touch sw RIGHT."
 - SW_TOUCH_MENU [bit=6] "Touch sw MENU."
 - SW_TOUCH_RET [bit=7] "Touch sw RET."
 - SENSOR_DUMP_ENABLE [bit=8] "Send SENSOR_UPDATE events during slew."
-- AWAKE [bit=9] "Controller awake"
-- ABORT_REQ [bit=10] "Abort running command."
 - EEPROM_READ_BAD_0 [bit=13] "EEPROM bank 0 corrupt.
 	EEPROM bank 0 corrupt. If bank 1 is corrupt too then a default set of values has been written. Flag written at startup only."
 - EEPROM_READ_BAD_1 [bit=14] "EEPROM bank 1 corrupt.
 	EEPROM bank 1 corrupt. If bank 0 is corrupt too then a default set of values has been written. Flag written at startup only."
 - WATCHDOG_RESTART [bit=15] "Device has restarted from a watchdog timeout."
+FAULT_FLAGS [fmt=hex] "Flags used by command processor to check for faults.
+	Set implies fault, so all clear is OK. Also convenient for masks to select specific flags."
+- NOT_AWAKE [bit=0] "Controller not awake"
+- ABORT_REQ [bit=1] "Abort running command."
+- SENSOR_0 [bit=4] "Any fault on Sensor 0 if enabled."
+- SENSOR_1 [bit=5] "Any fault on Sensor 1 if enabled."
+- SENSOR_2 [bit=6] "Any fault on Sensor 2 if enabled."
+- SENSOR_3 [bit=7] "Any fault on Sensor 3 if enabled."
+- RELAY [bit=8] "Any fault on Relay."
 RESTART [fmt=hex] "MCUSR in low byte, wdog in high byte.
 	The processor MCUSR register is copied into the low byte. The watchdog reset source is copied to the high byte. For details
 	refer to devWatchdogInit()."
