@@ -13,7 +13,7 @@ FLAGS [fmt=hex] "Various flags.
 - DC_LOW [bit=0] "External DC power volts low.
 	The DC volts supplying power to the slave from the bus cable is low indicating a possible problem."
 - FAULT_NOT_AWAKE [bit=1] "Controller not awake"
-- SLEW_TIMEOUT [bit=2] "Total time on slew axes has timed out."
+- FAULT_SLEW_TIMEOUT [bit=2] "Total time on slew axes has timed out."
 - FAULT_RELAY [bit=3] "Any fault on Relay."
 - FAULT_SENSOR_0 [bit=4] "Any fault on Sensor 0 if enabled."
 - FAULT_SENSOR_1 [bit=5] "Any fault on Sensor 1 if enabled."
@@ -138,7 +138,7 @@ enum {
 enum {
     	REGS_FLAGS_MASK_DC_LOW = (int)0x1,
     	REGS_FLAGS_MASK_FAULT_NOT_AWAKE = (int)0x2,
-    	REGS_FLAGS_MASK_SLEW_TIMEOUT = (int)0x4,
+    	REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT = (int)0x4,
     	REGS_FLAGS_MASK_FAULT_RELAY = (int)0x8,
     	REGS_FLAGS_MASK_FAULT_SENSOR_0 = (int)0x10,
     	REGS_FLAGS_MASK_FAULT_SENSOR_1 = (int)0x20,
@@ -284,7 +284,7 @@ enum {
     "\nFlags:"                                                                          \
     "\n DC_LOW: 0 (External DC power volts low.)"                                       \
     "\n FAULT_NOT_AWAKE: 1 (Controller not awake.)"                                     \
-    "\n SLEW_TIMEOUT: 2 (Total time on slew axes has timed out.)"                       \
+    "\n FAULT_SLEW_TIMEOUT: 2 (Total time on slew axes has timed out.)"                 \
     "\n FAULT_RELAY: 3 (Any fault on Relay.)"                                           \
     "\n FAULT_SENSOR_0: 4 (Any fault on Sensor 0 if enabled.)"                          \
     "\n FAULT_SENSOR_1: 5 (Any fault on Sensor 1 if enabled.)"                          \
