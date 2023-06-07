@@ -23,6 +23,7 @@ FLAGS [fmt=hex] "Various flags.
 - SW_TOUCH_RIGHT [bit=9] "Touch sw RIGHT."
 - SW_TOUCH_MENU [bit=10] "Touch sw MENU."
 - SW_TOUCH_RET [bit=11] "Touch sw RET."
+- FAULT_APP_BUSY [bit=12] "App is busy running a pending command."
 - EEPROM_READ_BAD_0 [bit=13] "EEPROM bank 0 corrupt.
 	EEPROM bank 0 corrupt. If bank 1 is corrupt too then a default set of values has been written. Flag written at startup only."
 - EEPROM_READ_BAD_1 [bit=14] "EEPROM bank 1 corrupt.
@@ -147,6 +148,7 @@ enum {
     	REGS_FLAGS_MASK_SW_TOUCH_RIGHT = (int)0x200,
     	REGS_FLAGS_MASK_SW_TOUCH_MENU = (int)0x400,
     	REGS_FLAGS_MASK_SW_TOUCH_RET = (int)0x800,
+    	REGS_FLAGS_MASK_FAULT_APP_BUSY = (int)0x1000,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_0 = (int)0x2000,
     	REGS_FLAGS_MASK_EEPROM_READ_BAD_1 = (int)0x4000,
     	REGS_FLAGS_MASK_WATCHDOG_RESTART = (int)0x8000,
@@ -292,6 +294,7 @@ enum {
     "\n SW_TOUCH_RIGHT: 9 (Touch sw RIGHT.)"                                            \
     "\n SW_TOUCH_MENU: 10 (Touch sw MENU.)"                                             \
     "\n SW_TOUCH_RET: 11 (Touch sw RET.)"                                               \
+    "\n FAULT_APP_BUSY: 12 (App is busy running a pending command.)"                    \
     "\n EEPROM_READ_BAD_0: 13 (EEPROM bank 0 corrupt.)"                                 \
     "\n EEPROM_READ_BAD_1: 14 (EEPROM bank 1 corrupt.)"                                 \
     "\n WATCHDOG_RESTART: 15 (Device has restarted from a watchdog timeout.)"           \

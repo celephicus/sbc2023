@@ -1,6 +1,8 @@
 #ifndef DRIVER_H__
 #define DRIVER_H__
 
+#include "modbus.h"
+
 // Call first off to initialise the driver.
 void driverInit();
 
@@ -9,6 +11,14 @@ void driverService();
 
 // Get pointer to event tracemask, array of size EVENT_TRACE_MASK_SIZE. This function must be declared and memory assigned.
 uint8_t* eventGetTraceMask();
+
+// Stuff for debugging timing for MODBUS and other stuff.
+enum {
+	TIMING_DEBUG_EVENT_QUERY_SCHEDULE_START = MODBUS_TIMING_DEBUG_EVENTS_COUNT,
+	TIMING_DEBUG_EVENT_APP_WORKER_JOG,
+	TIMING_DEBUG_EVENT_SPARE,
+};
+void driverTimingDebug(uint8_t id, uint8_t s);
 
 // Special for controller to read/write position presets. There are DRIVER_BED_POS_PRESET_COUNT sets of presets. Each preset has CFG_TILT_SENSOR_COUNT items.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD

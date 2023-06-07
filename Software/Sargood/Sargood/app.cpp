@@ -56,7 +56,7 @@ enum {
 	AXIS_DIR_DOWN = 2,
 	AXIS_DIR_UP = 1,
 };
-/*
+
 static void axis_set_drive(uint8_t axis, uint8_t dir) {
 	regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK << (axis*2), dir << (axis*2));
 	eventPublish(EV_RELAY_WRITE, REGS[REGS_IDX_RELAY_STATE]);
@@ -71,7 +71,7 @@ static int8_t axis_get_active() {
 	if ((uint8_t)REGS[REGS_IDX_RELAY_STATE] & RELAY_TILT_MASK) return AXIS_TILT;
 	return -1;
 }
-*/
+
 static void axis_stop_all() {
 	REGS[REGS_IDX_RELAY_STATE] = 0U;
 	eventPublish(EV_RELAY_WRITE, REGS[REGS_IDX_RELAY_STATE]);
@@ -101,12 +101,40 @@ static uint8_t app_timer_service() {
 static void app_timer_start(uint8_t idx, uint16_t ticks) { f_timers[idx] = ticks; }
 static constexpr uint16_t TICKS_PER_SEC = 10U;
 
+// Generic timers.
+// TODO: Move to library.
+static bool timer_is_active(const uint16_t* then) {	// Check if timer is running, might be useful to check if a timer is still running.
+	return (*then != (uint16_t)0U);
+}
+static void timer_start(uint16_t now, uint16_t* then) { 	// Start timer, note extends period by 1 if necessary to make timer flag as active.
+	*then = now;
+	if (!timer_is_active(then))
+		*then -= 1;
+}
+static void timer_stop(uint16_t* then) { 	// Stop timer, it is now inactive and timer_is_timeout() will never return true;
+	*then = (uint16_t)0U;
+}
+static bool timer_is_timeout(uint16_t now, uint16_t* then, uint16_t duration) { // Check for timeout and return true if so, then timer will be inactive.
+	if (
+	  timer_is_active(then) &&	// No timeout unless set.
+	  (now - *then > duration)
+	) {
+		timer_stop(then);
+		return true;
+	}
+	return false;
+}
+
 // Keep state in struct for easy viewing in debugger.
 static struct {
-	//thread_control_t tcb_cmd;
+	// thread_control_t tcb_cmd;
 	thread_control_t tcb_rs232_cmd;
 	uint8_t cmd_req;
 	uint8_t save_preset_attempts, save_cmd;
+	uint16_t fault_mask;
+	uint16_t timer;
+	bool reset;
+	bool extend_jog;
 } f_app_ctx;
 
 // Do the needful to wake the app.
@@ -119,24 +147,21 @@ static void do_wakeup() {
 }
 
 // Accessors for state.
-static inline uint8_t get_current_cmd() { return REGS[REGS_IDX_CMD_ACTIVE]; }
 static inline bool is_awake() { return !(regsFlags() & REGS_FLAGS_MASK_FAULT_NOT_AWAKE); }
-static inline bool is_idle() { return (APP_CMD_IDLE == get_current_cmd()); }
+static inline bool is_idle() { return (APP_CMD_IDLE == REGS[REGS_IDX_CMD_ACTIVE]); }
 
-/* Start a command. Must be idle to start a command, to restart a jog command stop then start, this sends the correct events.
-	Command processor runs if current command is not IDLE. */
-static uint8_t cmd_start(uint8_t cmd, uint8_t status) {
-	ASSERT(is_idle());
+// Set end status of a PENDING command from worker thread.
+static void cmd_done(uint16_t status) {
+	ASSERT(!is_idle());
+	ASSERT(regsFlags() & REGS_FLAGS_MASK_FAULT_APP_BUSY);
+	ASSERT(APP_CMD_STATUS_PENDING != status);
 
-	REGS[REGS_IDX_CMD_STATUS] = status;
-	eventPublish(EV_COMMAND_START, cmd, status);
-	if (APP_CMD_STATUS_PENDING == status)
-		REGS[REGS_IDX_CMD_ACTIVE] = cmd;
-	else
-		eventPublish(EV_COMMAND_DONE, cmd, status);
-	return status;
+	eventPublish(EV_COMMAND_DONE, REGS[REGS_IDX_CMD_ACTIVE], status);
+	REGS[REGS_IDX_CMD_ACTIVE] = APP_CMD_IDLE;
+	axis_stop_all();
+	regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_APP_BUSY, false);
 }
-
+	
 // Logic is first save command starts timer, sets count to 1, but returns fail. Subsequent commands increment count if no timeout, does action when count == 3.
 static bool check_can_save(uint8_t cmd) {
 	if ((!app_timer_is_active(APP_TIMER_SAVE)) || (f_app_ctx.save_cmd != cmd)) {
@@ -157,13 +182,6 @@ typedef struct {
 	cmd_handler_func cmd_handler;
 } CmdHandlerDef;
 
-// Some aliases for the flags.
-static constexpr uint16_t F_NOWAKE = REGS_FLAGS_MASK_FAULT_NOT_AWAKE;
-static constexpr uint16_t F_RELAY = REGS_FLAGS_MASK_FAULT_RELAY;
-static constexpr uint16_t F_SENSOR_ALL = FLAGS_MASK_SENSORS_ALL;
-static constexpr uint16_t F_SENSOR_0 = REGS_FLAGS_MASK_FAULT_SENSOR_0;
-static constexpr uint16_t F_SENSOR_1 = REGS_FLAGS_MASK_FAULT_SENSOR_1;
-
 // Command handlers. These either _do_ the command action, or set it to be performed asynchronously by the worker thread.
 
 static uint8_t handle_wakeup(uint8_t cmd) {
@@ -181,12 +199,46 @@ static uint8_t handle_stop(uint8_t cmd) {
 	else
 		return APP_CMD_STATUS_OK;				// Start command as non-pending, returns OK.
 }
+
+// We know which way we are moving, which gives the limit to check against, one of DRIVER_AXIS_LIMIT_IDX_LOWER, DRIVER_AXIS_LIMIT_IDX_UPPER.
+bool check_axis_within_limit(uint8_t axis_idx, uint8_t limit_idx) {
+	const int16_t limit = driverAxisLimitGet(axis_idx, limit_idx);
+	if (SBC2022_MODBUS_TILT_FAULT == limit)		// Either no limit possible on this axis or no limit set.
+		return true;
+
+	return (DRIVER_AXIS_LIMIT_IDX_LOWER == limit_idx) ?
+	((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx] > (limit + (int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND])) :
+	((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx] < (limit - (int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]));
+}
 static uint8_t handle_jog(uint8_t cmd) {
+	if (!is_idle()) {
+		if (REGS[REGS_IDX_CMD_ACTIVE] == cmd) { 	// Extend time if the same command is running.
+			f_app_ctx.extend_jog = true;
+			return APP_CMD_STATUS_OK_DURING_PENDING;
+		}	
+		else
+			return APP_CMD_STATUS_BUSY;
+	}
+
 	do_wakeup();
-	return APP_CMD_STATUS_PENDING;						// Start command as pending.
+
+	switch(cmd) {
+	case APP_CMD_JOG_HEAD_UP:	if (check_axis_within_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_UPPER)) { axis_set_drive(AXIS_HEAD, AXIS_DIR_UP);   return APP_CMD_STATUS_PENDING; } else return APP_CMD_STATUS_MOTION_LIMIT; 
+	case APP_CMD_JOG_HEAD_DOWN:	if (check_axis_within_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_LOWER)) { axis_set_drive(AXIS_HEAD, AXIS_DIR_DOWN); return APP_CMD_STATUS_PENDING; } else return APP_CMD_STATUS_MOTION_LIMIT;
+	case APP_CMD_JOG_LEG_UP:	if (check_axis_within_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_UPPER)) { axis_set_drive(AXIS_FOOT, AXIS_DIR_UP);   return APP_CMD_STATUS_PENDING; } else return APP_CMD_STATUS_MOTION_LIMIT;
+	case APP_CMD_JOG_LEG_DOWN:	if (check_axis_within_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_LOWER)) { axis_set_drive(AXIS_FOOT, AXIS_DIR_DOWN); return APP_CMD_STATUS_PENDING; } else return APP_CMD_STATUS_MOTION_LIMIT; 
+	// TODO: As above, so below.
+	case APP_CMD_JOG_BED_UP:	axis_set_drive(AXIS_BED, AXIS_DIR_UP);		return APP_CMD_STATUS_PENDING; 
+	case APP_CMD_JOG_BED_DOWN:	axis_set_drive(AXIS_BED, AXIS_DIR_DOWN);	return APP_CMD_STATUS_PENDING; 
+	case APP_CMD_JOG_TILT_UP:	axis_set_drive(AXIS_TILT, AXIS_DIR_UP);		return APP_CMD_STATUS_PENDING; 
+	case APP_CMD_JOG_TILT_DOWN:	axis_set_drive(AXIS_TILT, AXIS_DIR_DOWN);	return APP_CMD_STATUS_PENDING; 
+	}
+	return APP_CMD_STATUS_ERROR_UNKNOWN;
 }
 
 static uint8_t handle_preset_save(uint8_t cmd) {
+	if (!is_idle()) 
+		return APP_CMD_STATUS_BUSY;
 	if (!check_can_save(cmd))
 		return APP_CMD_STATUS_SAVE_FAIL;	// Return fail status.
 
@@ -198,6 +250,8 @@ static uint8_t handle_preset_save(uint8_t cmd) {
 }
 
 static uint8_t handle_clear_limits(uint8_t cmd) {
+	if (!is_idle()) 
+		return APP_CMD_STATUS_BUSY;
 	if (!check_can_save(cmd))
 		return APP_CMD_STATUS_SAVE_FAIL;	// Return fail status.
 
@@ -207,6 +261,8 @@ static uint8_t handle_clear_limits(uint8_t cmd) {
 }
 
 uint8_t do_save_axis_limit(uint8_t cmd, uint8_t axis_idx, uint8_t limit_idx) {
+	if (!is_idle()) 
+		return APP_CMD_STATUS_BUSY;
 	if (!check_can_save(cmd))
 		return APP_CMD_STATUS_SAVE_FAIL;
 
@@ -216,6 +272,8 @@ uint8_t do_save_axis_limit(uint8_t cmd, uint8_t axis_idx, uint8_t limit_idx) {
 	return APP_CMD_STATUS_OK;
 }
 static uint8_t handle_limits_save(uint8_t cmd) {
+	if (!is_idle()) 
+		return APP_CMD_STATUS_BUSY;
 	if (!check_can_save(cmd))
 		return APP_CMD_STATUS_SAVE_FAIL;	// Return fail status.
 
@@ -230,40 +288,51 @@ static uint8_t handle_limits_save(uint8_t cmd) {
 }
 
 static uint8_t handle_preset_move(uint8_t cmd) {
+	if (!is_idle()) 
+		return APP_CMD_STATUS_BUSY;
 	do_wakeup();
 	const uint8_t preset_idx = cmd - APP_CMD_POS_SAVE_1;
 	fori (CFG_TILT_SENSOR_COUNT) {
 		if (driverSensorIsEnabled(i) && (SBC2022_MODBUS_TILT_FAULT == driverPresets(preset_idx)[i]))
 			return APP_CMD_STATUS_PRESET_INVALID;
 	}
-
+	
+	app_timer_start(APP_TIMER_SLEW, REGS[REGS_IDX_SLEW_TIMEOUT]*10U);
 	return APP_CMD_STATUS_PENDING;						// Start command as pending.
 }
 
+// Some aliases for the flags.
+static constexpr uint16_t F_NOWAKE = REGS_FLAGS_MASK_FAULT_NOT_AWAKE;
+static constexpr uint16_t F_RELAY = REGS_FLAGS_MASK_FAULT_RELAY;
+static constexpr uint16_t F_SENSOR_ALL = FLAGS_MASK_SENSORS_ALL;
+static constexpr uint16_t F_SENSOR_0 = REGS_FLAGS_MASK_FAULT_SENSOR_0;
+static constexpr uint16_t F_SENSOR_1 = REGS_FLAGS_MASK_FAULT_SENSOR_1;
+static constexpr uint16_t F_BUSY = REGS_FLAGS_MASK_FAULT_APP_BUSY;
+
 static const CmdHandlerDef CMD_HANDLERS[] PROGMEM = {
-	{ APP_CMD_WAKEUP, 				0U, 							handle_wakeup, },
-	{ APP_CMD_STOP, 				0U, 							handle_stop, },
-	{ APP_CMD_JOG_HEAD_UP, 			F_NOWAKE|F_RELAY, 				handle_jog, },
-	{ APP_CMD_JOG_HEAD_DOWN, 			F_NOWAKE|F_RELAY, 				handle_jog, },
-	{ APP_CMD_JOG_LEG_UP, 			F_NOWAKE|F_RELAY, 				handle_jog, },
-	{ APP_CMD_JOG_LEG_DOWN, 			F_NOWAKE|F_RELAY, 				handle_jog, },
-	{ APP_CMD_JOG_BED_UP, 			F_NOWAKE|F_RELAY, 				handle_jog, },
-	{ APP_CMD_JOG_BED_DOWN, 			F_NOWAKE|F_RELAY, 				handle_jog, },
-	{ APP_CMD_JOG_TILT_UP, 				F_NOWAKE|F_RELAY, 				handle_jog, },
-	{ APP_CMD_JOG_TILT_DOWN, 				F_NOWAKE|F_RELAY, 				handle_jog, },
-	{ APP_CMD_POS_SAVE_1,			F_NOWAKE|F_SENSOR_ALL, 			handle_preset_save, },
-	{ APP_CMD_POS_SAVE_2,			F_NOWAKE|F_SENSOR_ALL,			handle_preset_save, },
-	{ APP_CMD_POS_SAVE_3,			F_NOWAKE|F_SENSOR_ALL,			handle_preset_save, },
-	{ APP_CMD_POS_SAVE_4,			F_NOWAKE|F_SENSOR_ALL,			handle_preset_save, },
-	{ APP_CMD_LIMIT_CLEAR_ALL,		F_NOWAKE,				handle_clear_limits, },
-	{ APP_CMD_LIMIT_SAVE_HEAD_DOWN,	F_NOWAKE|F_SENSOR_0,			handle_limits_save, },
-	{ APP_CMD_LIMIT_SAVE_HEAD_UP,	F_NOWAKE|F_SENSOR_0,			handle_limits_save, },
-	{ APP_CMD_LIMIT_SAVE_FOOT_DOWN,	F_NOWAKE|F_SENSOR_1,			handle_limits_save, },
-	{ APP_CMD_LIMIT_SAVE_FOOT_UP,	F_NOWAKE|F_SENSOR_1,			handle_limits_save, },
-	{ APP_CMD_RESTORE_POS_1,		F_NOWAKE|F_RELAY|F_SENSOR_ALL,	handle_preset_move, },
-	{ APP_CMD_RESTORE_POS_2,		F_NOWAKE|F_RELAY|F_SENSOR_ALL,	handle_preset_move, },
-	{ APP_CMD_RESTORE_POS_3,		F_NOWAKE|F_RELAY|F_SENSOR_ALL,	handle_preset_move, },
-	{ APP_CMD_RESTORE_POS_4,		F_NOWAKE|F_RELAY|F_SENSOR_ALL,	handle_preset_move, },
+	{ APP_CMD_WAKEUP, 				0U, 									handle_wakeup, },
+	{ APP_CMD_STOP, 				0U, 									handle_stop, },
+	{ APP_CMD_JOG_HEAD_UP, 			F_NOWAKE|F_RELAY, 						handle_jog, },
+	{ APP_CMD_JOG_HEAD_DOWN, 		F_NOWAKE|F_RELAY, 						handle_jog, },
+	{ APP_CMD_JOG_LEG_UP, 			F_NOWAKE|F_RELAY, 						handle_jog, },
+	{ APP_CMD_JOG_LEG_DOWN, 		F_NOWAKE|F_RELAY, 						handle_jog, },
+	{ APP_CMD_JOG_BED_UP, 			F_NOWAKE|F_RELAY, 						handle_jog, },
+	{ APP_CMD_JOG_BED_DOWN, 		F_NOWAKE|F_RELAY, 						handle_jog, },
+	{ APP_CMD_JOG_TILT_UP, 			F_NOWAKE|F_RELAY, 						handle_jog, },
+	{ APP_CMD_JOG_TILT_DOWN, 		F_NOWAKE|F_RELAY, 						handle_jog, },
+	{ APP_CMD_POS_SAVE_1,			F_NOWAKE|F_BUSY|F_SENSOR_ALL, 			handle_preset_save, },
+	{ APP_CMD_POS_SAVE_2,			F_NOWAKE|F_BUSY|F_SENSOR_ALL,			handle_preset_save, },
+	{ APP_CMD_POS_SAVE_3,			F_NOWAKE|F_BUSY|F_SENSOR_ALL,			handle_preset_save, },
+	{ APP_CMD_POS_SAVE_4,			F_NOWAKE|F_BUSY|F_SENSOR_ALL,			handle_preset_save, },
+	{ APP_CMD_LIMIT_CLEAR_ALL,		F_NOWAKE|F_BUSY,						handle_clear_limits, },
+	{ APP_CMD_LIMIT_SAVE_HEAD_DOWN,	F_NOWAKE|F_BUSY|F_SENSOR_0,				handle_limits_save, },
+	{ APP_CMD_LIMIT_SAVE_HEAD_UP,	F_NOWAKE|F_BUSY|F_SENSOR_0,				handle_limits_save, },
+	{ APP_CMD_LIMIT_SAVE_FOOT_DOWN,	F_NOWAKE|F_BUSY|F_SENSOR_1,				handle_limits_save, },
+	{ APP_CMD_LIMIT_SAVE_FOOT_UP,	F_NOWAKE|F_BUSY|F_SENSOR_1,				handle_limits_save, },
+	{ APP_CMD_RESTORE_POS_1,		F_NOWAKE|F_BUSY|F_RELAY|F_SENSOR_ALL,	handle_preset_move, },
+	{ APP_CMD_RESTORE_POS_2,		F_NOWAKE|F_BUSY|F_RELAY|F_SENSOR_ALL,	handle_preset_move, },
+	{ APP_CMD_RESTORE_POS_3,		F_NOWAKE|F_BUSY|F_RELAY|F_SENSOR_ALL,	handle_preset_move, },
+	{ APP_CMD_RESTORE_POS_4,		F_NOWAKE|F_BUSY|F_RELAY|F_SENSOR_ALL,	handle_preset_move, },
 };
 
 static int cmd_handlers_list_compare(const void* k, const void* elem) {
@@ -274,126 +343,120 @@ static const CmdHandlerDef* search_cmd_handler(uint8_t app_cmd) {
 	return reinterpret_cast<const CmdHandlerDef*>(bsearch(reinterpret_cast<const void*>(app_cmd), CMD_HANDLERS, UTILS_ELEMENT_COUNT(CMD_HANDLERS), sizeof(CmdHandlerDef), cmd_handlers_list_compare));
 }
 
+static uint8_t check_fault_mask() {
+	const uint16_t faults = regsFlags() & f_app_ctx.fault_mask;
+	if (faults) {
+		if (faults & F_NOWAKE)		return APP_CMD_STATUS_NOT_AWAKE;
+		if (faults & F_BUSY)		return APP_CMD_STATUS_BUSY;
+		if (faults & F_RELAY)		return APP_CMD_STATUS_RELAY_FAIL;
+		if (faults & F_SENSOR_0)	return APP_CMD_STATUS_SENSOR_FAIL_0;
+		if (faults & F_SENSOR_1)	return APP_CMD_STATUS_SENSOR_FAIL_1;
+		else						return APP_CMD_STATUS_ERROR_UNKNOWN;
+	}
+	return APP_CMD_STATUS_OK;
+}
+
+// Notify that a command was run. Must be idle to run a command. Note behaviour is different if command is pending. 
+// TODO: Fix duplicated code with a shared helper function. 
+static uint8_t cmd_start(uint8_t cmd, uint8_t status) {
+	REGS[REGS_IDX_CMD_STATUS] = status;		// Set status to registers, so it can be read by the console.
+	eventPublish(EV_COMMAND_START, cmd, status);
+	if (APP_CMD_STATUS_PENDING != status) 
+		eventPublish(EV_COMMAND_DONE, cmd, status);
+	return status;
+}
 uint8_t appCmdRun(uint8_t cmd) {
-	const CmdHandlerDef* cmd_def = search_cmd_handler(cmd);
+	const CmdHandlerDef* cmd_def = search_cmd_handler(cmd);		// Get a def object for this command.
 
 	if (NULL == cmd_def)		// Not found.
 		return cmd_start(cmd, APP_CMD_STATUS_BAD_CMD);
 
-	const uint16_t fault_mask = pgm_read_word(&cmd_def->fault_mask);
-	if ((fault_mask & F_NOWAKE) && (!is_idle()))	// All commands that require to be awake _also_ require app to be idle.
-		return cmd_start(cmd, APP_CMD_STATUS_BUSY);
+	// Check fault flags for command and return fail status if any are set. 
+	f_app_ctx.fault_mask = pgm_read_word(&cmd_def->fault_mask);
+	uint8_t fault_status = check_fault_mask();
+	if (APP_CMD_STATUS_OK != fault_status)
+		return cmd_start(cmd, fault_status);
 
-	const uint16_t faults = regsFlags() & fault_mask &
-	  (REGS_FLAGS_MASK_FAULT_NOT_AWAKE|REGS_FLAGS_MASK_FAULT_RELAY|FLAGS_MASK_SENSORS_ALL);
-	if (faults) {
-		if (faults & REGS_FLAGS_MASK_FAULT_NOT_AWAKE)	return cmd_start(cmd, APP_CMD_STATUS_NOT_AWAKE);
-		if (faults & REGS_FLAGS_MASK_FAULT_RELAY)		return cmd_start(cmd, APP_CMD_STATUS_RELAY_FAIL);
-		if (faults & REGS_FLAGS_MASK_FAULT_SENSOR_0)	return cmd_start(cmd, APP_CMD_STATUS_SENSOR_FAIL_0);
-		if (faults & REGS_FLAGS_MASK_FAULT_SENSOR_1)	return cmd_start(cmd, APP_CMD_STATUS_SENSOR_FAIL_1);
-		else											return cmd_start(cmd, APP_CMD_STATUS_ERROR_UNKNOWN);
-	}
-
+	// Run the handler. This will check all sorts of things, maybe do the command, or do some setup for a pending command, and then return a status code. 
 	const cmd_handler_func cmd_handler = reinterpret_cast<cmd_handler_func>(pgm_read_ptr(&cmd_def->cmd_handler));
-	return cmd_start(cmd, cmd_handler(cmd));
-}
-/*
-static void cmd_done(uint16_t status=APP_CMD_STATUS_OK) {
-	ASSERT((APP_CMD_STATUS_PENDING == REGS[REGS_IDX_CMD_STATUS]) && (APP_CMD_IDLE != REGS[REGS_IDX_CMD_ACTIVE]));
+	const uint8_t status = cmd_handler(cmd);
 
-	uint8_t cmd = REGS[REGS_IDX_CMD_ACTIVE];
-	REGS[REGS_IDX_CMD_ACTIVE] = APP_CMD_IDLE;
-	REGS[REGS_IDX_CMD_STATUS] = status;
-	eventPublish(EV_COMMAND_DONE, cmd, status);
-	if (APP_CMD_STATUS_OK == status)		// Successful commands restart wake period.
-		do_wakeup();
-}
-*/
-#if 0
-static bool check_slew_timeout() {
-	if (!app_timer_is_active(APP_TIMER_SLEW)) {
-		cmd_done(APP_CMD_STATUS_SLEW_TIMEOUT);
-		return true;
-	}
-	return false;
-}
-
-// We know which way we are moving, which gives the limit to check against, one of DRIVER_AXIS_LIMIT_IDX_LOWER, DRIVER_AXIS_LIMIT_IDX_UPPER.
-bool check_axis_within_limit(uint8_t axis_idx, uint8_t limit_idx) {
-	const int16_t limit = driverAxisLimitGet(axis_idx, limit_idx);
-	if (SBC2022_MODBUS_TILT_FAULT == limit)		// Either no limit possible on this axis or no limit set.
-		return true;
-
-	return (DRIVER_AXIS_LIMIT_IDX_LOWER == limit_idx) ?
-	  ((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx] > (limit + (int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND])) :
-	  ((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx] < (limit - (int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]));
-}
-
-static int8_t thread_cmd(void* arg) {
-	(void)arg;
-	static uint8_t preset_idx;
-
-	const bool avail = driverSensorUpdateAvailable();	// Check for new sensor data every time thread is run.
-	if (avail && (regsFlags() & REGS_FLAGS_MASK_SENSOR_DUMP_ENABLE)) {
-		fori(CFG_TILT_SENSOR_COUNT) {
-			if (driverSensorIsEnabled(i))
-				eventPublish(EV_SENSOR_UPDATE, i, REGS[REGS_IDX_TILT_SENSOR_0 + i]);
-		}
+	// Do some setup for worker.
+	if (APP_CMD_STATUS_PENDING == status) {
+		REGS[REGS_IDX_CMD_ACTIVE] = cmd;
+		f_app_ctx.reset = true;
+		regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_APP_BUSY, true);
 	}
 
-	THREAD_BEGIN();
-	while (1) {
-		if (APP_CMD_IDLE == REGS[REGS_IDX_CMD_ACTIVE]) 		// If idle, load new command.
-			load_command();			// Most likely still idle.
+	return cmd_start(cmd, status);
+}
 
-		switch (REGS[REGS_IDX_CMD_ACTIVE]) {
+static void service_worker() {
+	// Exit early if no new data yet.
+	if (!driverSensorUpdateAvailable())
+		return;
+		
+	// If no pending command exit, as there is nothing to do,
+	if (APP_CMD_IDLE == REGS[REGS_IDX_CMD_ACTIVE])
+		return;
 
-		// Timed motion commands
-		case APP_CMD_JOG_HEAD_UP:	if (check_not_awake()) break; if (check_axis_within_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_UPPER)) { axis_set_drive(AXIS_HEAD, AXIS_DIR_UP);	goto do_manual; } else { cmd_done(APP_CMD_STATUS_MOTION_LIMIT); break; }
-		case APP_CMD_JOG_HEAD_DOWN:	if (check_not_awake()) break; if (check_axis_within_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_LOWER)) { axis_set_drive(AXIS_HEAD, AXIS_DIR_DOWN);	goto do_manual; } else { cmd_done(APP_CMD_STATUS_MOTION_LIMIT); break; }
-		case APP_CMD_JOG_LEG_UP:	if (check_not_awake()) break; if (check_axis_within_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_UPPER)) { axis_set_drive(AXIS_FOOT, AXIS_DIR_UP);	goto do_manual; } else { cmd_done(APP_CMD_STATUS_MOTION_LIMIT); break; }
-		case APP_CMD_JOG_LEG_DOWN:	if (check_not_awake()) break; if (check_axis_within_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_LOWER)) { axis_set_drive(AXIS_FOOT, AXIS_DIR_DOWN);	goto do_manual; } else { cmd_done(APP_CMD_STATUS_MOTION_LIMIT); break; }
-		// TODO: As above, so below.
-		case APP_CMD_JOG_BED_UP:	if (check_not_awake()) break; axis_set_drive(AXIS_BED, AXIS_DIR_UP);	goto do_manual;
-		case APP_CMD_JOG_BED_DOWN:	if (check_not_awake()) break; axis_set_drive(AXIS_BED, AXIS_DIR_DOWN);	goto do_manual;
-		case APP_CMD_JOG_TILT_UP:	if (check_not_awake()) break; axis_set_drive(AXIS_TILT, AXIS_DIR_UP);	goto do_manual;
-		case APP_CMD_JOG_TILT_DOWN:	if (check_not_awake()) break; axis_set_drive(AXIS_TILT, AXIS_DIR_DOWN);	goto do_manual;
+	// Check for various fault states and abort command.
+	const uint8_t fault_status = check_fault_mask();
+	if (APP_CMD_STATUS_OK != fault_status)
+		return cmd_done(fault_status);
 
-do_manual:	THREAD_START_DELAY();
+	switch (REGS[REGS_IDX_CMD_ACTIVE]) {
+			
+		// Jog commands...
+		case APP_CMD_JOG_HEAD_UP:
+		case APP_CMD_JOG_HEAD_DOWN:
+		case APP_CMD_JOG_LEG_UP:
+		case APP_CMD_JOG_LEG_DOWN:
+		case APP_CMD_JOG_BED_UP:
+		case APP_CMD_JOG_BED_DOWN:
+		case APP_CMD_JOG_TILT_UP:
+		case APP_CMD_JOG_TILT_DOWN: {
+			driverTimingDebug(TIMING_DEBUG_EVENT_APP_WORKER_JOG, true);
+		
+			if (f_app_ctx.reset) {
+				f_app_ctx.reset = false;
+				timer_start((uint16_t)millis(), &f_app_ctx.timer);
+				f_app_ctx.extend_jog = false;
+			}
+		
+			// Restart timer on timeout if we have another request.
+			if (timer_is_timeout((uint16_t)millis(), &f_app_ctx.timer, REGS[REGS_IDX_JOG_DURATION_MS])) {
+				if (f_app_ctx.extend_jog) {				// Repeated jog commands just extend the jog duration.
+					timer_start((uint16_t)millis(), &f_app_ctx.timer);
+					f_app_ctx.extend_jog = false;
+				}
+			}
+
 			// TODO: Check for sensor faults on axes with limits?
-			while ((!check_relay()) && (!THREAD_IS_DELAY_DONE(REGS[REGS_IDX_JOG_DURATION_MS])) && (!check_stop_command())) {
+			if (timer_is_active(&f_app_ctx.timer)) {		// Just check if timer is running as we have already called timer_is_timeout() which returns true once only on timeout.
+				driverTimingDebug(TIMING_DEBUG_EVENT_SPARE, true);				
 				int8_t axis = axis_get_active();
-				if (axis < 0)
-					goto jog_done;
+				if (axis < 0)		// One axis should be running.
+					return cmd_done(APP_CMD_STATUS_ERROR_UNKNOWN);
 				if (axis_get_dir(axis) == AXIS_DIR_UP) { // Pitch increasing...
-					if (!check_axis_within_limit(axis, DRIVER_AXIS_LIMIT_IDX_UPPER)) {
-						cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
-						goto jog_done;
-					}
+					if (!check_axis_within_limit(axis, DRIVER_AXIS_LIMIT_IDX_UPPER)) 
+						return cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
 				}
 				else {
-					if (!check_axis_within_limit(axis, DRIVER_AXIS_LIMIT_IDX_LOWER)) {
-						cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
-						goto jog_done;
-					}
+					if (!check_axis_within_limit(axis, DRIVER_AXIS_LIMIT_IDX_LOWER)) 
+						return cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
 				}
-				THREAD_WAIT_UNTIL(avail);		// Wait for new reading.
-
-				THREAD_YIELD();
+				driverTimingDebug(TIMING_DEBUG_EVENT_SPARE, false);				
 			}
-			if (REGS[REGS_IDX_CMD_ACTIVE] == f_app_ctx.cmd_req) {	// If repeat of previous, restart timing. If not then active register will either have new command or idle.
-				cmd_done();
-				load_command();
-				goto do_manual;
-			}
+			else 
+				return cmd_done(APP_CMD_STATUS_OK);
+		}
+		break;
+		
+	}	// Closes `switch (REGS[REGS_IDX_CMD_ACTIVE]) {'
+}
 
-jog_done:	axis_stop_all();
-			THREAD_START_DELAY();
-			THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(RELAY_STOP_DURATION_MS));
-			cmd_done();
-			THREAD_YIELD();
-			break;
-
+#if 0
 		// Restore to saved position...
 		case APP_CMD_RESTORE_POS_1:
 		case APP_CMD_RESTORE_POS_2:
@@ -418,7 +481,6 @@ jog_done:	axis_stop_all();
 				if (!driverSensorIsEnabled(s_axis_idx))		// Do not do disabled axes.
 					continue;
 
-				app_timer_start(APP_TIMER_SLEW, REGS[REGS_IDX_SLEW_TIMEOUT]*10U);
 				while ((!check_sensors()) && (!check_relay()) && (!check_stop_command()) && (!check_slew_timeout()) && (!check_abort_flag())) {
 					// TODO: Verify sensor going offline can't lock up.
 					THREAD_WAIT_UNTIL(avail);		// Wait for new reading.
@@ -494,36 +556,10 @@ slew_abort:	if (REGS[REGS_IDX_RELAY_STATE] & (RELAY_HEAD_MASK|RELAY_FOOT_MASK)) 
 			cmd_done();
 			THREAD_YIELD();
 			} break;
-		}	// Closes `switch (REGS[REGS_IDX_CMD_ACTIVE]) {'
-	}	// Closes `while (1) '...
-	THREAD_END();
-}
 #endif
 
 // RS232 Remote Command
 //
-
-static bool timer_is_active(const uint16_t* then) {	// Check if timer is running, might be useful to check if a timer is still running.
-	return (*then != (uint16_t)0U);
-}
-static void timer_start(uint16_t now, uint16_t* then) { 	// Start timer, note extends period by 1 if necessary to make timere flag as active.
-	*then = now;
-	if (!timer_is_active(then))
-		*then = (uint16_t)-1;
-}
-static void timer_stop(uint16_t* then) { 	// Stop timer, it is now inactive and timer_is_timeout() will never return true;
-	*then = (uint16_t)0U;
-}
-static bool timer_is_timeout(uint16_t now, uint16_t* then, uint16_t duration) { // Check for timeout and return true if so, then timer will be inactive.
-	if (
-	  timer_is_active(then) &&	// No timeout unless set.
-	  (now - *then > duration)
-	) {
-		timer_stop(then);
-		return true;
-	}
-	return false;
-}
 
 static constexpr uint16_t RS232_CMD_TIMEOUT_MILLIS = 100U;
 static constexpr uint8_t  RS232_CMD_CHAR_COUNT = 4;
@@ -1116,7 +1152,7 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 
 void appInit() {
 	threadInit(&f_app_ctx.tcb_rs232_cmd);
-//	threadInit(&f_app_ctx.tcb_cmd);
+	//threadInit(&f_app_ctx.tcb_cmd);
 	eventInit();
 	lcd_init();
 	eventSmInit(sm_lcd, (EventSmContextBase*)&f_sm_lcd_ctx, 0);
@@ -1126,7 +1162,8 @@ void appInit() {
 
 void appService() {
 	threadRun(&f_app_ctx.tcb_rs232_cmd, thread_rs232_cmd, NULL);
-//	threadRun(&f_app_ctx.tcb_cmd, thread_cmd, NULL);
+	service_worker();
+	//threadRun(&f_app_ctx.tcb_cmd, thread_cmd, NULL);
 	t_event ev;
 
 	while (EV_NIL != (ev = eventGet())) {	// Read events until there are no more left.
@@ -1143,6 +1180,6 @@ void appService10hz() {
 	const uint8_t app_timer_timeouts = app_timer_service();
 	if (app_timer_timeouts & _BV(APP_TIMER_WAKEUP)) {
 		if (regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_NOT_AWAKE, true))
-			eventPublish(EV_WAKEUP, 0);
+		eventPublish(EV_WAKEUP, 0);
 	}
 }

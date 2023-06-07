@@ -5,22 +5,19 @@
 #include "utils.h"
 #include "regs.h"
 #include "dev.h"
-#include "modbus.h"
 #include "console.h"
 #include "driver.h"
 #include "sbc2022_modbus.h"
 FILENUM(2);
 
-// Stuff for debugging timing for MODBUS and other stuff.
-enum {
-	TIMING_DEBUG_EVENT_QUERY_SCHEDULE_START = MODBUS_TIMING_DEBUG_EVENTS_COUNT,
-};
-void modbus_timing_debug(uint8_t id, uint8_t s) {
+void driverTimingDebug(uint8_t id, uint8_t s) {
 	switch (id) {
 		case MODBUS_TIMING_DEBUG_EVENT_RX_FRAME:		gpioSp0Write(s); break;
 		case MODBUS_TIMING_DEBUG_EVENT_SERVICE: 		gpioSp1Write(s); break;
 		case MODBUS_TIMING_DEBUG_EVENT_INTERFRAME: 		gpioSp2Write(s); break;
 		case TIMING_DEBUG_EVENT_QUERY_SCHEDULE_START:	gpioSp3Write(s); break;
+		case TIMING_DEBUG_EVENT_APP_WORKER_JOG:			gpioSp4Write(s); break;
+		case TIMING_DEBUG_EVENT_SPARE:					gpioSp5Write(s); break;
 	}
 }
 
@@ -349,8 +346,6 @@ static int8_t thread_query_slaves(void* arg) {
 
 		// Read from all slaves...
 		for (slave_idx = 0; slave_idx < UTILS_ELEMENT_COUNT(SLAVES); slave_idx += 1) {
-			if (0 == slave_idx)
-				modbus_timing_debug(TIMING_DEBUG_EVENT_QUERY_SCHEDULE_START, true);
 			THREAD_START_DELAY();
 			const SlaveDef* const slave_def = &SLAVES[slave_idx];
 			const uint8_t slave_id = pgm_read_byte(&slave_def->modbus_id);
@@ -363,10 +358,10 @@ static int8_t thread_query_slaves(void* arg) {
 				modbusSend(req);
 			}
 			THREAD_WAIT_UNTIL(THREAD_IS_DELAY_DONE(SLAVE_QUERY_PERIOD));
-			modbus_timing_debug(TIMING_DEBUG_EVENT_QUERY_SCHEDULE_START, false);		// Width is length of 1 part of schedule.
 		}
 
 		// Should have all responses or timeouts by now so check all used and enabled slaves for fault state.
+		driverTimingDebug(TIMING_DEBUG_EVENT_QUERY_SCHEDULE_START, true);
 		fori (UTILS_ELEMENT_COUNT(SLAVES)) {
 			const SlaveDef* slave_def = &SLAVES[i];
 			const uint8_t idx = pgm_read_byte(&slave_def->idx);
@@ -382,6 +377,7 @@ static int8_t thread_query_slaves(void* arg) {
 
 		set_schedule_done();			// Flag new data available to command thread.
 		REGS[REGS_IDX_UPDATE_COUNT] += 1;
+		driverTimingDebug(TIMING_DEBUG_EVENT_QUERY_SCHEDULE_START, false);
 	}		// Closes `while (1) {'.
 	THREAD_END();
 }
@@ -495,7 +491,7 @@ static void modbus_init() {
 	}
 	REGS[REGS_IDX_RELAY_STATUS] = SBC2022_MODBUS_STATUS_SLAVE_NO_RESPONSE;
 #endif
-	modbusSetTimingDebugCb(modbus_timing_debug);
+	modbusSetTimingDebugCb(driverTimingDebug);
 	gpioSp0SetModeOutput();		// These are used by the RS485 debug cb.
 	gpioSp1SetModeOutput();
 	gpioSp2SetModeOutput();
