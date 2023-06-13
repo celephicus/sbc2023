@@ -6,7 +6,6 @@
 /* A Buffer is a simple wrapper for a byte buffer. It allows bytes to be added without always having to explicitly check for
 	overflow, but will not overwrite memory and can signal an overflow. It can also add memory blocks and two bytes.
  */
-
 class Buffer {
 	uint8_t m_size;
 	uint8_t* m_buf;
@@ -88,12 +87,13 @@ public:
 	void addU16_le(uint16_t x) { add(static_cast<uint8_t>(x)); add(static_cast<uint8_t>(x>>8)); }
 	void addU16_be(uint16_t x) { add(static_cast<uint8_t>(x>>8)); add(static_cast<uint8_t>(x)); }
 	uint16_t getU16_le(uint8_t idx) const {
-		return static_cast<uint16_t>(m_buf[idx]) | (static_cast<uint16_t>(m_buf[idx+1])<<8);
+		return static_cast<uint16_t>(get(idx)) | (static_cast<uint16_t>(get(idx+1))<<8);
 	}
 	uint16_t getU16_be(uint8_t idx) const {
-		return static_cast<uint16_t>(m_buf[idx+1]) | (static_cast<uint16_t>(m_buf[idx])<<8);
+		return static_cast<uint16_t>(get(idx+1)) | (static_cast<uint16_t>(get(idx))<<8);
 	}
 	operator const uint8_t*() const { return m_buf; }
+	uint8_t get(uint8_t idx) const { return m_buf[idx]; }
 };
 
 #if 0
