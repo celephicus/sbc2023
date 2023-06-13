@@ -2,10 +2,9 @@
 #define BUFFER_H__
 
 #include <string.h>
-#include "utils.h" 			// Endianness conversion funcs.
 
 /* A Buffer is a simple wrapper for a byte buffer. It allows bytes to be added without always having to explicitly check for
-	overflow, but will not oveerwrite memory and can signal an overflow. It can also add memory blocks and two bytes.
+	overflow, but will not overwrite memory and can signal an overflow. It can also add memory blocks and two bytes.
  */
 
 class Buffer {
@@ -13,6 +12,7 @@ class Buffer {
 	uint8_t* m_buf;
 	uint8_t* m_p;
 	bool m_ovf;
+
 public:
 	Buffer() : m_size(0), m_buf(NULL) { clear(); }
 	Buffer(uint8_t size) : m_size(size), m_buf(new uint8_t[size]) { clear(); }
@@ -85,17 +85,14 @@ public:
 		}
 		return !cc;		// Fail if odd number of hex chars.
 	}
-	void addU16_le(uint16_t x) {
-		const uint16_t x_le = utilsU16_native_to_le(x);
-		addMem((const uint8_t*)&x_le, sizeof(uint16_t));
+	void addU16_le(uint16_t x) { add(static_cast<uint8_t>(x)); add(static_cast<uint8_t>(x>>8)); }
+	void addU16_be(uint16_t x) { add(static_cast<uint8_t>(x>>8)); add(static_cast<uint8_t>(x)); }
+	uint16_t getU16_le(uint8_t idx) const {
+		return static_cast<uint16_t>(m_buf[idx]) | (static_cast<uint16_t>(m_buf[idx+1])<<8);
 	}
-	void addU16_be(uint16_t x) {
-		const uint16_t x_be = utilsU16_native_to_be(x);
-		addMem((const uint8_t*)&x_be, sizeof(uint16_t));
+	uint16_t getU16_be(uint8_t idx) const {
+		return static_cast<uint16_t>(m_buf[idx+1]) | (static_cast<uint16_t>(m_buf[idx])<<8);
 	}
-	uint16_t getU16_le(uint8_t idx) const { return utilsU16_le_to_native(*(const uint16_t*)&m_buf[idx]); }
-	uint16_t getU16_be(uint8_t idx) const { return utilsU16_be_to_native(*(const uint16_t*)&m_buf[idx]); }
-	//uint8_t operator [](uint8_t idx) const { return m_buf[idx]; }
 	operator const uint8_t*() const { return m_buf; }
 };
 
