@@ -10,56 +10,57 @@ class Buffer {
 	uint8_t m_size;
 	uint8_t* m_buf;
 	uint8_t* m_p;
-	bool m_ovf;
 
 public:
-	Buffer() : m_size(0), m_buf(NULL) { clear(); }
-	Buffer(uint8_t size) : m_size(size), m_buf(new uint8_t[size]) { clear(); }
+	Buffer(uint8_t size=0) : m_size(size), m_buf(new uint8_t[size]) { clear(); }
 	/* Buffer(const Buffer& b) : m_size(b.size()), m_buf(new uint8_t[m_size]), m_p(m_buf + b.len()), m_ovf(b.m_ovf) {
 		memcpy(m_buf, b.m_buf, b.len());
 	} */
 	Buffer(const Buffer& b) = delete;
 	void resize(uint8_t newsize) {
 		if (newsize != size()) {
-			const uint8_t* const old_buf = m_buf;
+			uint8_t* const new_buf = new uint8_t[newsize];
+			if (len() > newsize) {
+				memcpy(new_buf, m_buf, newsize);
+				m_p = nullptr;
+			}
+			else {
+				memcpy(new_buf, m_buf, len());
+				m_p = new_buf + len();
+			}
 			m_size = newsize;
-			m_ovf = (len() > newsize);
-			const uint8_t newlen = m_ovf ? newsize : len();
-			m_buf = new uint8_t[newsize];
-			memcpy(m_buf, old_buf, newlen);
-			m_p = m_buf + newlen;
-			delete old_buf;
+			delete m_buf;
+			m_buf = new_buf;
 		}
 	}
 	Buffer& operator = (const Buffer& rhs) {
 		if (rhs.size() != size()) { delete m_buf; m_buf = new uint8_t[rhs.size()]; m_size = rhs.size(); }
 		memcpy(m_buf, rhs.m_buf, rhs.len());
-		m_p = m_buf + rhs.len();
-		m_ovf = rhs.m_ovf;
+		m_p = rhs.ovf() ? nullptr : (m_buf + rhs.len());
 		return *this;
 	}
 	~Buffer() { delete [] m_buf; }
 	uint8_t free() const { return size() - len(); }
 	uint8_t size() const { return m_size; }
-	uint8_t len() const { return m_p - m_buf; }
-	bool ovf() const { return m_ovf; }
-	void clear() { m_p = m_buf; m_ovf = false; }
-	void add(uint8_t c) { if (free() > 0) *m_p++ = c; else m_ovf = true; }
-	void addMem(const uint8_t* buf, uint8_t sz) {
-		if (sz > free()) {
-			sz = free();
-			m_ovf = true;
+	uint8_t len() const { return ovf() ? size() : (m_p - m_buf); }
+	bool ovf() const { return (nullptr == m_p); }
+	void clear() { m_p = m_buf; }
+	void add(uint8_t c) {
+		if (!ovf()) {
+			if (free() >= 1) *m_p++ = c;
+			else              m_p = nullptr;
 		}
-		memcpy(m_p, buf, sz); m_p += sz;
+	}
+	void addMem(const uint8_t* buf, uint8_t sz) {
+		if (!ovf()) {
+			if (sz > free()) { memcpy(m_p, buf, free()); m_p = nullptr;	}
+			else { memcpy(m_p, buf, sz); m_p += sz; }
+		}
 	}
 	void assignMem(const uint8_t* buf, uint8_t sz) {
-		if (sz > size()) {
-			sz = size();
-			m_ovf = true;
-		}
-		memcpy(m_buf, buf, sz); m_p = m_buf + sz;
+		if (sz > size()) { memcpy(m_buf, buf, size()); m_p = nullptr; }
+		else {             memcpy(m_buf, buf, sz); m_p = m_buf + sz;  }
 	}
-
 	bool addHexStr(const char* str) {
 		uint8_t cc = 0U;
 		uint8_t v, c;

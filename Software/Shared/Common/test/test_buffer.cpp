@@ -9,10 +9,10 @@ TT_END_INCLUDE()
 // Verify properties & contents of buffer. Also tests operator [].
 void verify_buffer(const Buffer& b, uint8_t size_exp, bool ovf_exp, uint8_t len_exp) {
 	//const uint8_t len_exp = strlen(data_exp);
-	TEST_ASSERT_EQUAL(size_exp, b.size());
-	TEST_ASSERT_EQUAL(len_exp, b.len());
-	TEST_ASSERT_EQUAL(size_exp-len_exp, b.free());
-	TEST_ASSERT_EQUAL(ovf_exp, b.ovf());
+	TEST_ASSERT_EQUAL_MESSAGE(size_exp, b.size(), "size");
+	TEST_ASSERT_EQUAL_MESSAGE(len_exp, b.len(), "len");
+	TEST_ASSERT_EQUAL_MESSAGE(size_exp-len_exp, b.free(), "free");
+	TEST_ASSERT_EQUAL_MESSAGE(ovf_exp, b.ovf(), "ovf");
 	for (uint8_t i = 0; i < len_exp; ++i)
 		TEST_ASSERT_EQUAL_UINT8('a'+i, b[i]);
 }
@@ -158,6 +158,13 @@ void test_buffer_assign(uint8_t sz1, uint8_t sz2) {
 TT_TEST_CASE(test_buffer_assign(4, 2));
 TT_TEST_CASE(test_buffer_assign(2, 2));
 TT_TEST_CASE(test_buffer_assign(1, 2));
+
+void test_buffer_assign_self() {
+	Buffer b(2);
+	b.add('a');
+	b = b;
+	verify_buffer(b, 2, false, 1);
+}
 
 // Test resize function.
 void test_buffer_resize(uint8_t sz1, uint8_t sz2) {
