@@ -23,10 +23,10 @@
 typedef void (*modbus_response_cb)(uint8_t evt);
 
 // Return last frame sent.
-const Buffer& modbusTxFrame();
+const BufferDynamic& modbusTxFrame();
 
 //Return last frame received. Ifcalled whendriver is busy it will be incomplete.
-const Buffer& modbusRxFrame();
+const BufferDynamic& modbusRxFrame();
 
 // Event IDs sent as callback from driver. Note sorted by generic, slave or master.
 enum {
@@ -67,7 +67,7 @@ enum {
 	MODBUS_TIMING_DEBUG_EVENT_RX_FRAME,		// Frame being received from bus.
 	MODBUS_TIMING_DEBUG_EVENT_SERVICE,		// In service function.
 	MODBUS_TIMING_DEBUG_EVENT_INTERFRAME,	// Timing interframe period for no TX.
-	MODBUS_TIMING_DEBUG_EVENTS_COUNT		// Number of events, also next free event. 
+	MODBUS_TIMING_DEBUG_EVENTS_COUNT		// Number of events, also next free event.
 };
 typedef void (*modbus_timing_debug_cb)(uint8_t id, uint8_t s);
 void modbusSetTimingDebugCb(modbus_timing_debug_cb cb);
@@ -102,7 +102,7 @@ enum {
 /* Send raw data to the line. If add_crc is false it does not append a CRC.
 	If called when driver is busy then the data will be transmitted but as it will be in the
 	middle of a frame it will probably be corrupted and will not be received. */
-void modbusSend(const Buffer& f, bool add_crc=true);
+void modbusSend(const BufferDynamic& f, bool add_crc=true);
 void modbusSend(const uint8_t* f, uint8_t sz, bool add_crc=true);
 
 void modbusHregWrite(uint8_t id, uint16_t address, uint16_t value);
@@ -130,7 +130,7 @@ void modbusService();
 
 // Functions exposed for testing.
 uint16_t modbusCrc(const uint8_t* buf, uint8_t sz);
-uint8_t modbusVerifyFrameValid(const Buffer& f);
+uint8_t modbusVerifyFrameValid(const BufferDynamic& f);
 bool modbusIsValidSlaveId(uint8_t id);
 
 #endif	// MODBUS_H__

@@ -3,20 +3,20 @@
 
 #include <string.h>
 
-/* A Buffer is a simple wrapper for a byte buffer. It allows bytes to be added without always having to explicitly check for
+/* A BufferDynamic is a simple wrapper for a byte buffer. It allows bytes to be added without always having to explicitly check for
 	overflow, but will not overwrite memory and can signal an overflow. It can also add memory blocks and two bytes.
  */
-class Buffer {
+class BufferDynamic {
 	uint8_t m_size;
 	uint8_t* m_buf;
 	uint8_t* m_p;
 
 public:
-	Buffer(uint8_t size=0) : m_size(size), m_buf(new uint8_t[size]) { clear(); }
-	/* Buffer(const Buffer& b) : m_size(b.size()), m_buf(new uint8_t[m_size]), m_p(m_buf + b.len()), m_ovf(b.m_ovf) {
+	BufferDynamic(uint8_t size=0) : m_size(size), m_buf(new uint8_t[size]) { clear(); }
+	/* BufferDynamic(const BufferDynamic& b) : m_size(b.size()), m_buf(new uint8_t[m_size]), m_p(m_buf + b.len()), m_ovf(b.m_ovf) {
 		memcpy(m_buf, b.m_buf, b.len());
 	} */
-	Buffer(const Buffer& b) = delete;
+	BufferDynamic(const BufferDynamic& b) = delete;
 	void resize(uint8_t newsize) {
 		if (newsize != size()) {
 			uint8_t* const new_buf = new uint8_t[newsize];
@@ -33,13 +33,13 @@ public:
 			m_buf = new_buf;
 		}
 	}
-	Buffer& operator = (const Buffer& rhs) {
+	BufferDynamic& operator = (const BufferDynamic& rhs) {
 		if (rhs.size() != size()) { delete m_buf; m_buf = new uint8_t[rhs.size()]; m_size = rhs.size(); }
 		memcpy(m_buf, rhs.m_buf, rhs.len());
 		m_p = rhs.ovf() ? nullptr : (m_buf + rhs.len());
 		return *this;
 	}
-	~Buffer() { delete [] m_buf; }
+	~BufferDynamic() { delete [] m_buf; }
 	uint8_t free() const { return size() - len(); }
 	uint8_t size() const { return m_size; }
 	uint8_t len() const { return ovf() ? size() : (m_p - m_buf); }
@@ -107,9 +107,9 @@ class SBuffer {
 public:
 	SBuffer() { clear(); }
 	// SBuffer(const SBuffer<CAPACITY_>& b) { memcpy(m_buf, b.m_buf, b.len()); m_p = b.ovf() ? NULL : m_buf + b.len(); }
-	Buffer(const Buffer& b) = delete;
-	Buffer& operator = (const Buffer& rhs) = delete;
-	~Buffer() { }
+	BufferDynamic(const BufferDynamic& b) = delete;
+	BufferDynamic& operator = (const BufferDynamic& rhs) = delete;
+	~BufferDynamic() { }
 	void clear() { m_p = m_buf; }
 	uint8_t size() const { return m_size; }
 	uint8_t len() const { return ovf() ? m_size : m_p - m_buf; }

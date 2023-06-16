@@ -15,10 +15,10 @@ TT_END_INCLUDE()
 DECLARE_QUEUE_TYPE(TestModbus, uint8_t, 20)
 
 static struct {
-	Buffer t_sent;	// Records what modbus lib sent.
+	BufferDynamic t_sent;	// Records what modbus lib sent.
 	QueueTestModbus t_recd;	// What modbus lib will receive.
 	uint8_t cb_event;
-	Buffer cb_frame;
+	BufferDynamic cb_frame;
 	bool cb_overun;
 	uint8_t debug_state, debug_state_set, debug_state_clear;	// Holds state from debug callbacks.
 } fixture;
@@ -66,12 +66,12 @@ void test_modbus_slave_id_valid() {
 	TEST_ASSERT_FALSE(modbusIsValidSlaveId(255));
 }
 void test_modbus_frame_valid_ovf() {
-	Buffer bf(0);
+	BufferDynamic bf(0);
 	bf.add(0);
 	TEST_ASSERT_EQUAL_UINT8(MODBUS_CB_EVT_MS_ERR_INVALID_LEN, modbusVerifyFrameValid(bf));
 }
 void test_modbus_frame_valid(const char* f, uint8_t rc) {
-	Buffer bf(20);
+	BufferDynamic bf(20);
 	bf.addHexStr(f);
 	TEST_ASSERT_EQUAL_UINT8(rc, modbusVerifyFrameValid(bf));
 }
@@ -96,7 +96,7 @@ void test_modbus_slave_id() {
 }
 
 void test_modbus_crc(const char* f, uint16_t crc) {		// Refer https://www.scadacore.com/tools/programming-calculators/online-checksum-calculator/
-	Buffer frame(40);
+	BufferDynamic frame(40);
 	frame.addHexStr(f);
 	TEST_ASSERT_EQUAL_HEX16(crc, modbusCrc(frame, frame.len()));
 }
@@ -114,7 +114,7 @@ static void verify_modbus_cb(uint8_t evt_exp) {
 }
 
 void test_modbus_send_raw() {
-	Buffer frame(40);
+	BufferDynamic frame(40);
 	frame.addHexStr("414243");
 	modbusSend(frame, false);
 	TEST_ASSERT_EQUAL_BUFFER(frame, fixture.t_sent);
@@ -122,9 +122,9 @@ void test_modbus_send_raw() {
 	TEST_ASSERT_EQUAL_BUFFER(frame, modbusTxFrame());
 }
 void test_modbus_send() {
-	Buffer frame(40);
+	BufferDynamic frame(40);
 	frame.addHexStr("1103006B0003");
-	Buffer frame_rx(40);
+	BufferDynamic frame_rx(40);
 	frame_rx = frame;
 	frame_rx.addHexStr("7687");
 	modbusSend(frame);

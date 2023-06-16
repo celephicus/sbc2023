@@ -34,11 +34,11 @@ static struct {
 	modbus_timing_debug_cb debug_timing_cb;	// Callback function for debugging timing.
 
 	// TX: Holds last sent frame, used by Master response handler to make sense of responses.
-	Buffer buf_txed;
+	BufferDynamic buf_txed;
 
 	// RX: Master waits for response after sending request, slaves receive requests.
-	Buffer buf_rx;							// Buffer used for receiving, requests if a slave, responses if a master.
-	Buffer buf_recd;						// Holds received frame for client to read at leisure.
+	BufferDynamic buf_rx;							// BufferDynamic used for receiving, requests if a slave, responses if a master.
+	BufferDynamic buf_recd;						// Holds received frame for client to read at leisure.
 	uint16_t rx_frame_timer_micros;			// Timer for end of frame.
 	uint16_t rx_frame_timeout_micros;		// Timeout for end of frame.
 	uint16_t interframe_timer_micros;			// Timer for end of frame.
@@ -111,8 +111,8 @@ void modbusSetBaudrate(uint32_t baud) {
 	TIMER_STOP_WITH_CB(&f_modbus_ctx.interframe_timer_micros, MODBUS_TIMING_DEBUG_EVENT_RX_FRAME);
 }
 
-const Buffer& modbusTxFrame() { return f_modbus_ctx.buf_txed; }
-const Buffer& modbusRxFrame() { return f_modbus_ctx.buf_recd; }
+const BufferDynamic& modbusTxFrame() { return f_modbus_ctx.buf_txed; }
+const BufferDynamic& modbusRxFrame() { return f_modbus_ctx.buf_recd; }
 
 // Helper for sending, assumes payloadcopied to TX buffer.
 static void do_send(bool add_crc) {
@@ -122,7 +122,7 @@ static void do_send(bool add_crc) {
 		f_modbus_ctx.buf_txed.addU16_le(crc);
 	}
 
-	f_modbus_ctx.buf_recd.clear();		// Clear any previous response. Not really necessary, but stops a client printing rubbish if it dumps the SEND event. 
+	f_modbus_ctx.buf_recd.clear();		// Clear any previous response. Not really necessary, but stops a client printing rubbish if it dumps the SEND event.
 	f_modbus_ctx.cb_resp(MODBUS_CB_EVT_M_REQ_TX);
 	f_modbus_ctx.send(f_modbus_ctx.buf_txed, f_modbus_ctx.buf_txed.len());
 	TIMER_START_WITH_CB((uint16_t)micros(), &f_modbus_ctx.interframe_timer_micros, MODBUS_TIMING_DEBUG_EVENT_INTERFRAME);
@@ -132,7 +132,7 @@ void modbusSend(const uint8_t* f, uint8_t sz, bool add_crc /*=true*/) {
 	f_modbus_ctx.buf_txed.assignMem(f, sz);
 	do_send(add_crc);
 }
-void modbusSend(const Buffer& f, bool add_crc /*=true*/) {
+void modbusSend(const BufferDynamic& f, bool add_crc /*=true*/) {
 	f_modbus_ctx.buf_txed = f;
 	do_send(add_crc);
 }
@@ -187,7 +187,7 @@ bool modbusIsValidSlaveId(uint8_t id) {		// Check ID in request frame.
 	return (id >= 1) && (id <= 247);
 }
 
-uint8_t modbusVerifyFrameValid(const Buffer& f) {
+uint8_t modbusVerifyFrameValid(const BufferDynamic& f) {
 	if (f.ovf())			// If buffer overflow then just exit...
 		return MODBUS_CB_EVT_MS_ERR_INVALID_LEN;
 

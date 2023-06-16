@@ -7,7 +7,7 @@ TT_BEGIN_INCLUDE()
 TT_END_INCLUDE()
 
 // Verify properties & contents of buffer. Also tests operator [].
-void verify_buffer(const Buffer& b, uint8_t size_exp, bool ovf_exp, uint8_t len_exp) {
+void verify_buffer(const BufferDynamic& b, uint8_t size_exp, bool ovf_exp, uint8_t len_exp) {
 	//const uint8_t len_exp = strlen(data_exp);
 	TEST_ASSERT_EQUAL_MESSAGE(size_exp, b.size(), "size");
 	TEST_ASSERT_EQUAL_MESSAGE(len_exp, b.len(), "len");
@@ -17,7 +17,7 @@ void verify_buffer(const Buffer& b, uint8_t size_exp, bool ovf_exp, uint8_t len_
 		TEST_ASSERT_EQUAL_UINT8('a'+i, b[i]);
 }
 
-void verify_buffer_s(const Buffer& b, uint8_t size_exp, bool ovf_exp, const char* data_exp) {
+void verify_buffer_s(const BufferDynamic& b, uint8_t size_exp, bool ovf_exp, const char* data_exp) {
 	const uint8_t len_exp = strlen(data_exp);
 	TEST_ASSERT_EQUAL(size_exp, b.size());
 	TEST_ASSERT_EQUAL(len_exp, b.len());
@@ -28,7 +28,7 @@ void verify_buffer_s(const Buffer& b, uint8_t size_exp, bool ovf_exp, const char
 
 // Verify constructor with size, note even a buffer of size zero is not overflow.
 void test_buffer_new(uint8_t size) {
-	Buffer b(size);
+	BufferDynamic b(size);
 	verify_buffer(b, size, false, 0);
 }
 TT_TEST_CASE(test_buffer_new(0));
@@ -37,13 +37,13 @@ TT_TEST_CASE(test_buffer_new(2));
 
 // Verify default constructor with zero size.
 void test_buffer_default() {
-	Buffer b;
+	BufferDynamic b;
 	verify_buffer(b, 0, false, 0);
 }
 
 // Adding bytes up to size works.
 void test_buffer_add_byte(uint8_t size, int n) {
-	Buffer b(size);
+	BufferDynamic b(size);
 	for (uint8_t i = 0; i < n; ++i) {
 		b.add((uint8_t)('a'+i));
 		verify_buffer(b, size, false, i+1);
@@ -55,7 +55,7 @@ TT_TEST_CASE(test_buffer_add_byte(4, 4));
 
 // But one over size is overflow.
 void test_buffer_add_byte_ovf(uint8_t size) {
-	Buffer b(size);
+	BufferDynamic b(size);
 	for (uint8_t i = 0; i < size; ++i) {
 		b.add((uint8_t)('a'+i));
 		verify_buffer(b, size, false, i+1);
@@ -69,7 +69,7 @@ TT_TEST_CASE(test_buffer_add_byte_ovf(2));
 
 // Clear should just clear.
 void test_buffer_clear() {
-	Buffer b(2);
+	BufferDynamic b(2);
 	b.add('a');
 	verify_buffer(b, 2, false, 1);
 	b.clear();
@@ -78,7 +78,7 @@ void test_buffer_clear() {
 
 // Add memory adds till overflow.
 void test_buffer_add_mem(int n, int len_exp, bool ovf) {
-	Buffer b(4);
+	BufferDynamic b(4);
 	for (uint8_t i = 0; i < n; ++i)
 		b.add((uint8_t)('a'+i));
 
@@ -105,20 +105,20 @@ TT_TEST_CASE(test_buffer_add_mem(4, 4, true));
 #endif
 
 void test_buffer_add_u16_le() {
-	Buffer b(4);
+	BufferDynamic b(4);
 	b.addU16_le(TEST_BUFFER_U16_VAL_LE);
 	verify_buffer(b, 4, false, 2);
 	TEST_ASSERT_EQUAL_UINT16(TEST_BUFFER_U16_VAL_LE, b.getU16_le(0));
 }
 void test_buffer_add_u16_be() {
-	Buffer b(4);
+	BufferDynamic b(4);
 	b.addU16_be(TEST_BUFFER_U16_VAL_BE);
 	verify_buffer(b, 4, false, 2);
 	TEST_ASSERT_EQUAL_UINT16(TEST_BUFFER_U16_VAL_BE, b.getU16_be(0));
 }
 
 void test_buffer_add_u16_ovf_le(int n) {
-	Buffer b(4);
+	BufferDynamic b(4);
 	for (uint8_t i = 0; i < n; ++i)
 		b.add((uint8_t)('a'+i));
 	uint16_t u16 = TEST_BUFFER_U16_VAL_LE + n;
@@ -130,7 +130,7 @@ TT_TEST_CASE(test_buffer_add_u16_ovf_le(3));
 TT_TEST_CASE(test_buffer_add_u16_ovf_le(4));
 
 void test_buffer_add_u16_ovf_be(int n) {
-	Buffer b(4);
+	BufferDynamic b(4);
 	for (uint8_t i = 0; i < n; ++i)
 		b.add((uint8_t)('a'+i));
 	uint16_t u16 = TEST_BUFFER_U16_VAL_BE + n;
@@ -143,11 +143,11 @@ TT_TEST_CASE(test_buffer_add_u16_ovf_be(4));
 
 // Assignment operator and resize are very similar.
 void test_buffer_assign(uint8_t sz1, uint8_t sz2) {
-	Buffer b(sz1);
+	BufferDynamic b(sz1);
 	b.add('a');
 	b.add('b');
 
-	Buffer c(sz2);
+	BufferDynamic c(sz2);
 	c.add('q');
 	c = b;
 	TEST_ASSERT_EQUAL(sz1, c.size());
@@ -160,7 +160,7 @@ TT_TEST_CASE(test_buffer_assign(2, 2));
 TT_TEST_CASE(test_buffer_assign(1, 2));
 
 void test_buffer_assign_self() {
-	Buffer b(2);
+	BufferDynamic b(2);
 	b.add('a');
 	b = b;
 	verify_buffer(b, 2, false, 1);
@@ -168,7 +168,7 @@ void test_buffer_assign_self() {
 
 // Test resize function.
 void test_buffer_resize(uint8_t sz1, uint8_t sz2) {
-	Buffer b(sz1);
+	BufferDynamic b(sz1);
 	b.add('a');
 	b.add('b');
 	const bool ovf_exp = (b.len() > sz2);
@@ -186,7 +186,7 @@ TT_TEST_CASE(test_buffer_resize(4, 0));
 
 // Another utility method, assign an array to the buffer. Replaces clear() then addMem().
 void test_buffer_assign_array(int n, int len_exp, bool ovf) {
-	Buffer b(4);
+	BufferDynamic b(4);
 	b.add('z');
 
 	const char* mem = "abcdef";
@@ -199,7 +199,7 @@ TT_TEST_CASE(test_buffer_assign_array(5, 4, true));
 
 // Handy hex string added for testing. Should have done this first.
 void test_buffer_hex_bad(const char* s, uint8_t len) {
-	Buffer b(16);
+	BufferDynamic b(16);
 	TEST_ASSERT_FALSE(b.addHexStr(s));
 		verify_buffer(b, 16, false, len);
 }
@@ -211,7 +211,7 @@ TT_TEST_CASE(test_buffer_hex_bad("610x", 1));
 TT_TEST_CASE(test_buffer_hex_bad("610", 1));
 
 void test_buffer_hex(const char* s) {
-	Buffer b(16);
+	BufferDynamic b(16);
 	TEST_ASSERT(b.addHexStr(s));
 	verify_buffer(b, 16, false, strlen(s)/2);
 }
@@ -222,7 +222,7 @@ TT_TEST_CASE(test_buffer_hex("616263646566676869"));
 TT_TEST_CASE(test_buffer_hex("6162636465666768696a6B6c6D6e6F"));
 
 void test_buffer_hex_ovf() {
-	Buffer b(2);
+	BufferDynamic b(2);
 	TEST_ASSERT_FALSE(b.addHexStr("616263"));
 	verify_buffer(b, 2, true, 2);
 }
