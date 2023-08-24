@@ -85,7 +85,13 @@ rundict = {
 extra_includes = []
 
 # Process all input files, in case we see a number of glob patterns. Note that files are processed in alphabetical order.
-input_files = sorted(functools.reduce(lambda x,y:x+y, [glob.glob(f) for f in opt_args.files], []))
+input_files = []
+for f in opt_args.files:
+	fns = glob.glob(f)
+	if not fns: exit(f"file/pattern `{f}' not found.")
+	for ff in fns:
+		if ff not in input_files: input_files.append(ff)
+# input_files = sorted(input_files)
 if not input_files:
 	exit("no input files!")
 
@@ -119,9 +125,10 @@ def line_proc_test_case_data(ln):
 
 def add_test_case(test_func, test_args):
 	global stub_num, num_tests
-	if test_func not in test_funcs:
+	if '<' not in test_func and test_func not in test_funcs:
 		exit(f"macro {macro}:{fn}, line {lineno} references an unknown test function `{test_func}'.")
-	test_stub_name = f'{test_func}_stub_{stub_num}'
+	base_test_func = test_func.split('<', 1)[0]
+	test_stub_name = f'{base_test_func}_stub_{stub_num}'
 	stub_num += 1
 	test_stub_body = f'{test_func}({test_args})'
 	descr = test_stub_body.replace('\\', '\\\\').replace('"', r'\"')
@@ -172,15 +179,18 @@ def parse_source_line(ln):
 
 
 	elif m := re.search(r"""
+	  (template\s*<.+>\s*)?	# Optional template decl on same line.
 	  void 		# Return type void.
 	  \s+ 		# Whitespace.
 	  (test\w+) # Function name .
-	  \s*\(\s* 	# Possible whitespace, opening bracket, more possible whitespace.
+	  \s*		# Possible whitespace.
+	  \(\s*		# Opening bracket, more possible whitespace.
 	  ([^)]*?) 	# Possible arguments.
-	  \)\s* 	# Possible whitespace & closing bracket.
+	  \s*\)	 	# Possible whitespace, closing bracket.
+				# Ignore rest of line.
 	""", ln, re.X):
-		test_func, test_args = m.groups()
-		return 'test-func', [test_func, test_args]
+		template_decl, test_func, test_args = m.groups()
+		return 'test-func', [template_decl or '', test_func, test_args]
 
 	# Must just be a line.
 	return 'line', ln
@@ -205,6 +215,7 @@ for fn in input_files:
 	# TODO: Add TT_BEGIN_IGNORE ... TT_END_IGNORE for ignoring a block.
 	for lineno, ln in enumerate(src.splitlines()): # Iterate over all lines.
 		p, q = parse_source_line(ln)
+		if p != 'line': print(p, q)
 
 		if p.startswith(MACRO_PREFIX):
 			macro, raw_args = p, q
@@ -246,7 +257,8 @@ for fn in input_files:
 				test_run.append('registerFixture(NULL, NULL, NULL);')
 				fixture = None
 			elif macro == 'TT_TEST_CASE':
-				m = re.match(r'(\w+)\((.+)\)\s*$', raw_args)
+				print(f"`{raw_args}`")
+				m = re.match(r'(.+)\((.*)\)\s*$', raw_args)
 				if not m:
 					exit(f"Macro at `{ln}' needs to be like {macro}(func(args))")
 				test_func, test_args = m.groups()
@@ -269,16 +281,18 @@ for fn in input_files:
 		elif p == 'test-func':
 			# Test function...
 
-			test_func, test_args = q
-			if test_func in test_funcs:
-				exit(f"Duplicate test function {test_func}, {fn}, {lineno}.")
+			template_decl, test_func, test_args = q
+			test_func_sig = template_decl + test_func
+			if test_func_sig in test_funcs:
+				exit(f"Duplicate test function {test_func_sig}, {fn}, {lineno}.")
 
 			# Looks like a test function definition: void f(void), so call it.
-			if test_args in ('', 'void'):
+			if test_args in ('', 'void') and not template_decl:
 				add_test(test_func, test_func, lineno)
 
 			# Add to list to generate a declaration.
-			test_funcs[test_func] = if_condition, test_args
+			func_decl = f"{template_decl} void {test_func}({test_args});"
+			test_funcs[test_func_sig] = if_condition, test_args, func_decl
 			num_tests += 1
 		elif p == 'line':		# Not a test file...
 			if line_proc:
@@ -402,7 +416,7 @@ def handle_ifs(code):
 
 rundict['RUNNER_LEADER_STR'] = RUNNER_LEADER_STR
 rundict['TEST_FUNCTION_DECLS'] = \
-  handle_ifs([(if_cond, f"void {func}({args});") for func, (if_cond, args) in test_funcs.items()])
+  handle_ifs([(if_cond, func_decl) for func, (if_cond, args, func_decl) in test_funcs.items()])
 
 rundict['FIXTURE_FUNCTION_DECLS'] = '\n'.join([f'void {f}(void);' for f in fixture_funcs.keys()]) if fixture_funcs else '/* None */'
 rundict['COPY_BLOCKS'] = '\n'.join(block_includes)

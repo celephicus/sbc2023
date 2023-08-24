@@ -13,7 +13,7 @@ CurrentFileName        :=
 CurrentFilePath        :=
 CurrentFileFullPath    :=
 User                   :=Tom
-Date                   :=16/06/23
+Date                   :=25/08/23
 CodeLitePath           :=/home/tom/.codelite
 LinkerName             :=/usr/bin/g++-11
 SharedObjectLinkerName :=/usr/bin/g++-11 -shared -fPIC
@@ -60,7 +60,7 @@ AS       := /usr/bin/as
 ## User defined environment variables
 ##
 CodeLiteDir:=/usr/share/codelite
-Objects0=$(IntermediateDirectory)/up_up_src_modbus.cpp$(ObjectSuffix) $(IntermediateDirectory)/up_test_buffer.cpp$(ObjectSuffix) $(IntermediateDirectory)/up_unity.c$(ObjectSuffix) $(IntermediateDirectory)/up_support_test.cpp$(ObjectSuffix) $(IntermediateDirectory)/up_test_modbus.cpp$(ObjectSuffix) $(IntermediateDirectory)/up_t_main.cpp$(ObjectSuffix) 
+Objects0=$(IntermediateDirectory)/up_up_src_modbus.cpp$(ObjectSuffix) $(IntermediateDirectory)/up_support_test.cpp$(ObjectSuffix) $(IntermediateDirectory)/up_test_modbus.cpp$(ObjectSuffix) $(IntermediateDirectory)/up_t_main.cpp$(ObjectSuffix) $(IntermediateDirectory)/up_test_buffer_dynamic.cpp$(ObjectSuffix) $(IntermediateDirectory)/up_unity.c$(ObjectSuffix) $(IntermediateDirectory)/up_test_buffer_static.cpp$(ObjectSuffix) 
 
 
 
@@ -88,7 +88,7 @@ $(IntermediateDirectory)/.d:
 PreBuild:
 	@echo Executing Pre Build commands ...
 	
-	../grm.py -v -o ../t_main.cpp ../test_buffer.cpp ../test_modbus.cpp
+	../grm.py -v -o ../t_main.cpp ../test_buffer_dynamic.cpp ../test_modbus.cpp ../test_buffer_static.cpp
 	@echo Done
 
 
@@ -100,18 +100,6 @@ $(IntermediateDirectory)/up_up_src_modbus.cpp$(ObjectSuffix): ../../src/modbus.c
 	$(CXX) $(IncludePCH) $(SourceSwitch) "/home/tom/git/misc/2022SBC/Software/Shared/Common/src/modbus.cpp" $(CXXFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/up_up_src_modbus.cpp$(ObjectSuffix) $(IncludePath)
 $(IntermediateDirectory)/up_up_src_modbus.cpp$(PreprocessSuffix): ../../src/modbus.cpp
 	$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/up_up_src_modbus.cpp$(PreprocessSuffix) ../../src/modbus.cpp
-
-$(IntermediateDirectory)/up_test_buffer.cpp$(ObjectSuffix): ../test_buffer.cpp
-	@$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) -MG -MP -MT$(IntermediateDirectory)/up_test_buffer.cpp$(ObjectSuffix) -MF$(IntermediateDirectory)/up_test_buffer.cpp$(DependSuffix) -MM ../test_buffer.cpp
-	$(CXX) $(IncludePCH) $(SourceSwitch) "/home/tom/git/misc/2022SBC/Software/Shared/Common/test/test_buffer.cpp" $(CXXFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/up_test_buffer.cpp$(ObjectSuffix) $(IncludePath)
-$(IntermediateDirectory)/up_test_buffer.cpp$(PreprocessSuffix): ../test_buffer.cpp
-	$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/up_test_buffer.cpp$(PreprocessSuffix) ../test_buffer.cpp
-
-$(IntermediateDirectory)/up_unity.c$(ObjectSuffix): ../unity.c
-	@$(CC) $(CFLAGS) $(IncludePath) -MG -MP -MT$(IntermediateDirectory)/up_unity.c$(ObjectSuffix) -MF$(IntermediateDirectory)/up_unity.c$(DependSuffix) -MM ../unity.c
-	$(CC) $(SourceSwitch) "/home/tom/git/misc/2022SBC/Software/Shared/Common/test/unity.c" $(CFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/up_unity.c$(ObjectSuffix) $(IncludePath)
-$(IntermediateDirectory)/up_unity.c$(PreprocessSuffix): ../unity.c
-	$(CC) $(CFLAGS) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/up_unity.c$(PreprocessSuffix) ../unity.c
 
 $(IntermediateDirectory)/up_support_test.cpp$(ObjectSuffix): ../support_test.cpp
 	@$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) -MG -MP -MT$(IntermediateDirectory)/up_support_test.cpp$(ObjectSuffix) -MF$(IntermediateDirectory)/up_support_test.cpp$(DependSuffix) -MM ../support_test.cpp
@@ -130,6 +118,24 @@ $(IntermediateDirectory)/up_t_main.cpp$(ObjectSuffix): ../t_main.cpp
 	$(CXX) $(IncludePCH) $(SourceSwitch) "/home/tom/git/misc/2022SBC/Software/Shared/Common/test/t_main.cpp" $(CXXFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/up_t_main.cpp$(ObjectSuffix) $(IncludePath)
 $(IntermediateDirectory)/up_t_main.cpp$(PreprocessSuffix): ../t_main.cpp
 	$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/up_t_main.cpp$(PreprocessSuffix) ../t_main.cpp
+
+$(IntermediateDirectory)/up_test_buffer_dynamic.cpp$(ObjectSuffix): ../test_buffer_dynamic.cpp
+	@$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) -MG -MP -MT$(IntermediateDirectory)/up_test_buffer_dynamic.cpp$(ObjectSuffix) -MF$(IntermediateDirectory)/up_test_buffer_dynamic.cpp$(DependSuffix) -MM ../test_buffer_dynamic.cpp
+	$(CXX) $(IncludePCH) $(SourceSwitch) "/home/tom/git/misc/2022SBC/Software/Shared/Common/test/test_buffer_dynamic.cpp" $(CXXFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/up_test_buffer_dynamic.cpp$(ObjectSuffix) $(IncludePath)
+$(IntermediateDirectory)/up_test_buffer_dynamic.cpp$(PreprocessSuffix): ../test_buffer_dynamic.cpp
+	$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/up_test_buffer_dynamic.cpp$(PreprocessSuffix) ../test_buffer_dynamic.cpp
+
+$(IntermediateDirectory)/up_unity.c$(ObjectSuffix): ../unity.c
+	@$(CC) $(CFLAGS) $(IncludePath) -MG -MP -MT$(IntermediateDirectory)/up_unity.c$(ObjectSuffix) -MF$(IntermediateDirectory)/up_unity.c$(DependSuffix) -MM ../unity.c
+	$(CC) $(SourceSwitch) "/home/tom/git/misc/2022SBC/Software/Shared/Common/test/unity.c" $(CFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/up_unity.c$(ObjectSuffix) $(IncludePath)
+$(IntermediateDirectory)/up_unity.c$(PreprocessSuffix): ../unity.c
+	$(CC) $(CFLAGS) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/up_unity.c$(PreprocessSuffix) ../unity.c
+
+$(IntermediateDirectory)/up_test_buffer_static.cpp$(ObjectSuffix): ../test_buffer_static.cpp
+	@$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) -MG -MP -MT$(IntermediateDirectory)/up_test_buffer_static.cpp$(ObjectSuffix) -MF$(IntermediateDirectory)/up_test_buffer_static.cpp$(DependSuffix) -MM ../test_buffer_static.cpp
+	$(CXX) $(IncludePCH) $(SourceSwitch) "/home/tom/git/misc/2022SBC/Software/Shared/Common/test/test_buffer_static.cpp" $(CXXFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/up_test_buffer_static.cpp$(ObjectSuffix) $(IncludePath)
+$(IntermediateDirectory)/up_test_buffer_static.cpp$(PreprocessSuffix): ../test_buffer_static.cpp
+	$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/up_test_buffer_static.cpp$(PreprocessSuffix) ../test_buffer_static.cpp
 
 
 -include $(IntermediateDirectory)/*$(DependSuffix)
