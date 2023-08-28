@@ -24,7 +24,7 @@ enum {
     GPIO_PIN_TS_RET = 36,                          // Touchswitch module
 
     // LCD
-    GPIO_PIN_LCD_BL = 3,                           // LCD backlight
+    GPIO_PIN_LCD_BL = 4,                           // LCD backlight
     GPIO_PIN_LCD_E = 44,                           // LCD control
     GPIO_PIN_LCD_RS = 45,                          // LCD control
     GPIO_PIN_LCD_D7 = 46,                          // LCD data
@@ -173,6 +173,6 @@ static inline void gpioLedClear() { PORTC &= ~_BV(7); }
 static inline void gpioLedWrite(bool b) { if (b) PORTC |= _BV(7); else PORTC &= ~_BV(7); }
 
 // List unused pins
-#define GPIO_UNUSED_PINS 4, 5, 6, 7, 8, 9, 10, 11, 20, 21, 37, 38, 39, 40, 41, 42, 43, 53, A1, A2, A3, A4, A5, A6, A7, A8, A10, A11, A12, A13, A14, A15
+#define GPIO_UNUSED_PINS 3, 5, 6, 7, 8, 9, 10, 11, 20, 21, 37, 38, 39, 40, 41, 42, 43, 53, A1, A2, A3, A4, A5, A6, A7, A8, A10, A11, A12, A13, A14, A15
 
 #endif   // GPIO_H__
