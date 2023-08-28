@@ -3,7 +3,7 @@
 
 // Define version of NV data. If you change the schema or the implementation, increment the number to force any existing
 // EEPROM to flag as corrupt. Also increment to force the default values to be set for testing.
-const uint16_t REGS_DEF_VERSION = 7;
+const uint16_t REGS_DEF_VERSION = 8;
 
 /* [[[ Definition start...
 
@@ -60,7 +60,7 @@ ENABLES [nv fmt=hex] "Non-volatile enable flags.
 - SENSOR_DISABLE_1 [bit=5] "Disable Sensor 1."
 - SENSOR_DISABLE_2 [bit=6] "Disable Sensor 2."
 - SENSOR_DISABLE_3 [bit=7] "Disable Sensor 3."
-- TOUCH_DISABLE [bit=8 default=1] "Disable touch buttons."
+- TOUCH_DISABLE [bit=8] "Disable touch buttons."
 - TRACE_FORMAT_BINARY [bit=13] "Dump trace in binary format."
 - TRACE_FORMAT_CONCISE [bit=14] "Dump trace in concise text format."
 - DISABLE_BLINKY_LED [bit=15] "Disable setting Blinky Led from fault states.

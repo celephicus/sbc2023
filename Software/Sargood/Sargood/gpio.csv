@@ -10,7 +10,7 @@
 #Arduino Pin,Signal,Function,Description,Group,Arduino Pin No.,Processor Pin No.,Proc Port,Proc Alt Func,Comment,Note
 D0/RX0,RX0,RXD0,Onboard USB serial port,Serial,0,2,PE0,RXD0/PCINT8,Bootloader/USB,
 D1/TX0,TX0,TXD0,Onboard USB serial port,Serial,1,3,PE1,TXD0,Bootloader/USB,
-D2,IR_REC,input,IR receiver input,Misc,2,6,PE4,OC3B/INT4,PWM,On INTx pin in case we want to try irupt driven decoding. 
+D2,IR_REC,input,IR receiver input,Misc,2,6,PE4,OC3B/INT4,PWM,On INTx pin in case we want to try irupt driven decoding.
 D3,,unused,,,3,7,PE5,OC3C/INT5,PWM,
 D4,LCD_BL,PWM,LCD backlight,LCD,4,1,PG5,OC0B,PWM,
 D5,,unused,,,5,5,PE3,OC3A/AIN1,PWM,
@@ -21,7 +21,7 @@ D9,,unused,,,9,18,PH6,OC2B,PWM,
 D10,,unused,,,10,23,PB4,OC2A/PCINT4,PWM,
 D11,,unused,,,11,24,PB5,OC1A/PCINT5,PWM,
 D12,,unused,,,12,25,PB6,OC1B/PCINT6,PWM,
-D13,LED_BUILTIN,output direct,Onboard LED,Misc,13,26,PB7,OC0A/OC1C/PCINT7,PWM,Onboard LED returned to ground. 
+D13,LED_BUILTIN,output direct,Onboard LED,Misc,13,26,PB7,OC0A/OC1C/PCINT7,PWM,Onboard LED returned to ground.
 D14/TX3,CONS_TXO,TXD3,Console FDTI serial,Serial,14,64,PJ1,TXD3/PCINT10,,
 D15/RX3,CONS_RXI,RXD3,Console FDTI serial,Serial,15,63,PJ0,RXD3/PCINT9,,
 D16/TX2,RS485_TXD,TXD2,RS485 TX,Bus,16,13,PH1,TXD2,,
@@ -42,8 +42,8 @@ D30,LED,output direct,Blinky LED,Misc,30,60,PC7,A15,,
 D31,ATN,output,Pulse high to signal ATN low on bus.,Bus,31,59,PC6,A14,,
 D32,RS485_TX_EN,output,Enable RS485 xmitter,Bus,32,58,PC5,A13,,
 D33,TS_RIGHT,input,Touchswitch module,Misc,33,57,PC4,A12,,
-D34,TS_LEFT,input,Touchswitch module,Misc,34,56,PC3,A11,,
-D35,TS_MENU,input,Touchswitch module,Misc,35,55,PC2,A10,,
+D34,TS_MENU,input,Touchswitch module,Misc,34,56,PC3,A11,,
+D35,TS_LEFT,input,Touchswitch module,Misc,35,55,PC2,A10,,
 D36,TS_RET,input,Touchswitch module,Misc,36,54,PC1,A9,,
 D37,,unused,,,37,53,PC0,A8,,
 D38,,unused,,,38,50,PD7,T0,,

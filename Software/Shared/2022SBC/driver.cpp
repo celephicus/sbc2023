@@ -595,9 +595,9 @@ void service_devices_50ms() { /* empty */ }
 
 #elif CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY
 
-// MAX4820 relay driver driver. Note has hardware watchdog that is patted by either edge on input, on timeout (100ms) will pulse o/p at 300ms rate, which clears the relay driver state. 
+// MAX4820 relay driver driver. Note has hardware watchdog that is patted by either edge on input, on timeout (100ms) will pulse o/p at 300ms rate, which clears the relay driver state.
 // TODO: Made a boo-boo, connected relay driver to SCK/MOSI instead of GPIO_PIN_RDAT/GPIO_PIN_RCLK. Suggest correcting in next board spin. Till then, we use the on-chip SPI.
-// TODO: Fix relay recover from no watchdog as it sets the h/w state to zero. Think this fixes it. 
+// TODO: Fix relay recover from no watchdog as it sets the h/w state to zero. Think this fixes it.
 // TODO: Really need a little state machine to cope with error state to relay driver.
 //static constexpr int16_t RELAY_DATA_NONE = -1;
 static int16_t f_relay_data;
@@ -793,7 +793,7 @@ static void switches_setup() {
 	swScanInit(SWITCHES_DEFS, switches_contexts, UTILS_ELEMENT_COUNT(SWITCHES_DEFS));
 }
 static void switches_service() {
-	if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TOUCH_DISABLE)
+	if (!(REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TOUCH_DISABLE))
 		swScanSample(SWITCHES_DEFS, switches_contexts, UTILS_ELEMENT_COUNT(SWITCHES_DEFS));
 }
 
@@ -878,13 +878,13 @@ void driverPresetClear(uint8_t idx) {
 	fori(CFG_TILT_SENSOR_COUNT)
 		driverPresets(idx)[i] = SBC2022_MODBUS_TILT_FAULT;
 }
-int16_t driverAxisLimitGet(uint8_t axis_idx, uint8_t limit_idx) { 
+int16_t driverAxisLimitGet(uint8_t axis_idx, uint8_t limit_idx) {
 	ASSERT(limit_idx < 2);
 	if (axis_idx >= CFG_TILT_SENSOR_COUNT)	// May be called for other axes.
 		return SBC2022_MODBUS_TILT_FAULT;
-	return l_nv_data.axis_limits[axis_idx][limit_idx]; 
+	return l_nv_data.axis_limits[axis_idx][limit_idx];
 }
-void driverAxisLimitSet(uint8_t axis_idx, uint8_t limit_idx, int16_t limit) { 
+void driverAxisLimitSet(uint8_t axis_idx, uint8_t limit_idx, int16_t limit) {
 	ASSERT(axis_idx < CFG_TILT_SENSOR_COUNT);
 	ASSERT(limit_idx < 2);
 	l_nv_data.axis_limits[axis_idx][limit_idx] = limit;
