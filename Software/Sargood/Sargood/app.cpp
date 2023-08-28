@@ -230,7 +230,7 @@ bool check_axis_within_limit(uint8_t axis_idx, uint8_t limit_idx) {
 	const int16_t limit = driverAxisLimitGet(axis_idx, limit_idx);
 	if (SBC2022_MODBUS_TILT_FAULT == limit)		// Either no limit possible on this axis or no limit set.
 		return true;
-		
+
 	return (DRIVER_AXIS_LIMIT_IDX_LOWER == limit_idx) ?
 	  ((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx] > (limit + (int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND])) :
 	  ((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx] < (limit - (int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]));
@@ -284,7 +284,7 @@ static int8_t thread_cmd(void* arg) {
 		case APP_CMD_HEAD_DOWN:	if (check_not_awake()) break; if (check_axis_within_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_LOWER)) { axis_set_drive(AXIS_HEAD, AXIS_DIR_DOWN);	goto do_manual; } else { cmd_done(APP_CMD_STATUS_MOTION_LIMIT); break; }
 		case APP_CMD_LEG_UP:	if (check_not_awake()) break; if (check_axis_within_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_UPPER)) { axis_set_drive(AXIS_FOOT, AXIS_DIR_UP);	goto do_manual; } else { cmd_done(APP_CMD_STATUS_MOTION_LIMIT); break; }
 		case APP_CMD_LEG_DOWN:	if (check_not_awake()) break; if (check_axis_within_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_LOWER)) { axis_set_drive(AXIS_FOOT, AXIS_DIR_DOWN);	goto do_manual; } else { cmd_done(APP_CMD_STATUS_MOTION_LIMIT); break; }
-		// TODO: As above, so below. 
+		// TODO: As above, so below.
 		case APP_CMD_BED_UP:	if (check_not_awake()) break; axis_set_drive(AXIS_BED, AXIS_DIR_UP);	goto do_manual;
 		case APP_CMD_BED_DOWN:	if (check_not_awake()) break; axis_set_drive(AXIS_BED, AXIS_DIR_DOWN);	goto do_manual;
 		case APP_CMD_TILT_UP:	if (check_not_awake()) break; axis_set_drive(AXIS_TILT, AXIS_DIR_UP);	goto do_manual;
@@ -492,7 +492,7 @@ static constexpr uint16_t RS232_CMD_TIMEOUT_MILLIS = 100U;
 static constexpr uint8_t  RS232_CMD_CHAR_COUNT = 4;
 
 // My test IR remote uses this address.
-static constexpr uint16_t IR_CODE_ADDRESS = 0xef00;
+static constexpr uint16_t IR_CODE_ADDRESS = 0x0000;	// Was 0xef00
 
 static int8_t thread_rs232_cmd(void* arg) {
 	(void)arg;
@@ -537,8 +537,8 @@ static int8_t thread_rs232_cmd(void* arg) {
 	byte 3: command code
 	byte 4: 1 if the controller was not busy and accepted the command, 0 otherwise.
 	byte 5: Checksum of 8 bit addition of all bytes in the message.
-	
-	Note that the response will always be a '1' if the Controller was not busy, even if the command code was not recognised. The only situation where the response will be zero is if the 
+
+	Note that the response will always be a '1' if the Controller was not busy, even if the command code was not recognised. The only situation where the response will be zero is if the
 	Controller is moving to a preset position.
 */
 static void rs232_resp(uint8_t cmd, uint8_t rc) {
@@ -549,7 +549,7 @@ static void rs232_resp(uint8_t cmd, uint8_t rc) {
 	GPIO_SERIAL_RS232.write((uint8_t)((IR_CODE_ADDRESS>>8) + IR_CODE_ADDRESS + cmd + rc));
 }
 
-// For binary format we emit ESC ID, then the event from memory, escaping an ESC with ESC 00. So data 123456fe is sent fe01123456fe00 
+// For binary format we emit ESC ID, then the event from memory, escaping an ESC with ESC 00. So data 123456fe is sent fe01123456fe00
 enum {
 	BINARY_FMT_ID_EVENT = 1,
 };
@@ -571,7 +571,7 @@ static void emit_binary_trace(uint8_t id, const uint8_t* m, uint8_t sz) {
 static void service_trace_log() {
 	EventTraceItem evt;
 	if (eventTraceRead(&evt)) {
-		if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TRACE_FORMAT_BINARY) 
+		if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TRACE_FORMAT_BINARY)
 			emit_binary_trace(BINARY_FMT_ID_EVENT, reinterpret_cast<const uint8_t*>(&evt), sizeof(evt));
 		else {
 			const uint8_t id = event_id(evt.event);
@@ -654,34 +654,44 @@ typedef struct {
 	uint8_t ir_cmd;
 	uint8_t app_cmd;
 } IrCmdDef;
+/* Layout on James' remote:
+5 4 6 7
+9 8 10 11
+13 12 14 15
+21 20 22 23
+25 24 26 27
+17 16 18 19
+*/
 const static IrCmdDef IR_CMD_DEFS[] PROGMEM = {
-	{ 0x00, APP_CMD_WAKEUP },
-	{ 0x01, APP_CMD_STOP },
-	{ 0x02, APP_CMD_CLEAR_LIMITS },
+	{ 5, APP_CMD_WAKEUP },
+	{ 4, APP_CMD_STOP },
+	{ 6, APP_CMD_CLEAR_LIMITS },
+	// 7
 
-	{ 0x04, APP_CMD_HEAD_UP },
-	{ 0x05, APP_CMD_HEAD_DOWN },
-	{ 0x06, APP_CMD_LEG_UP },
-	{ 0x07, APP_CMD_LEG_DOWN },
-	{ 0x08, APP_CMD_BED_UP },
-	{ 0x09, APP_CMD_BED_DOWN },
-	{ 0x0a, APP_CMD_TILT_UP },
-	{ 0x0b, APP_CMD_TILT_DOWN },
+	{ 9, APP_CMD_HEAD_UP },
+	{ 8, APP_CMD_HEAD_DOWN },
+	{ 10, APP_CMD_LEG_UP },
+	{ 11, APP_CMD_LEG_DOWN },
 
-	{ 0x0c, APP_CMD_SAVE_LIMIT_HEAD_LOWER },
-	{ 0x0d, APP_CMD_SAVE_LIMIT_HEAD_UPPER },
-	{ 0x0e, APP_CMD_SAVE_LIMIT_FOOT_LOWER },
-	{ 0x0f, APP_CMD_SAVE_LIMIT_FOOT_UPPER },
+	{ 13, APP_CMD_BED_UP },
+	{ 12, APP_CMD_BED_DOWN },
+	{ 14, APP_CMD_TILT_UP },
+	{ 15, APP_CMD_TILT_DOWN },
 
-	{ 0x10, APP_CMD_RESTORE_POS_1 },
-	{ 0x11, APP_CMD_RESTORE_POS_2 },
-	{ 0x12, APP_CMD_RESTORE_POS_3 },
-	{ 0x13, APP_CMD_RESTORE_POS_4 },
+	{ 21, APP_CMD_SAVE_LIMIT_HEAD_LOWER },
+	{ 20, APP_CMD_SAVE_LIMIT_HEAD_UPPER },
+	{ 22, APP_CMD_SAVE_LIMIT_FOOT_LOWER },
+	{ 23, APP_CMD_SAVE_LIMIT_FOOT_UPPER },
 
-	{ 0x14, APP_CMD_SAVE_POS_1 },
-	{ 0x15, APP_CMD_SAVE_POS_2 },
-	{ 0x16, APP_CMD_SAVE_POS_3 },
-	{ 0x17, APP_CMD_SAVE_POS_4 },
+	{ 25, APP_CMD_RESTORE_POS_1 },
+	{ 24, APP_CMD_RESTORE_POS_2 },
+	{ 26, APP_CMD_RESTORE_POS_3 },
+	{ 27, APP_CMD_RESTORE_POS_4 },
+
+	{ 17, APP_CMD_SAVE_POS_1 },
+	{ 16, APP_CMD_SAVE_POS_2 },
+	{ 18, APP_CMD_SAVE_POS_3 },
+	{ 19, APP_CMD_SAVE_POS_4 },
 };
 
 // For now use same command table for remote.
