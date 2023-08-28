@@ -19,8 +19,8 @@ enum {
     GPIO_PIN_LED_BUILTIN = 13,                     // Onboard LED
     GPIO_PIN_LED = 30,                             // Blinky LED
     GPIO_PIN_TS_RIGHT = 33,                        // Touchswitch module
-    GPIO_PIN_TS_LEFT = 34,                         // Touchswitch module
-    GPIO_PIN_TS_MENU = 35,                         // Touchswitch module
+    GPIO_PIN_TS_MENU = 34,                         // Touchswitch module
+    GPIO_PIN_TS_LEFT = 35,                         // Touchswitch module
     GPIO_PIN_TS_RET = 36,                          // Touchswitch module
 
     // LCD
