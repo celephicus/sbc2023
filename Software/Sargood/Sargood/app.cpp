@@ -548,7 +548,7 @@ static constexpr uint16_t RS232_CMD_TIMEOUT_MILLIS = 100U;
 static constexpr uint8_t  RS232_CMD_CHAR_COUNT = 4;
 
 // My test IR remote uses this address.
-static constexpr uint16_t IR_CODE_ADDRESS = 0xef00;
+static constexpr uint16_t IR_CODE_ADDRESS = 0x0000;	// Was 0xef00
 
 static int8_t thread_rs232_cmd(void* arg) {
 	(void)arg;
@@ -706,38 +706,49 @@ enum {
 };
 
 // Command table to map IR/RS232 codes to AP_CMD_xxx codes. Must be sorted on command ID.
+// Command table to map IR/RS232 codes to AP_CMD_xxx codes. Must be sorted on command ID.
 typedef struct {
 	uint8_t ir_cmd;
 	uint8_t app_cmd;
 } IrCmdDef;
+/* Layout on James' remote:
+5 4 6 7
+9 8 10 11
+13 12 14 15
+21 20 22 23
+25 24 26 27
+17 16 18 19
+*/
 const static IrCmdDef IR_CMD_DEFS[] PROGMEM = {
-	{ 0x00, APP_CMD_WAKEUP },
-	{ 0x01, APP_CMD_STOP },
-	{ 0x02, APP_CMD_LIMIT_CLEAR_ALL },
+	{ 4, APP_CMD_STOP },
+	{ 5, APP_CMD_WAKEUP },
+	{ 6, APP_CMD_LIMIT_CLEAR_ALL },
+	// 7
 
-	{ 0x04, APP_CMD_JOG_HEAD_UP },
-	{ 0x05, APP_CMD_JOG_HEAD_DOWN },
-	{ 0x06, APP_CMD_JOG_LEG_UP },
-	{ 0x07, APP_CMD_JOG_LEG_DOWN },
-	{ 0x08, APP_CMD_JOG_BED_UP },
-	{ 0x09, APP_CMD_JOG_BED_DOWN },
-	{ 0x0a, APP_CMD_JOG_TILT_UP },
-	{ 0x0b, APP_CMD_JOG_TILT_DOWN },
+	{ 8, APP_CMD_JOG_HEAD_DOWN },
+	{ 9, APP_CMD_JOG_HEAD_UP },
+	{ 10, APP_CMD_JOG_LEG_UP },
+	{ 11, APP_CMD_JOG_LEG_DOWN },
 
-	{ 0x0c, APP_CMD_LIMIT_SAVE_HEAD_DOWN },
-	{ 0x0d, APP_CMD_LIMIT_SAVE_HEAD_UP },
-	{ 0x0e, APP_CMD_LIMIT_SAVE_FOOT_DOWN },
-	{ 0x0f, APP_CMD_LIMIT_SAVE_FOOT_UP },
+	{ 12, APP_CMD_JOG_BED_DOWN },
+	{ 13, APP_CMD_JOG_BED_UP },
+	{ 14, APP_CMD_JOG_TILT_UP },
+	{ 15, APP_CMD_JOG_TILT_DOWN },
 
-	{ 0x10, APP_CMD_RESTORE_POS_1 },
-	{ 0x11, APP_CMD_RESTORE_POS_2 },
-	{ 0x12, APP_CMD_RESTORE_POS_3 },
-	{ 0x13, APP_CMD_RESTORE_POS_4 },
+	{ 16, APP_CMD_POS_SAVE_2 },
+	{ 17, APP_CMD_POS_SAVE_1 },
+	{ 18, APP_CMD_POS_SAVE_3 },
+	{ 19, APP_CMD_POS_SAVE_4 },
 
-	{ 0x14, APP_CMD_POS_SAVE_1 },
-	{ 0x15, APP_CMD_POS_SAVE_2 },
-	{ 0x16, APP_CMD_POS_SAVE_3 },
-	{ 0x17, APP_CMD_POS_SAVE_4 },
+	{ 20, APP_CMD_LIMIT_SAVE_HEAD_UP },
+	{ 21, APP_CMD_LIMIT_SAVE_HEAD_DOWN },
+	{ 22, APP_CMD_LIMIT_SAVE_FOOT_DOWN },
+	{ 23, APP_CMD_LIMIT_SAVE_FOOT_UP },
+
+	{ 24, APP_CMD_RESTORE_POS_2 },
+	{ 25, APP_CMD_RESTORE_POS_1 },
+	{ 26, APP_CMD_RESTORE_POS_3 },
+	{ 27, APP_CMD_RESTORE_POS_4 },
 };
 
 // For now use same command table for remote.

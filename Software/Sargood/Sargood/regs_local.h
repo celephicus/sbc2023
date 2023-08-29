@@ -3,7 +3,7 @@
 
 // Define version of NV data. If you change the schema or the implementation, increment the number to force any existing
 // EEPROM to flag as corrupt. Also increment to force the default values to be set for testing.
-const uint16_t REGS_DEF_VERSION = 7;
+const uint16_t REGS_DEF_VERSION = 8;
 
 /* [[[ Definition start...
 
@@ -78,7 +78,7 @@ ENABLES [nv fmt=hex] "Non-volatile enable flags.
 - SENSOR_DISABLE_1 [bit=5] "Disable Sensor 1."
 - SENSOR_DISABLE_2 [bit=6] "Disable Sensor 2."
 - SENSOR_DISABLE_3 [bit=7] "Disable Sensor 3."
-- TOUCH_DISABLE [bit=8 default=1] "Disable touch buttons."
+- TOUCH_DISABLE [bit=8] "Disable touch buttons."
 - SLAVE_UPDATE_DISABLE [bit=9] "Disable slave MODBUS schedule.
 	Disable the schedule that reads Sensors and writes the Relay. For testing onlyas all slaves will go to fault state."
 - TRACE_FORMAT_BINARY [bit=13] "Dump trace in binary format."
@@ -129,7 +129,7 @@ enum {
 #define REGS_START_NV_IDX REGS_IDX_SLEW_TIMEOUT
 
 // Define default values for the NV segment.
-#define REGS_NV_DEFAULT_VALS 30, 500, 3, 256, 0, 0, 30, 50
+#define REGS_NV_DEFAULT_VALS 30, 500, 3, 0, 0, 0, 30, 50
 
 // Define how to format the reg when printing.
 #define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_U

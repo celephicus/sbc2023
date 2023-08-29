@@ -3,6 +3,7 @@
 #include "project_config.h"
 #include "gpio.h"
 #include "utils.h"
+#include "buffer.h"
 #include "regs.h"
 #include "dev.h"
 #include "console.h"
@@ -199,10 +200,10 @@ static void set_slave_status(uint8_t regs_idx_status, uint8_t new_status, uint8_
 }
 
 // Construct a request for the given MODBUS slave ID.
-typedef void (*build_slave_request_func)(Buffer& f_request, uint8_t modbus_id);
+typedef void (*build_slave_request_func)(BufferDynamic& f_request, uint8_t modbus_id);
 
 // Handle a response for the given index, returns true on success
-typedef bool (*handle_slave_response_func)(const Buffer& f_response, const Buffer& f_request, uint8_t idx);
+typedef bool (*handle_slave_response_func)(const BufferDynamic& f_response, const BufferDynamic& f_request, uint8_t idx);
 
 // Set an error for the slave.
 typedef void (*set_error_func)(uint8_t idx);
@@ -210,13 +211,13 @@ typedef void (*set_error_func)(uint8_t idx);
 //Check if the device is enabled
 typedef bool (*is_enabled_func)(uint8_t idx);
 
-static void build_request_relay(Buffer& f_request, uint8_t modbus_id) {
+static void build_request_relay(BufferDynamic& f_request, uint8_t modbus_id) {
 	f_request.add(modbus_id);
 	f_request.add(MODBUS_FC_WRITE_SINGLE_REGISTER);
 	f_request.addU16_be(SBC2022_MODBUS_REGISTER_RELAY);
 	f_request.addU16_be(REGS[REGS_IDX_RELAY_STATE]);
 }
-static bool handle_response_relay(const Buffer& f_response, const Buffer& f_request, uint8_t idx) {
+static bool handle_response_relay(const BufferDynamic& f_response, const BufferDynamic& f_request, uint8_t idx) {
 	(void)idx;		// Not used, only one Relay.
 	// REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
 	if ((8 == f_response.len()) && (MODBUS_FC_WRITE_SINGLE_REGISTER == f_response[MODBUS_FRAME_IDX_FUNCTION])) {
@@ -233,14 +234,14 @@ static void set_error_relay(uint8_t idx) {
 }
 static bool is_enabled_relay(uint8_t idx) { return true; }
 
-static void build_request_sensor(Buffer& f_request, uint8_t modbus_id) {
+static void build_request_sensor(BufferDynamic& f_request, uint8_t modbus_id) {
 	f_request.add(modbus_id);
 	f_request.add(MODBUS_FC_READ_HOLDING_REGISTERS);
 	f_request.addU16_be(SBC2022_MODBUS_REGISTER_SENSOR_TILT);
 	// TODO: only need two registers here, but we request 3 for debugging.
 	f_request.addU16_be(3);
 }
-static bool handle_response_sensor(const Buffer& f_response, const Buffer& f_request, uint8_t idx) {
+static bool handle_response_sensor(const BufferDynamic& f_response, const BufferDynamic& f_request, uint8_t idx) {
 // REQ: [ID FC=3 addr:16 count:16(max 125)] RESP: [ID FC=3 byte-count value-0:16, ...]
 	if (MODBUS_FC_READ_HOLDING_REGISTERS == f_response[MODBUS_FRAME_IDX_FUNCTION]) {
 		uint16_t address = f_request.getU16_be(MODBUS_FRAME_IDX_DATA); // Get register address from request frame.
@@ -338,7 +339,7 @@ bool driverSensorUpdateAvailable() { const bool f = f_slave_status.schedule_done
 static constexpr uint16_t SLAVE_QUERY_PERIOD = 12U;
 
 static int8_t thread_query_slaves(void* arg) {
-	static Buffer req(MAX_MODBUS_FRAME_SIZE);
+	static BufferDynamic req(MAX_MODBUS_FRAME_SIZE);
 
 	THREAD_BEGIN();
 	while (1) {
@@ -402,7 +403,7 @@ int8_t driverGetFaultySensor() {
 
 static void do_handle_modbus_cb(uint8_t evt) {
 	if (MODBUS_CB_EVT_M_RESP_RX == evt) {  // Good response from slave...
-		const Buffer& frame = modbusRxFrame();
+		const BufferDynamic& frame = modbusRxFrame();
 		const int8_t slave_idx = get_slave_def(frame[MODBUS_FRAME_IDX_SLAVE_ID]);	// Do we have a definition?
 		if (slave_idx >= 0) {	// Yes!
 			const SlaveDef* slave_def = &SLAVES[slave_idx];
@@ -803,7 +804,7 @@ static void switches_setup() {
 	swScanInit(SWITCHES_DEFS, switches_contexts, UTILS_ELEMENT_COUNT(SWITCHES_DEFS));
 }
 static void switches_service() {
-	if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TOUCH_DISABLE)
+	if (!(REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TOUCH_DISABLE))
 		swScanSample(SWITCHES_DEFS, switches_contexts, UTILS_ELEMENT_COUNT(SWITCHES_DEFS));
 }
 

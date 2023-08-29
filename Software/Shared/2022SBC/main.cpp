@@ -6,6 +6,7 @@
 #include "dev.h"
 #include "regs.h"
 #include "utils.h"
+#include "buffer.h"
 #include "console.h"
 #include "modbus.h"
 #include "driver.h"
@@ -87,7 +88,7 @@ static bool console_cmds_user(char* cmd) {
         uint8_t* d = (uint8_t*)consoleStackPop(); uint8_t sz = *d; modbusSend(d + 1, sz);
       } break;
     case /** WRITE **/ 0xa8f8: { // (val addr sl -) REQ: [FC=6 addr:16 value:16] -- RESP: [FC=6 addr:16 value:16]
-		Buffer rf(10);
+		BufferDynamic rf(10);
 		rf.add(consoleStackPop());
 		rf.add(MODBUS_FC_WRITE_SINGLE_REGISTER);
 		rf.addU16_be((uint16_t)consoleStackPop());
@@ -95,7 +96,7 @@ static bool console_cmds_user(char* cmd) {
 		modbusSend(rf);
       } break;
     case /** READ **/ 0xd8b7: { // (count addr sl -) REQ: [FC=3 addr:16 count:16(max 125)] RESP: [FC=3 byte-count value-0:16, ...]
-		Buffer rf(10);
+		BufferDynamic rf(10);
 		rf.add(consoleStackPop());
 		rf.add(MODBUS_FC_READ_HOLDING_REGISTERS);
 		rf.addU16_be((uint16_t)consoleStackPop());
