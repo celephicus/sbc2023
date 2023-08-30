@@ -81,6 +81,7 @@ ENABLES [nv fmt=hex] "Non-volatile enable flags.
 - TOUCH_DISABLE [bit=8] "Disable touch buttons."
 - SLAVE_UPDATE_DISABLE [bit=9] "Disable slave MODBUS schedule.
 	Disable the schedule that reads Sensors and writes the Relay. For testing onlyas all slaves will go to fault state."
+- ALWAYS_AWAKE [bit=10] "Controller always awake, ignored WAKE command."
 - TRACE_FORMAT_BINARY [bit=13] "Dump trace in binary format."
 - TRACE_FORMAT_CONCISE [bit=14] "Dump trace in concise text format."
 - DISABLE_BLINKY_LED [bit=15] "Disable setting Blinky Led from fault states.
@@ -165,6 +166,7 @@ enum {
     	REGS_ENABLES_MASK_SENSOR_DISABLE_3 = (int)0x80,
     	REGS_ENABLES_MASK_TOUCH_DISABLE = (int)0x100,
     	REGS_ENABLES_MASK_SLAVE_UPDATE_DISABLE = (int)0x200,
+    	REGS_ENABLES_MASK_ALWAYS_AWAKE = (int)0x400,
     	REGS_ENABLES_MASK_TRACE_FORMAT_BINARY = (int)0x2000,
     	REGS_ENABLES_MASK_TRACE_FORMAT_CONCISE = (int)0x4000,
     	REGS_ENABLES_MASK_DISABLE_BLINKY_LED = (int)0x8000,
@@ -308,6 +310,7 @@ enum {
     "\n SENSOR_DISABLE_3: 7 (Disable Sensor 3.)"                                        \
     "\n TOUCH_DISABLE: 8 (Disable touch buttons.)"                                      \
     "\n SLAVE_UPDATE_DISABLE: 9 (Disable slave MODBUS schedule.)"                       \
+    "\n ALWAYS_AWAKE: 10 (Controller always awake, ignored WAKE command.)"              \
     "\n TRACE_FORMAT_BINARY: 13 (Dump trace in binary format.)"                         \
     "\n TRACE_FORMAT_CONCISE: 14 (Dump trace in concise text format.)"                  \
     "\n DISABLE_BLINKY_LED: 15 (Disable setting Blinky Led from fault states.)"         \

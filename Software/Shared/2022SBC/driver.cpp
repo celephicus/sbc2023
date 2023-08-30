@@ -330,6 +330,11 @@ static bool slave_too_many_errors(uint8_t slave_idx) { return f_slave_status.err
 static void set_schedule_done() { f_slave_status.schedule_done = true; }
 bool driverSensorUpdateAvailable() { const bool f = f_slave_status.schedule_done; f_slave_status.schedule_done = false; return f; }
 
+// Check if a slave is faulty.
+static bool is_slave_faulty(uint8_t regs_idx_status) {
+	return isSlaveStatusFault(REGS[regs_idx_status]);
+}
+
 #include "thread.h"
 
 /* This code reads all sensors and writes to the relay, then decides if there is an error condition that should be flagged upwards.
@@ -373,7 +378,7 @@ static int8_t thread_query_slaves(void* arg) {
 
 			// Update error flags that are used by Command Processor and that drive the Blinky LED.
 			const is_enabled_func is_enabled = reinterpret_cast<const is_enabled_func>(pgm_read_ptr(&slave_def->is_enabled));
-			regsWriteMaskFlags(pgm_read_word(&slave_def->fault_flags_mask), (is_enabled(idx) && driverIsSlaveFaulty(pgm_read_byte(&slave_def->regs_idx_status))));
+			regsWriteMaskFlags(pgm_read_word(&slave_def->fault_flags_mask), (is_enabled(idx) && is_slave_faulty(pgm_read_byte(&slave_def->regs_idx_status))));
 		}
 
 		set_schedule_done();			// Flag new data available to command thread.
@@ -387,15 +392,10 @@ bool driverSensorIsEnabled(uint8_t sensor_idx) {
 	return !(REGS[REGS_IDX_ENABLES] & (REGS_ENABLES_MASK_SENSOR_DISABLE_0 << sensor_idx));
 }
 
-// Check if a slave is faulty.
-bool driverIsSlaveFaulty(uint8_t regs_idx_status) {
-	return isSlaveStatusFault(REGS[regs_idx_status]);
-}
-
 // Return index of first faulty AND enabled sensor, else -1;
 int8_t driverGetFaultySensor() {
 	fori (CFG_TILT_SENSOR_COUNT) {
-		if (driverSensorIsEnabled(i) &&  driverIsSlaveFaulty(REGS_IDX_SENSOR_STATUS_0 + i))
+		if (driverSensorIsEnabled(i) &&  is_slave_faulty(REGS_IDX_SENSOR_STATUS_0 + i))
 			return i;
 	}
 	return -1;

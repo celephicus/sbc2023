@@ -127,7 +127,6 @@ static bool timer_is_timeout(uint16_t now, uint16_t* then, uint16_t duration) { 
 
 // Keep state in struct for easy viewing in debugger.
 static struct {
-	// thread_control_t tcb_cmd;
 	thread_control_t tcb_rs232_cmd;
 	uint8_t cmd_req;
 	uint8_t save_preset_attempts, save_cmd;
@@ -139,15 +138,13 @@ static struct {
 
 // Do the needful to wake the app.
 static void do_wakeup() {
-	app_timer_start(APP_TIMER_WAKEUP, APP_WAKEUP_TIMEOUT_SECS*TICKS_PER_SEC);
-	// TODO: Move backlight control to GUI listening for WAKEUP event.
-	driverSetLcdBacklight(255);
-	if (regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_NOT_AWAKE, false))
-		eventPublish(EV_WAKEUP, 1);
+	if (!(REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_ALWAYS_AWAKE)) {		// If not always awake...
+		app_timer_start(APP_TIMER_WAKEUP, APP_WAKEUP_TIMEOUT_SECS*TICKS_PER_SEC);
+		regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_NOT_AWAKE, false);
+	}
 }
 
 // Accessors for state.
-static inline bool is_awake() { return !(regsFlags() & REGS_FLAGS_MASK_FAULT_NOT_AWAKE); }
 static inline bool is_idle() { return (APP_CMD_IDLE == REGS[REGS_IDX_CMD_ACTIVE]); }
 
 // Set end status of a PENDING command from worker thread.
@@ -858,11 +855,19 @@ static int16_t menu_scale_jog_duration(int16_t val) { return utilsMscale<int16_t
 static int16_t menu_unscale_jog_duration(uint8_t v) { return utilsUnmscale<int16_t, uint8_t>((int16_t)v, MENU_ITEM_JOG_DURATION_MIN, MENU_ITEM_JOG_DURATION_MAX, MENU_ITEM_JOG_DURATION_INC); }
 static uint8_t menu_max_jog_duration() { return utilsMscaleMax<int16_t, uint8_t>( MENU_ITEM_JOG_DURATION_MIN, MENU_ITEM_JOG_DURATION_MAX, MENU_ITEM_JOG_DURATION_INC); }
 
+// Enable wakeup command.
+static const char MENU_ITEM_WAKEUP_ENABLE_TITLE[] PROGMEM = "Wake Cmd Enable";
+static int16_t menu_scale_yes_no(int16_t val) { return val; }
+static int16_t menu_unscale_yes_no(uint8_t v) { return v; }
+static uint8_t menu_max_yes_no() { return 1; }
 
-static char f_menu_fmt_buf[15];
-const char* menu_format_number(int16_t v) { myprintf_snprintf(f_menu_fmt_buf, sizeof(f_menu_fmt_buf), PSTR("%u"), v); return f_menu_fmt_buf; }
-//const char* format_yes_no(uint8_t v) { const char* yn[2] = { "Yes", "No" }; return yn[!v]; }
-//const char* format_beep_options(uint8_t v) { const char* opts[] = { "Silent", "Card scan", "Always" }; return opts[v]; }
+static const char* menu_format_number(int16_t v) { 
+	static char f_menu_fmt_buf[15];
+	myprintf_snprintf(f_menu_fmt_buf, sizeof(f_menu_fmt_buf), PSTR("%u"), v); 
+	return f_menu_fmt_buf; 
+}
+static const char* format_yes_no(int16_t v) { static const char* yn[2] = { "Yes", "No" }; return yn[!v]; }
+//static const char* format_beep_options(int16_t v) { static const char* opts[] = { "Silent", "Card scan", "Always" }; return opts[v]; }
 
 static const MenuItem MENU_ITEMS[] PROGMEM = {
 	{
@@ -888,6 +893,14 @@ static const MenuItem MENU_ITEMS[] PROGMEM = {
 		menu_max_jog_duration,
 		false,
 		NULL,		// Special case, call unscale and print number.
+	},
+	{
+		MENU_ITEM_WAKEUP_ENABLE_TITLE,
+		REGS_IDX_ENABLES, REGS_ENABLES_MASK_ALWAYS_AWAKE,
+		menu_scale_yes_no, menu_unscale_yes_no,
+		menu_max_yes_no,
+		true,
+		format_yes_no,	
 	},
 };
 
@@ -946,17 +959,19 @@ typedef struct {
 static SmLcdContext f_sm_lcd_ctx;
 
 // Timeouts.
-static const uint16_t DISPLAY_CMD_START_DURATION_MS =		1U*1000U;
-static const uint16_t DISPLAY_BANNER_DURATION_MS =			2U*1000U;
-//static const uint16_t BACKLIGHT_TIMEOUT_MS =				4U*1000U;
-static const uint16_t UPDATE_INFO_PERIOD_MS =				500U;
-static const uint16_t MENU_TIMEOUT_MS =						10U*1000U;
+static constexpr uint16_t DISPLAY_CMD_START_DURATION_MS =		1U*1000U;
+static constexpr uint16_t DISPLAY_BANNER_DURATION_MS =			2U*1000U;
+static constexpr uint16_t UPDATE_INFO_PERIOD_MS =				500U;
+static constexpr uint16_t MENU_TIMEOUT_MS =						10U*1000U;
+static constexpr uint16_t BACKLIGHT_TIMEOUT_MS = 				4U*1000U;
 
 // Timers
 enum {
 	TIMER_MSG,
 	TIMER_UPDATE_INFO,
+	TIMER_BACKLIGHT,
 };
+
 // Define states.
 enum {
 	ST_INIT, ST_CLEAR_LIMITS, ST_RUN, ST_MENU
@@ -989,6 +1004,15 @@ static void lcd_flush() {
 	f_lcd.flush();
 }
 
+// Backlight, call with arg true to turn on with no timeout.
+static void backlight_on(bool cont=false) {
+	driverSetLcdBacklight(255);
+	if (cont)
+		eventSmTimerStop(TIMER_BACKLIGHT);
+	else
+		eventSmTimerStart(TIMER_BACKLIGHT, BACKLIGHT_TIMEOUT_MS/100U);
+}
+
 //	1234567890123456
 //
 //	H-12345 F-12345
@@ -1000,7 +1024,7 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 		case ST_INIT:
 		switch(event_id(ev)) {
 			case EV_SM_ENTRY:
-			driverSetLcdBacklight(255);
+			backlight_on(true);		// Turn on till we tell it to start timing.
 			lcd_printf(0, PSTR("  TSA MBC 2022"));
 			lcd_flush();
 			lcd_printf(1, PSTR("V" CFG_VER_STR " build " CFG_BUILD_NUMBER_STR));
@@ -1038,27 +1062,23 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 		case ST_RUN:
 		switch(event_id(ev)) {
 			case EV_SM_ENTRY:
-			driverSetLcdBacklight(0);
 			eventSmPostSelf(context);
-			if (!(regsFlags() & REGS_FLAGS_MASK_FAULT_NOT_AWAKE))
-				driverSetLcdBacklight(0);
 			break;
 
 			case EV_SM_SELF:
-			eventSmTimerStart(TIMER_UPDATE_INFO, 1);
+			backlight_on();		// Start timing.
+			eventSmTimerStart(TIMER_UPDATE_INFO, 1);	// Get update event next tick, will then restart timer & repeat.
 			break;
 
-			case EV_WAKEUP:
-				driverSetLcdBacklight((regsFlags() & REGS_FLAGS_MASK_FAULT_NOT_AWAKE) ? 255 : 0);
-				break;
-
 			case EV_COMMAND_START:
+			backlight_on(true);		// Turn on till we tell it to start timing.
 			lcd_printf(0, get_cmd_desc(event_p8(ev)));
 			lcd_printf(1, PSTR("Running"));
 			eventSmTimerStop(TIMER_UPDATE_INFO);
 			break;
 
 			case EV_COMMAND_DONE:
+			backlight_on();		// Start timing.
 			lcd_printf(1, get_cmd_status_desc(event_p16(ev)));
 			eventSmTimerStart(TIMER_MSG, DISPLAY_CMD_START_DURATION_MS/100U);
 			break;
@@ -1066,12 +1086,20 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 			case EV_TIMER:
 			if (event_p8(ev) == TIMER_MSG)
 				eventSmPostSelf(context);
-			if (event_p8(ev) == TIMER_UPDATE_INFO) {
-				lcd_printf(0, PSTR("R %S"), driverIsSlaveFaulty(REGS_IDX_RELAY_STATE) ? PSTR("FAIL") : PSTR("OK"));
-				//lcdDriverWrite(LCD_DRIVER_ROW_2, 0, PSTR("    Ready..."));
+			else if (event_p8(ev) == TIMER_UPDATE_INFO) {
+				// Turn on backlight if any devices are faulty.
+				if (regsFlags() & (FLAGS_MASK_SENSORS_ALL | REGS_FLAGS_MASK_FAULT_RELAY))
+					backlight_on();			
+				
+				// Display status on LCD. Not sure what we need here.
+				// TODO: Fix this...
+				lcd_printf(0, PSTR("R %S"), (regsFlags() & REGS_FLAGS_MASK_FAULT_RELAY) ? PSTR("FAIL") : PSTR("OK"));
 				lcd_printf(1, PSTR("H%+-6d T%+-6d"), REGS[REGS_IDX_TILT_SENSOR_0], REGS[REGS_IDX_TILT_SENSOR_1]);
+				
 				eventSmTimerStart(TIMER_UPDATE_INFO, UPDATE_INFO_PERIOD_MS/100U);
 			}
+			else if (event_p8(ev) == TIMER_BACKLIGHT)
+				driverSetLcdBacklight(0);
 			break;
 
 			case EV_SW_TOUCH_MENU:
@@ -1084,13 +1112,14 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 		case ST_MENU:
 		switch(event_id(ev)) {
 			case EV_SM_ENTRY:
-			driverSetLcdBacklight(255);
+			backlight_on(true);		// Turn on till we twll it to start timing.
 			my_context->menu_item_idx = 0;
 			eventSmTimerStart(TIMER_MSG, MENU_TIMEOUT_MS/100U);
 			eventSmPostSelf(context);
 			break;
 
 			case EV_SM_EXIT:
+			backlight_on();
 			// TODO: Only update value if has changed.
 			menuItemWriteValue(my_context->menu_item_idx, my_context->menu_item_value);
 			driverNvWrite();
@@ -1146,18 +1175,19 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 
 void appInit() {
 	threadInit(&f_app_ctx.tcb_rs232_cmd);
-	//threadInit(&f_app_ctx.tcb_cmd);
 	eventInit();
 	lcd_init();
 	eventSmInit(sm_lcd, (EventSmContextBase*)&f_sm_lcd_ctx, 0);
 	eventSmInit(sm_ir_rec, (EventSmContextBase*)&f_sm_ir_rec_ctx, 1);
-	regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_NOT_AWAKE, true);		// Set not awake.
+	
+	// Set not awake if always awake not enabled else keep it clear. 
+	if (!(REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_ALWAYS_AWAKE))
+		regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_NOT_AWAKE, true);		
 }
 
 void appService() {
 	threadRun(&f_app_ctx.tcb_rs232_cmd, thread_rs232_cmd, NULL);
 	service_worker();
-	//threadRun(&f_app_ctx.tcb_cmd, thread_cmd, NULL);
 	t_event ev;
 
 	while (EV_NIL != (ev = eventGet())) {	// Read events until there are no more left.
@@ -1171,11 +1201,13 @@ void appService() {
 void appService10hz() {
 	eventSmTimerService();
 
-	const uint8_t app_timer_timeouts = app_timer_service();
-	if (app_timer_timeouts & _BV(APP_TIMER_WAKEUP)) {
-		if (regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_NOT_AWAKE, true))
-		eventPublish(EV_WAKEUP, 0);
+	const uint8_t timeout_mask = app_timer_service();
+	if (!(REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_ALWAYS_AWAKE)) {		// If not always awake...
+		if (timeout_mask & _BV(APP_TIMER_WAKEUP)) 
+			regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_NOT_AWAKE, true);
 	}
-	if (app_timer_timeouts & _BV(REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT)) 
+	
+	// TODO: Check this works...
+	if (timeout_mask & _BV(APP_TIMER_SLEW)) 
 		regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT, true);
 }
