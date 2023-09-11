@@ -1,0 +1,1 @@
+call avrdude -p m328p -c atmelice_isp -B 2 -U flash:w:%1:a
