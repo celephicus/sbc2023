@@ -43,20 +43,17 @@ SENSOR_STATUS_0 "Status from Sensor Module 0.
 	Values: 0 = no response, 1 = responding but faulty, 2 = invalid response.
 	100 = not moving, 101 = angle increasing towards vertical, 102 = angle decreasing."
 SENSOR_STATUS_1 "Status from Sensor Module 1.
-	Generally values >= 100 are good.
-		Generally values >= 100 are good.
-	Values: 0 = no response, 1 = responding but faulty, 2 = invalid response.
-	100 = not moving, 101 = angle increasing towards vertical, 102 = angle decreasing."
+	See SENSOR_STATUS_0."
 RELAY_STATUS "Status from Relay Module.
 	Generally values >= 100 are good.
 	Values: 0 = no response, 1 = responding but faulty, 2 = invalid response.
 	100 = OK."
-SENSOR_0_FAULTS "Number of Sensor 0 faults.
+SENSOR_0_FAULTS "Number of distinct Sensor 0 faults.
 	Count increments only when status changes from good to fault, or from one fault to another."
 SENSOR_1_FAULTS "Number of Sensor 1 faults.
-	Count increments only when status changes from good to fault, or from one fault to another."
+	As for SENSOR_0_FAULTS."
 RELAY_FAULTS "Counts number of Relay faults.
-	Count increments only when status changes from good to fault, or from one fault to another."
+	As for SENSOR_0_FAULTS."
 RELAY_STATE [fmt=hex] "Value written to relays."
 UPDATE_COUNT "Incremented on each update cycle."
 CMD_ACTIVE "Current running command."
