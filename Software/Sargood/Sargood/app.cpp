@@ -327,7 +327,8 @@ uint8_t appCmdRun(uint8_t cmd) {
 		return cmd_start(cmd, APP_CMD_STATUS_BAD_CMD);
 
 	// Check fault flags for command and return fail status if any are set. 
-	const uint16_t fault_mask = pgm_read_word(&cmd_def->fault_mask);
+	// Hack clear slew timeout as it might be set from a previous fault but the command handler clears it on reset.
+	const uint16_t fault_mask = pgm_read_word(&cmd_def->fault_mask) & ~REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT;
 	uint8_t fault_status = check_faults(fault_mask);
 	if (APP_CMD_STATUS_OK != fault_status)
 		return cmd_start(cmd, fault_status);
@@ -479,7 +480,9 @@ static void service_worker() {
 				}
 				else {						// If we are moving in one direction, check for position reached. We can't just check for zero as it might overshoot.
 					const int8_t target_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]);
-					if (axis_get_dir(s_axis_idx) == AXIS_DIR_UP) {
+					if ((axis_get_dir(s_axis_idx) == AXIS_DIR_DOWN) ^ (target_dir <= 0))
+						axis_stop_all();
+/*					if (axis_get_dir(s_axis_idx) == AXIS_DIR_UP) {
 						if (target_dir <= 0) 
 							axis_stop_all();
 					}
@@ -487,7 +490,7 @@ static void service_worker() {
 						if (target_dir >= 0) 
 							axis_stop_all();
 					}
-				}
+	*/			}
 			}
 				
 			if (axis_get_dir(s_axis_idx) == AXIS_DIR_STOP) 			// If not moving, turn on motors.
@@ -497,46 +500,6 @@ static void service_worker() {
 			
 	}	// Closes `switch (REGS[REGS_IDX_CMD_ACTIVE]) {'
 }
-
-#if 0
-static void slew_start(uint8_t axis_idx) {
-					return;
-
-				// Get direction to go, or we might be there anyways.
-				const int16_t* presets = driverPresets(preset_idx);
-				const int16_t delta = presets[s_axis_idx] - (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx];
-
-
-
-				// Stop and let axis motor rundown if they are moving...
-				if (REGS[REGS_IDX_RELAY_STATE] & (RELAY_HEAD_MASK|RELAY_FOOT_MASK)) {
-					axis_stop_all();
-					THREAD_START_DELAY();
-					do {
-						THREAD_WAIT_UNTIL(avail);
-						THREAD_YIELD();
-					} while (!THREAD_IS_DELAY_DONE(RELAY_STOP_DURATION_MS));
-				}
-
-				// Report final position after run-on...
-				eventPublish(EV_SLEW_FINAL, s_axis_idx, REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_idx]);
-			}	// Closes for (s_axis_idx...) ...
-
-			// Stop and let axis motor rundown if they are moving...
-slew_abort:	if (REGS[REGS_IDX_RELAY_STATE] & (RELAY_HEAD_MASK|RELAY_FOOT_MASK)) {
-				axis_stop_all();
-				THREAD_START_DELAY();
-				do {
-					THREAD_WAIT_UNTIL(avail);
-					THREAD_YIELD();
-				} while (!THREAD_IS_DELAY_DONE(RELAY_STOP_DURATION_MS));
-			}
-
-			regsWriteMaskFlags(REGS_FLAGS_MASK_SENSOR_DUMP_ENABLE, false);
-			cmd_done();
-			THREAD_YIELD();
-			} break;
-#endif
 
 // RS232 Remote Command
 //

@@ -741,7 +741,7 @@ static void ir_setup() {
 	irmp_register_complete_callback_function(&handleReceivedIRData);
 }
 
-const uint16_t IR_MIN_REPEAT_MS = 500;
+static constexpr uint16_t IR_MIN_REPEAT_MS = 100;	// Set to shorter than the shortest jog duration else it will chatter if you hold the button down.
 static void ir_service() {
 	static uint16_t s_repeat_timestamp_ms;
 	if (sIRMPDataAvailable) {

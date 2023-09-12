@@ -28,23 +28,23 @@ FLAGS [fmt=hex] "Various flags.
 	EEPROM bank 0 corrupt. If bank 1 is corrupt too then a default set of values has been written. Flag written at startup only."
 - EEPROM_READ_BAD_1 [bit=14] "EEPROM bank 1 corrupt.
 	EEPROM bank 1 corrupt. If bank 0 is corrupt too then a default set of values has been written. Flag written at startup only."
-- WATCHDOG_RESTART [bit=15] "Device has restarted from a watchdog timeout."
+- WATCHDOG_RESTART [bit=15] "Watchdog restart."
 RESTART [fmt=hex] "MCUSR in low byte, wdog in high byte.
 	The processor MCUSR register is copied into the low byte. The watchdog reset source is copied to the high byte. For details
 	refer to devWatchdogInit()."
-ADC_VOLTS_MON_BUS "Raw ADC (unscaled) voltage on Bus."
+ADC_VOLTS_MON_BUS "Raw ADC Bus volts."
 VOLTS_MON_BUS "Bus volts /mV."
-TILT_SENSOR_0 [fmt=signed] "Tilt angle sensor 0.
+TILT_SENSOR_0 [fmt=signed] "Tilt angle Sensor 0.
 	Value zero for horizontal, can measure nearly a full circle."
-TILT_SENSOR_1 [fmt=signed] "Tilt angle sensor 1.
+TILT_SENSOR_1 [fmt=signed] "Tilt angle Sensor 1.
 	Value zero for horizontal, can measure nearly a full circle."
-SENSOR_STATUS_0 "Status from Sensor Module 0.
+SENSOR_STATUS_0 "Status from Sensor 0.
 	Generally values >= 100 are good.
 	Values: 0 = no response, 1 = responding but faulty, 2 = invalid response.
 	100 = not moving, 101 = angle increasing towards vertical, 102 = angle decreasing."
-SENSOR_STATUS_1 "Status from Sensor Module 1.
+SENSOR_STATUS_1 "Status from Sensor 1.
 	See SENSOR_STATUS_0."
-RELAY_STATUS "Status from Relay Module.
+RELAY_STATUS "Status from Relay .
 	Generally values >= 100 are good.
 	Values: 0 = no response, 1 = responding but faulty, 2 = invalid response.
 	100 = OK."
@@ -91,6 +91,7 @@ MODBUS_DUMP_SLAVE_ID [nv default=0] "For master, only dump MODBUS events from th
 SLEW_STOP_DEADBAND [default=30 nv] "Stop slew when within this deadband."
 SLEW_START_DEADBAND [default=50 nv] "Only start slew if delta tilt less than start-deadband.
 	If the tilt error is less than this value then slew is not started."
+RUN_ON_TIME_POS1 [nv] "Run on time in ms for restore position 1 only."
 
 >>>  Definition end, declaration start... */
 
@@ -120,17 +121,18 @@ enum {
     REGS_IDX_MODBUS_DUMP_SLAVE_ID = 21,
     REGS_IDX_SLEW_STOP_DEADBAND = 22,
     REGS_IDX_SLEW_START_DEADBAND = 23,
-    COUNT_REGS = 24
+    REGS_IDX_RUN_ON_TIME_POS1 = 24,
+    COUNT_REGS = 25
 };
 
 // Define the start of the NV regs. The region is from this index up to the end of the register array.
 #define REGS_START_NV_IDX REGS_IDX_SLEW_TIMEOUT
 
 // Define default values for the NV segment.
-#define REGS_NV_DEFAULT_VALS 30, 500, 3, 0, 0, 0, 30, 50
+#define REGS_NV_DEFAULT_VALS 30, 500, 3, 0, 0, 0, 30, 50, 0
 
 // Define how to format the reg when printing.
-#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_U
+#define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_U, CFMT_U
 
 // Flags/masks for register FLAGS.
 enum {
@@ -195,6 +197,7 @@ enum {
  static const char REGS_NAMES_21[] PROGMEM = "MODBUS_DUMP_SLAVE_ID";                    \
  static const char REGS_NAMES_22[] PROGMEM = "SLEW_STOP_DEADBAND";                      \
  static const char REGS_NAMES_23[] PROGMEM = "SLEW_START_DEADBAND";                     \
+ static const char REGS_NAMES_24[] PROGMEM = "RUN_ON_TIME_POS1";                        \
                                                                                         \
  static const char* const REGS_NAMES[] PROGMEM = {                                      \
    REGS_NAMES_0,                                                                        \
@@ -221,19 +224,20 @@ enum {
    REGS_NAMES_21,                                                                       \
    REGS_NAMES_22,                                                                       \
    REGS_NAMES_23,                                                                       \
+   REGS_NAMES_24,                                                                       \
  }
 
 // Declare an array of description text for each register.
 #define DECLARE_REGS_DESCRS()                                                           \
  static const char REGS_DESCRS_0[] PROGMEM = "Various flags.";                          \
  static const char REGS_DESCRS_1[] PROGMEM = "MCUSR in low byte, wdog in high byte.";   \
- static const char REGS_DESCRS_2[] PROGMEM = "Raw ADC (unscaled) voltage on Bus.";      \
+ static const char REGS_DESCRS_2[] PROGMEM = "Raw ADC Bus volts.";                      \
  static const char REGS_DESCRS_3[] PROGMEM = "Bus volts /mV.";                          \
- static const char REGS_DESCRS_4[] PROGMEM = "Tilt angle sensor 0.";                    \
- static const char REGS_DESCRS_5[] PROGMEM = "Tilt angle sensor 1.";                    \
- static const char REGS_DESCRS_6[] PROGMEM = "Status from Sensor Module 0.";            \
- static const char REGS_DESCRS_7[] PROGMEM = "Status from Sensor Module 1.";            \
- static const char REGS_DESCRS_8[] PROGMEM = "Status from Relay Module.";               \
+ static const char REGS_DESCRS_4[] PROGMEM = "Tilt angle Sensor 0.";                    \
+ static const char REGS_DESCRS_5[] PROGMEM = "Tilt angle Sensor 1.";                    \
+ static const char REGS_DESCRS_6[] PROGMEM = "Status from Sensor 0.";                   \
+ static const char REGS_DESCRS_7[] PROGMEM = "Status from Sensor 1.";                   \
+ static const char REGS_DESCRS_8[] PROGMEM = "Status from Relay .";                     \
  static const char REGS_DESCRS_9[] PROGMEM = "Number of distinct Sensor 0 faults.";     \
  static const char REGS_DESCRS_10[] PROGMEM = "Number of Sensor 1 faults.";             \
  static const char REGS_DESCRS_11[] PROGMEM = "Counts number of Relay faults.";         \
@@ -249,6 +253,7 @@ enum {
  static const char REGS_DESCRS_21[] PROGMEM = "For master, only dump MODBUS events from this slave ID.";\
  static const char REGS_DESCRS_22[] PROGMEM = "Stop slew when within this deadband.";   \
  static const char REGS_DESCRS_23[] PROGMEM = "Only start slew if delta tilt less than start-deadband.";\
+ static const char REGS_DESCRS_24[] PROGMEM = "Run on time in ms for restore position 1 only.";\
                                                                                         \
  static const char* const REGS_DESCRS[] PROGMEM = {                                     \
    REGS_DESCRS_0,                                                                       \
@@ -275,6 +280,7 @@ enum {
    REGS_DESCRS_21,                                                                      \
    REGS_DESCRS_22,                                                                      \
    REGS_DESCRS_23,                                                                      \
+   REGS_DESCRS_24,                                                                      \
  }
 
 // Declare a multiline string description of the fields.
@@ -296,7 +302,7 @@ enum {
     "\n FAULT_APP_BUSY: 12 (App is busy running a pending command.)"                    \
     "\n EEPROM_READ_BAD_0: 13 (EEPROM bank 0 corrupt.)"                                 \
     "\n EEPROM_READ_BAD_1: 14 (EEPROM bank 1 corrupt.)"                                 \
-    "\n WATCHDOG_RESTART: 15 (Device has restarted from a watchdog timeout.)"           \
+    "\n WATCHDOG_RESTART: 15 (Watchdog restart.)"                                       \
     "\nEnables:"                                                                        \
     "\n DUMP_MODBUS_EVENTS: 0 (Dump MODBUS event value.)"                               \
     "\n DUMP_REGS: 1 (Enable regs dump to console.)"                                    \
