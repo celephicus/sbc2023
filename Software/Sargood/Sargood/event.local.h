@@ -14,8 +14,8 @@
 	SENSOR_UPDATE	Sensor value updated: p8=idx, p16=value.
 	REMOTE_CMD		Command from RS232 port, p8=byte2, p16=byte0..1.
 	SLEW_TARGET		Slew target pos; p8: axis idx; p16=target
-	SLEW_START		Slew start pos; p8: axis idx; p16=target
-	SLEW_STOP		Slew stop pos; p8: axis idx; p16=target
+	SLEW_START		Slew start pos; p8: axis idx; p16=current
+	SLEW_STOP		Slew stop pos; p8: axis idx; p16=current
 	SLEW_FINAL		Slew final pos; p8: axis idx; p16=target
 	RELAY_WRITE		Relay write; p8: relay
 	COMMAND_QUEUED	Command accepted; p8: accepted, p16=cmd
@@ -45,8 +45,8 @@ enum {
     EV_SENSOR_UPDATE = 18,              // Sensor value updated: p8=idx, p16=value.
     EV_REMOTE_CMD = 19,                 // Command from RS232 port, p8=byte2, p16=byte0..1.
     EV_SLEW_TARGET = 20,                // Slew target pos; p8: axis idx; p16=target
-    EV_SLEW_START = 21,                 // Slew start pos; p8: axis idx; p16=target
-    EV_SLEW_STOP = 22,                  // Slew stop pos; p8: axis idx; p16=target
+    EV_SLEW_START = 21,                 // Slew start pos; p8: axis idx; p16=current
+    EV_SLEW_STOP = 22,                  // Slew stop pos; p8: axis idx; p16=current
     EV_SLEW_FINAL = 23,                 // Slew final pos; p8: axis idx; p16=target
     EV_RELAY_WRITE = 24,                // Relay write; p8: relay
     EV_COMMAND_QUEUED = 25,             // Command accepted; p8: accepted, p16=cmd
@@ -137,8 +137,8 @@ enum {
  static const char EVENT_DESCS_18[] PROGMEM = "Sensor value updated: p8=idx, p16=value.";                                                   \
  static const char EVENT_DESCS_19[] PROGMEM = "Command from RS232 port, p8=byte2, p16=byte0..1.";                                           \
  static const char EVENT_DESCS_20[] PROGMEM = "Slew target pos; p8: axis idx; p16=target";                                                  \
- static const char EVENT_DESCS_21[] PROGMEM = "Slew start pos; p8: axis idx; p16=target";                                                   \
- static const char EVENT_DESCS_22[] PROGMEM = "Slew stop pos; p8: axis idx; p16=target";                                                    \
+ static const char EVENT_DESCS_21[] PROGMEM = "Slew start pos; p8: axis idx; p16=current";                                                  \
+ static const char EVENT_DESCS_22[] PROGMEM = "Slew stop pos; p8: axis idx; p16=current";                                                   \
  static const char EVENT_DESCS_23[] PROGMEM = "Slew final pos; p8: axis idx; p16=target";                                                   \
  static const char EVENT_DESCS_24[] PROGMEM = "Relay write; p8: relay";                                                                     \
  static const char EVENT_DESCS_25[] PROGMEM = "Command accepted; p8: accepted, p16=cmd";                                                    \

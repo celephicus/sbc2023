@@ -301,12 +301,13 @@ static const CmdHandlerDef* search_cmd_handler(uint8_t app_cmd) {
 static uint8_t check_faults(uint16_t mask) {
 	const uint16_t faults = regsFlags() & mask;
 	if (faults) {
-		if (faults & F_NOWAKE)		return APP_CMD_STATUS_NOT_AWAKE;
-		if (faults & F_BUSY)		return APP_CMD_STATUS_BUSY;
-		if (faults & F_RELAY)		return APP_CMD_STATUS_RELAY_FAIL;
-		if (faults & F_SENSOR_0)	return APP_CMD_STATUS_SENSOR_FAIL_0;
-		if (faults & F_SENSOR_1)	return APP_CMD_STATUS_SENSOR_FAIL_1;
-		else						return APP_CMD_STATUS_ERROR_UNKNOWN;
+		if (faults & F_SLEW_TIMEOUT)	return APP_CMD_STATUS_SLEW_TIMEOUT;
+		else if (faults & F_NOWAKE)		return APP_CMD_STATUS_NOT_AWAKE;
+		else if (faults & F_BUSY)		return APP_CMD_STATUS_BUSY;
+		else if (faults & F_RELAY)		return APP_CMD_STATUS_RELAY_FAIL;
+		else if (faults & F_SENSOR_0)	return APP_CMD_STATUS_SENSOR_FAIL_0;
+		else if (faults & F_SENSOR_1)	return APP_CMD_STATUS_SENSOR_FAIL_1;
+		else 							return APP_CMD_STATUS_ERROR_UNKNOWN;
 	}
 	return APP_CMD_STATUS_OK;
 }
@@ -377,15 +378,18 @@ static void service_worker() {
 
 	// Check for various fault states and abort command. Note clear busy as that intended to prevent starting the command when busy, and if a command is Pending the appmust be busy. 
 	const uint8_t fault_status = check_faults(f_app_ctx.fault_mask & ~F_BUSY);
-	if (APP_CMD_STATUS_OK != fault_status)
-		return cmd_done(fault_status);
-
-		static uint8_t s_axis_idx;
+	if (APP_CMD_STATUS_OK != fault_status) {
+		cmd_done(fault_status);
+		return;
+	}
+		
+	static uint8_t s_axis_idx;
 
 	switch (REGS[REGS_IDX_CMD_ACTIVE]) {
 		// If somehow a command is tagged as pending, this handles it.
 		default:					
-			return cmd_done(APP_CMD_STATUS_ERROR_UNKNOWN);
+			cmd_done(APP_CMD_STATUS_ERROR_UNKNOWN);
+			break;
 
 		// Jog commands...
 		case APP_CMD_JOG_HEAD_UP:
@@ -400,16 +404,24 @@ static void service_worker() {
 			
 			if (worker_do_reset()) {
 				switch(REGS[REGS_IDX_CMD_ACTIVE]) {
-					case APP_CMD_JOG_HEAD_UP:	if (check_axis_within_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_UPPER)) { axis_set_drive(AXIS_HEAD, AXIS_DIR_UP);   break; } else return cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
-					case APP_CMD_JOG_HEAD_DOWN:	if (check_axis_within_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_LOWER)) { axis_set_drive(AXIS_HEAD, AXIS_DIR_DOWN); break; } else return cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
-					case APP_CMD_JOG_LEG_UP:	if (check_axis_within_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_UPPER)) { axis_set_drive(AXIS_FOOT, AXIS_DIR_UP);   break; } else return cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
-					case APP_CMD_JOG_LEG_DOWN:	if (check_axis_within_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_LOWER)) { axis_set_drive(AXIS_FOOT, AXIS_DIR_DOWN); break; } else return cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
+					case APP_CMD_JOG_HEAD_UP:	
+						if (check_axis_within_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_UPPER)) axis_set_drive(AXIS_HEAD, AXIS_DIR_UP); else cmd_done(APP_CMD_STATUS_MOTION_LIMIT); 
+						break;
+					case APP_CMD_JOG_HEAD_DOWN:	
+						if (check_axis_within_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_LOWER)) axis_set_drive(AXIS_HEAD, AXIS_DIR_DOWN); else cmd_done(APP_CMD_STATUS_MOTION_LIMIT); 
+						break;
+					case APP_CMD_JOG_LEG_UP:	
+						if (check_axis_within_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_UPPER)) axis_set_drive(AXIS_FOOT, AXIS_DIR_UP); else cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
+						break;
+					case APP_CMD_JOG_LEG_DOWN:	
+						if (check_axis_within_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_LOWER)) axis_set_drive(AXIS_FOOT, AXIS_DIR_DOWN); else cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
+						break;
 					// TODO: As above, so below.
 					case APP_CMD_JOG_BED_UP:	axis_set_drive(AXIS_BED, AXIS_DIR_UP);		break;
 					case APP_CMD_JOG_BED_DOWN:	axis_set_drive(AXIS_BED, AXIS_DIR_DOWN);	break;
 					case APP_CMD_JOG_TILT_UP:	axis_set_drive(AXIS_TILT, AXIS_DIR_UP);		break;
 					case APP_CMD_JOG_TILT_DOWN:	axis_set_drive(AXIS_TILT, AXIS_DIR_DOWN);	break;
-					default:					return cmd_done(APP_CMD_STATUS_ERROR_UNKNOWN);
+					default:					cmd_done(APP_CMD_STATUS_ERROR_UNKNOWN);		break;
 				}
 				timer_start((uint16_t)millis(), &f_app_ctx.timer);
 				f_app_ctx.extend_jog = false;
@@ -426,19 +438,25 @@ static void service_worker() {
 			// TODO: Check for sensor faults on axes with limits?
 			if (timer_is_active(&f_app_ctx.timer)) {		// Just check if timer is running as we have already called timer_is_timeout() which returns true once only on timeout.
 				int8_t axis = axis_get_active();
-				if (axis < 0)		// One axis should be running.
-					return cmd_done(APP_CMD_STATUS_ERROR_UNKNOWN);
+				if (axis < 0) {		// One axis should be running.
+					cmd_done(APP_CMD_STATUS_ERROR_UNKNOWN);
+					break;
+				}
 				if (axis_get_dir(axis) == AXIS_DIR_UP) { // Pitch increasing...
-					if (!check_axis_within_limit(axis, DRIVER_AXIS_LIMIT_IDX_UPPER)) 
-						return cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
+					if (!check_axis_within_limit(axis, DRIVER_AXIS_LIMIT_IDX_UPPER)) {
+						cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
+						break;
+					}
 				}
 				else {
-					if (!check_axis_within_limit(axis, DRIVER_AXIS_LIMIT_IDX_LOWER)) 
-						return cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
+					if (!check_axis_within_limit(axis, DRIVER_AXIS_LIMIT_IDX_LOWER)) {
+						cmd_done(APP_CMD_STATUS_MOTION_LIMIT);
+						break;
+					}
 				}
 			}
 			else 
-				return cmd_done(APP_CMD_STATUS_OK);
+				cmd_done(APP_CMD_STATUS_OK);
 		}
 		driverTimingDebug(TIMING_DEBUG_EVENT_APP_WORKER_JOG, false);
 		break;
@@ -460,41 +478,61 @@ static void service_worker() {
 				regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT, false);
 				
 				s_axis_idx = 0U;
+				timer_stop(&f_app_ctx.timer);
 			}
 			
 			if (s_axis_idx >= CFG_TILT_SENSOR_COUNT)	// Have we done all axes?
 				return cmd_done(APP_CMD_STATUS_OK);
-					
+			
+			if (timer_is_active(&f_app_ctx.timer)) {				// Time motor run down period...
+				if (axis_get_dir(s_axis_idx) == AXIS_DIR_STOP) {
+					if (!timer_is_timeout((uint16_t)millis(), &f_app_ctx.timer, 500))
+						break;
+					else
+						s_axis_idx += 1;
+				}
+				else {
+					if (!timer_is_timeout((uint16_t)millis(), &f_app_ctx.timer, REGS[REGS_IDX_RUN_ON_TIME_POS1]))
+						break;
+					else {
+						axis_stop_all();
+						timer_start((uint16_t)millis(), &f_app_ctx.timer);		// Start motor run down period.
+						break;
+					}
+				}
+			}
+			
 			if (driverSensorIsEnabled(s_axis_idx)) {		// Do not do disabled axes.
 				// Get direction to go, or we might be there anyways.
 				const int16_t* presets = driverPresets(preset_idx);
-				const int16_t delta = presets[s_axis_idx] - (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_idx];
+				const int16_t target_pos = presets[s_axis_idx];
+				const int16_t current_pos = (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_idx];
+				const int16_t delta = target_pos - current_pos;
 				
 				if (axis_get_dir(s_axis_idx) == AXIS_DIR_STOP) {			// If not moving, turn on motors.
+					eventPublish(EV_SLEW_TARGET, s_axis_idx, target_pos);
+					eventPublish(EV_SLEW_START, s_axis_idx, current_pos);
 					const int8_t start_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND]);
 					if (start_dir > 0)
 						axis_set_drive(s_axis_idx, AXIS_DIR_UP);
 					else if (start_dir < 0)
 						axis_set_drive(s_axis_idx, AXIS_DIR_DOWN);
-						// Else no slew necessary...
+					else	// Else no slew necessary...
+						s_axis_idx += 1;
 				}
 				else {						// If we are moving in one direction, check for position reached. We can't just check for zero as it might overshoot.
 					const int8_t target_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]);
-					if ((axis_get_dir(s_axis_idx) == AXIS_DIR_DOWN) ^ (target_dir <= 0))
-						axis_stop_all();
-/*					if (axis_get_dir(s_axis_idx) == AXIS_DIR_UP) {
-						if (target_dir <= 0) 
+					if ((axis_get_dir(s_axis_idx) == AXIS_DIR_DOWN) ^ (target_dir <= 0)) {
+						eventPublish(EV_SLEW_STOP, s_axis_idx, current_pos);
+						if ( !((APP_CMD_RESTORE_POS_1 == REGS[REGS_IDX_CMD_ACTIVE]) && (REGS[REGS_IDX_RUN_ON_TIME_POS1] > 0)) ) 	// Special delay for slew pos 1. 
 							axis_stop_all();
+						timer_start((uint16_t)millis(), &f_app_ctx.timer);		// Start motor run down OR run on period.
 					}
-					else {		// Or the other...
-						if (target_dir >= 0) 
-							axis_stop_all();
-					}
-	*/			}
+				}
 			}
 				
-			if (axis_get_dir(s_axis_idx) == AXIS_DIR_STOP) 			// If not moving, turn on motors.
-				s_axis_idx += 1;
+//			if (axis_get_dir(s_axis_idx) == AXIS_DIR_STOP) 			// If not moving, end of slew for this axis. 
+//				s_axis_idx += 1;
 		}
 		break;
 			
