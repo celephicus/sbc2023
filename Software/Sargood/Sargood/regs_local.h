@@ -234,7 +234,7 @@ enum {
  static const char REGS_DESCRS_6[] PROGMEM = "Status from Sensor Module 0.";            \
  static const char REGS_DESCRS_7[] PROGMEM = "Status from Sensor Module 1.";            \
  static const char REGS_DESCRS_8[] PROGMEM = "Status from Relay Module.";               \
- static const char REGS_DESCRS_9[] PROGMEM = "Number of Sensor 0 faults.";              \
+ static const char REGS_DESCRS_9[] PROGMEM = "Number of distinct Sensor 0 faults.";     \
  static const char REGS_DESCRS_10[] PROGMEM = "Number of Sensor 1 faults.";             \
  static const char REGS_DESCRS_11[] PROGMEM = "Counts number of Relay faults.";         \
  static const char REGS_DESCRS_12[] PROGMEM = "Value written to relays.";               \

@@ -197,7 +197,7 @@ static uint8_t handle_jog(uint8_t cmd) {
 	if (!is_idle()) {
 		if (REGS[REGS_IDX_CMD_ACTIVE] == cmd) { 	// Extend time if the same command is running.
 			f_app_ctx.extend_jog = true;
-			return APP_CMD_STATUS_OK_DURING_PENDING;
+			return APP_CMD_STATUS_PENDING_OK;
 		}	
 		else
 			return APP_CMD_STATUS_BUSY;
@@ -670,8 +670,10 @@ static const char* get_cmd_desc(uint8_t cmd) {
 	}
 }
 
-static const char* get_cmd_status_desc(uint8_t cmd) {
-	switch(cmd) {
+// TODO: Use x-macros.
+// TODO: use negative for errors?
+static const char* get_cmd_status_desc(uint8_t status) {
+	switch(status) {
 	case APP_CMD_STATUS_OK:					return PSTR("OK");
 	case APP_CMD_STATUS_NOT_AWAKE:			return PSTR("Not awake");
 	case APP_CMD_STATUS_PENDING:			return PSTR("Pending");
@@ -686,6 +688,10 @@ static const char* get_cmd_status_desc(uint8_t cmd) {
 	case APP_CMD_STATUS_SAVE_FAIL:			return PSTR("Save Fail");
 	case APP_CMD_STATUS_MOTION_LIMIT:		return PSTR("Move Limit");
 	case APP_CMD_STATUS_ABORT: 				return PSTR("Move Aborted");
+	case APP_CMD_STATUS_BUSY: 				return PSTR("Busy");
+	case APP_CMD_STATUS_PENDING_OK: 		return NULL;				// Not an error
+	case APP_CMD_STATUS_E_STOP: 			return PSTR("E stop");
+	case APP_CMD_STATUS_ERROR_UNKNOWN: 		return PSTR("Unknown");
 	default:								return PSTR("Unknown Status");
 	}
 }
@@ -1079,7 +1085,10 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 
 			case EV_COMMAND_DONE:
 			backlight_on();		// Start timing.
-			lcd_printf(1, get_cmd_status_desc(event_p16(ev)));
+			{ 
+				const char* reason = get_cmd_status_desc(event_p16(ev));
+				if (reason) lcd_printf(1, reason);
+			}
 			eventSmTimerStart(TIMER_MSG, DISPLAY_CMD_START_DURATION_MS/100U);
 			break;
 

@@ -88,7 +88,7 @@ enum {
 	APP_CMD_STATUS_MOTION_LIMIT = 8,		// Axis at limit for jog.
 	APP_CMD_STATUS_ABORT = 9,				// Motion aborted with IR code or RS232 data.
 	APP_CMD_STATUS_BUSY = 10,				// Cannot start command as busy.
-	APP_CMD_STATUS_OK_DURING_PENDING = 11,	// Some commands can run successfully during a pending command, so they return this code. 
+	APP_CMD_STATUS_PENDING_OK = 11,			// Some commands can run successfully during a pending command, so they return this code. 
 	APP_CMD_STATUS_E_STOP = 12,
 	
 	APP_CMD_STATUS_ERROR_UNKNOWN = 99,		// Something has gone wrong, but we don't know what.
