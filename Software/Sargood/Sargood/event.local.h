@@ -18,7 +18,6 @@
 	SLEW_STOP		Slew stop pos; p8: axis idx; p16=current
 	SLEW_FINAL		Slew final pos; p8: axis idx; p16=target
 	RELAY_WRITE		Relay write; p8: relay
-	COMMAND_QUEUED	Command accepted; p8: accepted, p16=cmd
 
    >>> End event definitions, begin generated code. */
 

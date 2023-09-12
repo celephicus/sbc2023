@@ -56,7 +56,7 @@ enum {
 	AXIS_DIR_DOWN = 2,
 	AXIS_DIR_UP = 1,
 };
-
+/*
 static void axis_set_drive(uint8_t axis, uint8_t dir) {
 	regsUpdateMask(REGS_IDX_RELAY_STATE, RELAY_HEAD_MASK << (axis*2), dir << (axis*2));
 	eventPublish(EV_RELAY_WRITE, REGS[REGS_IDX_RELAY_STATE]);
@@ -71,7 +71,7 @@ static int8_t axis_get_active() {
 	if ((uint8_t)REGS[REGS_IDX_RELAY_STATE] & RELAY_TILT_MASK) return AXIS_TILT;
 	return -1;
 }
-
+*/
 static void axis_stop_all() {
 	REGS[REGS_IDX_RELAY_STATE] = 0U;
 	eventPublish(EV_RELAY_WRITE, REGS[REGS_IDX_RELAY_STATE]);
@@ -128,25 +128,16 @@ static bool timer_is_timeout(uint16_t now, uint16_t* then, uint16_t duration) { 
 // Each action is implemented by a little state machine. They may run to completion or run a sequence, returning one of APP_CMD_STATUS_xxx
 //  codes. They share a single state variable and a timer. Reset is done by zeroing the state.
 typedef uint8_t (*cmd_handler_func)(uint8_t cmd);
-static void app_sm_reset() { f_app_sm_st = 0; f_sm_func(); }
-static uint8_t app_sm_run() { f_sm_func(); return 0 == f_app_sm_st; }
-
-// State machine to do slew.
-enum { ST_SLEW_OK, ST_SLEW_INIT, };
-enum { SM_SLEW_EV_DATA, SM_SLEW_EV_RESET, };
-static uint8_t f_sm_slew_st;
-static uint16_t f_slew_timer;
 
 // Keep state in struct for easy viewing in debugger.
 static struct {
 	thread_control_t tcb_rs232_cmd;
 	cmd_handler_func sm_func;	// Current sm for action, NULL if none. 
-	uint16_t fault_mask;		// Current falut mask for action.
+	uint16_t fault_mask;		// Current fault mask for action.
 	uint8_t sm_st;				// State var for sm.
 	uint16_t timer;				// Timer for use by SMs.
 
 	uint8_t save_preset_attempts, save_cmd;
-	uint16_t fault_mask;
 	bool reset;
 	bool extend_jog;
 } f_app_ctx;
@@ -177,9 +168,9 @@ static void cmd_done(uint16_t status) {
 // Command table, encodes whether command can be started and handler.
 typedef uint8_t (*cmd_handler_func)(uint8_t app_cmd);
 typedef struct {
-	uint8_t app_cmd;
-	uint16_t fault_mask;
-	appSmFunc sm_func;
+	uint8_t			app_cmd;
+	uint16_t		fault_mask;
+	cmd_handler_func cmd_handler;
 } CmdHandlerDef;
 
 // Command handlers.
@@ -236,8 +227,9 @@ static const CmdHandlerDef CMD_HANDLERS[] PROGMEM = {
 
 static const CmdHandlerDef* search_cmd_handler(uint8_t app_cmd) {
 	const CmdHandlerDef* def;
-	for(i = 0; def = CMD_HANDLERS; i < UTILS_ELEMENT_COUNT(CMD_HANDLERS); i += 1, def += 1) {
-		if (pgm_read_byte(&def->cmd) == app_cmd)
+	uint8_t i;
+	for(i = 0, def = CMD_HANDLERS; i < UTILS_ELEMENT_COUNT(CMD_HANDLERS); i += 1, def += 1) {
+		if (pgm_read_byte(&def->app_cmd) == app_cmd)
 			return def;
 	}
 	return NULL;
@@ -273,9 +265,9 @@ uint8_t appCmdRun(uint8_t cmd) {
 		return cmd_start(cmd, APP_CMD_STATUS_BAD_CMD);
 
 	// Check fault flags for command and return fail status if any are set. 
-	// Hack clear slew timeout as it might be set from a previous fault but the command handler clears it on reset.
-	const uint16_t fault_mask = pgm_read_word(&cmd_def->fault_mask) & ~REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT;
-	uint8_t fault_status = check_faults(fault_mask);
+	const uint16_t fault_mask = pgm_read_word(&cmd_def->fault_mask);
+	const uint8_t fault_status = check_faults(fault_mask & ~REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT);	// Ignore slew timeout for pre run chack as it might be set from a previous fault.
+
 	if (APP_CMD_STATUS_OK != fault_status)
 		return cmd_start(cmd, fault_status);
 
@@ -294,6 +286,8 @@ uint8_t appCmdRun(uint8_t cmd) {
 	return cmd_start(cmd, status);
 }
 
+static void service_worker() { }
+	
 /*
 ////////////////////////////////////
 	
