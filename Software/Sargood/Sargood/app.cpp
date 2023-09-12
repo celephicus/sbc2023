@@ -125,18 +125,34 @@ static bool timer_is_timeout(uint16_t now, uint16_t* then, uint16_t duration) { 
 	return false;
 }
 
+// Each action is implemented by a little state machine. They may run to completion or run a sequence, returning one of APP_CMD_STATUS_xxx
+//  codes. They share a single state variable and a timer. Reset is done by zeroing the state.
+typedef uint8_t (*cmd_handler_func)(uint8_t cmd);
+static void app_sm_reset() { f_app_sm_st = 0; f_sm_func(); }
+static uint8_t app_sm_run() { f_sm_func(); return 0 == f_app_sm_st; }
+
+// State machine to do slew.
+enum { ST_SLEW_OK, ST_SLEW_INIT, };
+enum { SM_SLEW_EV_DATA, SM_SLEW_EV_RESET, };
+static uint8_t f_sm_slew_st;
+static uint16_t f_slew_timer;
+
 // Keep state in struct for easy viewing in debugger.
 static struct {
 	thread_control_t tcb_rs232_cmd;
-	uint8_t cmd_req;
+	cmd_handler_func sm_func;	// Current sm for action, NULL if none. 
+	uint16_t fault_mask;		// Current falut mask for action.
+	uint8_t sm_st;				// State var for sm.
+	uint16_t timer;				// Timer for use by SMs.
+
 	uint8_t save_preset_attempts, save_cmd;
 	uint16_t fault_mask;
-	uint16_t timer;
 	bool reset;
 	bool extend_jog;
 } f_app_ctx;
 
-// Do the needful to wake the app.
+// Do the needful to wake the app. If wakeup enabled, the wake state is controlled by an app timer, which controls the WAKE flag.
+//  If not enabled, the flag is forced active.
 static void do_wakeup() {
 	if (!(REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_ALWAYS_AWAKE)) {		// If not always awake...
 		app_timer_start(APP_TIMER_WAKEUP, APP_WAKEUP_TIMEOUT_SECS*TICKS_PER_SEC);
@@ -144,7 +160,6 @@ static void do_wakeup() {
 	}
 }
 
-// Accessors for state.
 static inline bool is_idle() { return (APP_CMD_IDLE == REGS[REGS_IDX_CMD_ACTIVE]); }
 
 // Set end status of a PENDING command from worker thread.
@@ -158,6 +173,129 @@ static void cmd_done(uint16_t status) {
 	axis_stop_all();
 	regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_APP_BUSY, false);
 }
+
+// Command table, encodes whether command can be started and handler.
+typedef uint8_t (*cmd_handler_func)(uint8_t app_cmd);
+typedef struct {
+	uint8_t app_cmd;
+	uint16_t fault_mask;
+	appSmFunc sm_func;
+} CmdHandlerDef;
+
+// Command handlers.
+static uint8_t handle_wakeup(uint8_t cmd) {
+	do_wakeup();
+	return APP_CMD_STATUS_OK;				// Start command as non-pending, returns OK.
+}
+static uint8_t handle_stop(uint8_t cmd) {
+	// Stop command does not wake. It kills any pending command. 
+	axis_stop_all();			// Just kill motors anyway.
+	if (!is_idle()) 			// If not idle kill current command.
+		cmd_done(APP_CMD_STATUS_E_STOP);
+	return APP_CMD_STATUS_OK;				// Start command as non-pending, returns OK.
+}
+
+
+// Some aliases for the flags.
+static constexpr uint16_t F_NOWAKE = REGS_FLAGS_MASK_FAULT_NOT_AWAKE;
+static constexpr uint16_t F_RELAY = REGS_FLAGS_MASK_FAULT_RELAY;
+static constexpr uint16_t F_SENSOR_ALL = FLAGS_MASK_SENSORS_ALL;
+static constexpr uint16_t F_SENSOR_0 = REGS_FLAGS_MASK_FAULT_SENSOR_0;
+static constexpr uint16_t F_SENSOR_1 = REGS_FLAGS_MASK_FAULT_SENSOR_1;
+static constexpr uint16_t F_BUSY = REGS_FLAGS_MASK_FAULT_APP_BUSY;
+static constexpr uint16_t F_SLEW_TIMEOUT = REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT;
+
+// Keep in any order.
+static const CmdHandlerDef CMD_HANDLERS[] PROGMEM = {
+	{ APP_CMD_WAKEUP, 				0U, 									handle_wakeup, },
+	{ APP_CMD_STOP, 				0U, 									handle_stop, },
+/*	
+	{ APP_CMD_JOG_HEAD_UP, 			F_NOWAKE|F_RELAY, 						handle_jog, },
+	{ APP_CMD_JOG_HEAD_DOWN, 		F_NOWAKE|F_RELAY, 						handle_jog, },
+	{ APP_CMD_JOG_LEG_UP, 			F_NOWAKE|F_RELAY, 						handle_jog, },
+	{ APP_CMD_JOG_LEG_DOWN, 		F_NOWAKE|F_RELAY, 						handle_jog, },
+	{ APP_CMD_JOG_BED_UP, 			F_NOWAKE|F_RELAY, 						handle_jog, },
+	{ APP_CMD_JOG_BED_DOWN, 		F_NOWAKE|F_RELAY, 						handle_jog, },
+	{ APP_CMD_JOG_TILT_UP, 			F_NOWAKE|F_RELAY, 						handle_jog, },
+	{ APP_CMD_JOG_TILT_DOWN, 		F_NOWAKE|F_RELAY, 						handle_jog, },
+	{ APP_CMD_POS_SAVE_1,			F_NOWAKE|F_BUSY|F_SENSOR_ALL, 			handle_preset_save, },
+	{ APP_CMD_POS_SAVE_2,			F_NOWAKE|F_BUSY|F_SENSOR_ALL,			handle_preset_save, },
+	{ APP_CMD_POS_SAVE_3,			F_NOWAKE|F_BUSY|F_SENSOR_ALL,			handle_preset_save, },
+	{ APP_CMD_POS_SAVE_4,			F_NOWAKE|F_BUSY|F_SENSOR_ALL,			handle_preset_save, },
+	{ APP_CMD_LIMIT_CLEAR_ALL,		F_NOWAKE|F_BUSY,						handle_clear_limits, },
+	{ APP_CMD_LIMIT_SAVE_HEAD_DOWN,	F_NOWAKE|F_BUSY|F_SENSOR_0,				handle_limits_save, },
+	{ APP_CMD_LIMIT_SAVE_HEAD_UP,	F_NOWAKE|F_BUSY|F_SENSOR_0,				handle_limits_save, },
+	{ APP_CMD_LIMIT_SAVE_FOOT_DOWN,	F_NOWAKE|F_BUSY|F_SENSOR_1,				handle_limits_save, },
+	{ APP_CMD_LIMIT_SAVE_FOOT_UP,	F_NOWAKE|F_BUSY|F_SENSOR_1,				handle_limits_save, },
+	{ APP_CMD_RESTORE_POS_1,		F_NOWAKE|F_BUSY|F_RELAY|F_SENSOR_ALL|F_SLEW_TIMEOUT,	handle_preset_move, },
+	{ APP_CMD_RESTORE_POS_2,		F_NOWAKE|F_BUSY|F_RELAY|F_SENSOR_ALL|F_SLEW_TIMEOUT,	handle_preset_move, },
+	{ APP_CMD_RESTORE_POS_3,		F_NOWAKE|F_BUSY|F_RELAY|F_SENSOR_ALL|F_SLEW_TIMEOUT,	handle_preset_move, },
+	{ APP_CMD_RESTORE_POS_4,		F_NOWAKE|F_BUSY|F_RELAY|F_SENSOR_ALL|F_SLEW_TIMEOUT,	handle_preset_move, },
+*/
+};
+
+static const CmdHandlerDef* search_cmd_handler(uint8_t app_cmd) {
+	const CmdHandlerDef* def;
+	for(i = 0; def = CMD_HANDLERS; i < UTILS_ELEMENT_COUNT(CMD_HANDLERS); i += 1, def += 1) {
+		if (pgm_read_byte(&def->cmd) == app_cmd)
+			return def;
+	}
+	return NULL;
+}
+
+static uint8_t check_faults(uint16_t mask) {
+	const uint16_t faults = regsFlags() & mask;
+	if (faults) {
+		if (faults & F_SLEW_TIMEOUT)	return APP_CMD_STATUS_SLEW_TIMEOUT;
+		else if (faults & F_NOWAKE)		return APP_CMD_STATUS_NOT_AWAKE;
+		else if (faults & F_BUSY)		return APP_CMD_STATUS_BUSY;
+		else if (faults & F_RELAY)		return APP_CMD_STATUS_RELAY_FAIL;
+		else if (faults & F_SENSOR_0)	return APP_CMD_STATUS_SENSOR_FAIL_0;
+		else if (faults & F_SENSOR_1)	return APP_CMD_STATUS_SENSOR_FAIL_1;
+		else 							return APP_CMD_STATUS_ERROR_UNKNOWN;
+	}
+	return APP_CMD_STATUS_OK;
+}
+
+// Notify that a command was run. Must be idle to run a command. Note behaviour is different if command is pending. 
+// TODO: Fix duplicated code with a shared helper function. 
+static uint8_t cmd_start(uint8_t cmd, uint8_t status) {
+	REGS[REGS_IDX_CMD_STATUS] = status;		// Set status to registers, so it can be read by the console.
+	eventPublish(EV_COMMAND_START, cmd, status);
+	if (APP_CMD_STATUS_PENDING != status) 
+		eventPublish(EV_COMMAND_DONE, cmd, status);
+	return status;
+}
+uint8_t appCmdRun(uint8_t cmd) {
+	const CmdHandlerDef* cmd_def = search_cmd_handler(cmd);		// Get a def object for this command.
+
+	if (NULL == cmd_def)		// Not found.
+		return cmd_start(cmd, APP_CMD_STATUS_BAD_CMD);
+
+	// Check fault flags for command and return fail status if any are set. 
+	// Hack clear slew timeout as it might be set from a previous fault but the command handler clears it on reset.
+	const uint16_t fault_mask = pgm_read_word(&cmd_def->fault_mask) & ~REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT;
+	uint8_t fault_status = check_faults(fault_mask);
+	if (APP_CMD_STATUS_OK != fault_status)
+		return cmd_start(cmd, fault_status);
+
+	// Run the handler. This will check all sorts of things, maybe do the command, or do some setup for a pending command, and then return a status code. 
+	f_app_ctx.sm_st = 0;
+	const cmd_handler_func cmd_handler = reinterpret_cast<cmd_handler_func>(pgm_read_ptr(&cmd_def->cmd_handler));
+	const uint8_t status = cmd_handler(cmd);
+
+	// Do some setup for worker.
+	if (APP_CMD_STATUS_PENDING == status) {
+		f_app_ctx.fault_mask = fault_mask;
+		REGS[REGS_IDX_CMD_ACTIVE] = cmd;
+		regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_APP_BUSY, true);
+	}
+
+	return cmd_start(cmd, status);
+}
+
+/*
+////////////////////////////////////
 	
 // Logic is first save command starts timer, sets count to 1, but returns fail. Subsequent commands increment count if no timeout, does action when count == 3.
 static bool check_can_save(uint8_t cmd) {
@@ -171,27 +309,8 @@ static bool check_can_save(uint8_t cmd) {
 		return (++f_app_ctx.save_preset_attempts >= 3);
 }
 
-// Command table, encodes whether command can be started and handler.
-typedef uint8_t (*cmd_handler_func)(uint8_t app_cmd);
-typedef struct {
-	uint8_t app_cmd;
-	uint16_t fault_mask;
-	cmd_handler_func cmd_handler;
-} CmdHandlerDef;
 
 // Command handlers. These either _do_ the command action, or set it to be performed asynchronously by the worker thread.
-
-static uint8_t handle_wakeup(uint8_t cmd) {
-	do_wakeup();
-	return APP_CMD_STATUS_OK;				// Start command as non-pending, returns OK.
-}
-static uint8_t handle_stop(uint8_t cmd) {
-	// Stop command does not wake. It kills any pending command. 
-	axis_stop_all();			// Just kill motors anyway.
-	if (!is_idle()) 			// If not idle kill current command.
-		cmd_done(APP_CMD_STATUS_E_STOP);
-	return APP_CMD_STATUS_OK;				// Start command as non-pending, returns OK.
-}
 
 static uint8_t handle_jog(uint8_t cmd) {
 	if (!is_idle()) {
@@ -253,100 +372,6 @@ static uint8_t handle_limits_save(uint8_t cmd) {
 static uint8_t handle_preset_move(uint8_t cmd) {
 	do_wakeup();
 	return APP_CMD_STATUS_PENDING;						// Start command as pending.
-}
-
-// Some aliases for the flags.
-static constexpr uint16_t F_NOWAKE = REGS_FLAGS_MASK_FAULT_NOT_AWAKE;
-static constexpr uint16_t F_RELAY = REGS_FLAGS_MASK_FAULT_RELAY;
-static constexpr uint16_t F_SENSOR_ALL = FLAGS_MASK_SENSORS_ALL;
-static constexpr uint16_t F_SENSOR_0 = REGS_FLAGS_MASK_FAULT_SENSOR_0;
-static constexpr uint16_t F_SENSOR_1 = REGS_FLAGS_MASK_FAULT_SENSOR_1;
-static constexpr uint16_t F_BUSY = REGS_FLAGS_MASK_FAULT_APP_BUSY;
-static constexpr uint16_t F_SLEW_TIMEOUT = REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT;
-
-static const CmdHandlerDef CMD_HANDLERS[] PROGMEM = {
-	{ APP_CMD_WAKEUP, 				0U, 									handle_wakeup, },
-	{ APP_CMD_STOP, 				0U, 									handle_stop, },
-	{ APP_CMD_JOG_HEAD_UP, 			F_NOWAKE|F_RELAY, 						handle_jog, },
-	{ APP_CMD_JOG_HEAD_DOWN, 		F_NOWAKE|F_RELAY, 						handle_jog, },
-	{ APP_CMD_JOG_LEG_UP, 			F_NOWAKE|F_RELAY, 						handle_jog, },
-	{ APP_CMD_JOG_LEG_DOWN, 		F_NOWAKE|F_RELAY, 						handle_jog, },
-	{ APP_CMD_JOG_BED_UP, 			F_NOWAKE|F_RELAY, 						handle_jog, },
-	{ APP_CMD_JOG_BED_DOWN, 		F_NOWAKE|F_RELAY, 						handle_jog, },
-	{ APP_CMD_JOG_TILT_UP, 			F_NOWAKE|F_RELAY, 						handle_jog, },
-	{ APP_CMD_JOG_TILT_DOWN, 		F_NOWAKE|F_RELAY, 						handle_jog, },
-	{ APP_CMD_POS_SAVE_1,			F_NOWAKE|F_BUSY|F_SENSOR_ALL, 			handle_preset_save, },
-	{ APP_CMD_POS_SAVE_2,			F_NOWAKE|F_BUSY|F_SENSOR_ALL,			handle_preset_save, },
-	{ APP_CMD_POS_SAVE_3,			F_NOWAKE|F_BUSY|F_SENSOR_ALL,			handle_preset_save, },
-	{ APP_CMD_POS_SAVE_4,			F_NOWAKE|F_BUSY|F_SENSOR_ALL,			handle_preset_save, },
-	{ APP_CMD_LIMIT_CLEAR_ALL,		F_NOWAKE|F_BUSY,						handle_clear_limits, },
-	{ APP_CMD_LIMIT_SAVE_HEAD_DOWN,	F_NOWAKE|F_BUSY|F_SENSOR_0,				handle_limits_save, },
-	{ APP_CMD_LIMIT_SAVE_HEAD_UP,	F_NOWAKE|F_BUSY|F_SENSOR_0,				handle_limits_save, },
-	{ APP_CMD_LIMIT_SAVE_FOOT_DOWN,	F_NOWAKE|F_BUSY|F_SENSOR_1,				handle_limits_save, },
-	{ APP_CMD_LIMIT_SAVE_FOOT_UP,	F_NOWAKE|F_BUSY|F_SENSOR_1,				handle_limits_save, },
-	{ APP_CMD_RESTORE_POS_1,		F_NOWAKE|F_BUSY|F_RELAY|F_SENSOR_ALL|F_SLEW_TIMEOUT,	handle_preset_move, },
-	{ APP_CMD_RESTORE_POS_2,		F_NOWAKE|F_BUSY|F_RELAY|F_SENSOR_ALL|F_SLEW_TIMEOUT,	handle_preset_move, },
-	{ APP_CMD_RESTORE_POS_3,		F_NOWAKE|F_BUSY|F_RELAY|F_SENSOR_ALL|F_SLEW_TIMEOUT,	handle_preset_move, },
-	{ APP_CMD_RESTORE_POS_4,		F_NOWAKE|F_BUSY|F_RELAY|F_SENSOR_ALL|F_SLEW_TIMEOUT,	handle_preset_move, },
-};
-
-static int cmd_handlers_list_compare(const void* k, const void* elem) {
-	const CmdHandlerDef* ir_cmd_def = reinterpret_cast<const CmdHandlerDef*>(elem);
-	return static_cast<int>(reinterpret_cast<int>(k) - pgm_read_byte(&ir_cmd_def->app_cmd));
-}
-static const CmdHandlerDef* search_cmd_handler(uint8_t app_cmd) {
-	return reinterpret_cast<const CmdHandlerDef*>(bsearch(reinterpret_cast<const void*>(app_cmd), CMD_HANDLERS, UTILS_ELEMENT_COUNT(CMD_HANDLERS), sizeof(CmdHandlerDef), cmd_handlers_list_compare));
-}
-
-static uint8_t check_faults(uint16_t mask) {
-	const uint16_t faults = regsFlags() & mask;
-	if (faults) {
-		if (faults & F_SLEW_TIMEOUT)	return APP_CMD_STATUS_SLEW_TIMEOUT;
-		else if (faults & F_NOWAKE)		return APP_CMD_STATUS_NOT_AWAKE;
-		else if (faults & F_BUSY)		return APP_CMD_STATUS_BUSY;
-		else if (faults & F_RELAY)		return APP_CMD_STATUS_RELAY_FAIL;
-		else if (faults & F_SENSOR_0)	return APP_CMD_STATUS_SENSOR_FAIL_0;
-		else if (faults & F_SENSOR_1)	return APP_CMD_STATUS_SENSOR_FAIL_1;
-		else 							return APP_CMD_STATUS_ERROR_UNKNOWN;
-	}
-	return APP_CMD_STATUS_OK;
-}
-
-// Notify that a command was run. Must be idle to run a command. Note behaviour is different if command is pending. 
-// TODO: Fix duplicated code with a shared helper function. 
-static uint8_t cmd_start(uint8_t cmd, uint8_t status) {
-	REGS[REGS_IDX_CMD_STATUS] = status;		// Set status to registers, so it can be read by the console.
-	eventPublish(EV_COMMAND_START, cmd, status);
-	if (APP_CMD_STATUS_PENDING != status) 
-		eventPublish(EV_COMMAND_DONE, cmd, status);
-	return status;
-}
-uint8_t appCmdRun(uint8_t cmd) {
-	const CmdHandlerDef* cmd_def = search_cmd_handler(cmd);		// Get a def object for this command.
-
-	if (NULL == cmd_def)		// Not found.
-		return cmd_start(cmd, APP_CMD_STATUS_BAD_CMD);
-
-	// Check fault flags for command and return fail status if any are set. 
-	// Hack clear slew timeout as it might be set from a previous fault but the command handler clears it on reset.
-	const uint16_t fault_mask = pgm_read_word(&cmd_def->fault_mask) & ~REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT;
-	uint8_t fault_status = check_faults(fault_mask);
-	if (APP_CMD_STATUS_OK != fault_status)
-		return cmd_start(cmd, fault_status);
-
-	// Run the handler. This will check all sorts of things, maybe do the command, or do some setup for a pending command, and then return a status code. 
-	const cmd_handler_func cmd_handler = reinterpret_cast<cmd_handler_func>(pgm_read_ptr(&cmd_def->cmd_handler));
-	const uint8_t status = cmd_handler(cmd);
-
-	// Do some setup for worker.
-	if (APP_CMD_STATUS_PENDING == status) {
-		f_app_ctx.fault_mask = fault_mask;
-		REGS[REGS_IDX_CMD_ACTIVE] = cmd;
-		f_app_ctx.reset = true;
-		regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_APP_BUSY, true);
-	}
-
-	return cmd_start(cmd, status);
 }
 
 static bool worker_do_reset() {
@@ -538,6 +563,153 @@ static void service_worker() {
 			
 	}	// Closes `switch (REGS[REGS_IDX_CMD_ACTIVE]) {'
 }
+
+// Thread to do slew.
+static int8_t thread_slew(void* arg) {
+	(void)arg;
+	static uint16_t then;
+	static uint8_t s_axis_idx;
+	static uint8_t s_axis_order_rev;
+
+	// bool timeout = timer_is_timeout((uint16_t)millis(), &then, RS232_CMD_TIMEOUT_MILLIS);
+
+	THREAD_BEGIN();
+
+	static uint8_t preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_RESTORE_POS_1;
+	if (preset_idx >= 4)		// Logic error, should never happen.
+		THREAD_END(UNKNOWN);
+
+	// TODO: Function for checking if preset valid.
+	fori (CFG_TILT_SENSOR_COUNT) {
+		if (driverSensorIsEnabled(i) && (SBC2022_MODBUS_TILT_FAULT == driverPresets(preset_idx)[i]))
+			THREAD_END(APP_CMD_STATUS_PRESET_INVALID);
+	}
+
+	// Clear slew timeout in case it is running.				
+	app_timer_stop(APP_TIMER_SLEW);
+	regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT, false);
+
+	// Decide order to move axes...
+	s_axis_idx = 0U;
+	s_axis_order_rev = 0;
+
+	// Do axes in chosen order.
+	// TODO: implement reverse order. 
+	while (s_axis_idx < 2) {
+
+		// TODO: Do we need disabled axes? For variable axes could just set total number 1..4.
+		if (driverSensorIsEnabled(s_axis_idx)) {		// Do not do disabled axes.
+			// Get direction to go, or we might be there anyways.
+			// Note: we reread the position, just in case. Also allows us to disable axis reverse.
+			const int16_t* presets = driverPresets(preset_idx);
+			const int16_t target_pos = presets[s_axis_idx];
+			const int16_t current_pos = (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_idx];
+			const int16_t delta = target_pos - current_pos;
+}}}			
+
+typedef void(appSmFunc*)(void);
+appSmFunc f_sm_func;
+static void app_sm_reset() { f_app_sm_st = 0; f_sm_func(); }
+static uint8_t app_sm_run() { f_sm_func(); return 0 == f_app_sm_st; }
+
+// State machine to do slew.
+enum { ST_SLEW_OK, ST_SLEW_INIT, };
+enum { SM_SLEW_EV_DATA, SM_SLEW_EV_RESET, };
+static uint8_t f_sm_slew_st;
+static uint16_t f_slew_timer;
+timer_start((uint16_t)millis(), &f_slew_timer);	
+
+// Reset by setting state to zero and calling.
+static void sm_slew() {
+	static uint8_t preset_idx;
+
+	// Simple delay timer prevents SM from running.
+	if (timer_is_active(&f_slew_timer) && !timer_is_timeout((uint16_t)millis(), &f_slew_timer))
+		return;
+
+	switch(st) {
+	case SM_SLEW_EV_RESET:
+		
+		// Get which preset.
+		preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_RESTORE_POS_1;
+		if (preset_idx >= 4) {		// Logic error, should never happen.
+			sm_error(UNKNOWN);
+			st = ST_SLEW_OK;
+			break;
+		}
+
+		// TODO: Function for checking if preset valid.
+		fori (CFG_TILT_SENSOR_COUNT) {
+			if (driverSensorIsEnabled(i) && (SBC2022_MODBUS_TILT_FAULT == driverPresets(preset_idx)[i]))
+				sm_error(APP_CMD_STATUS_PRESET_INVALID);
+				st = ST_SLEW_OK;
+				break;
+			}
+		}
+
+		// Clear slew timeout in case it is running.				
+		app_timer_stop(APP_TIMER_SLEW);
+		regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT, false);
+
+		// Decide order to move axes...
+		s_axis_idx = 0U;
+		s_axis_order_rev = 0;
+
+		st = ST_START;
+		break;
+
+	case ST_START:
+
+		// TODO: Do we need disabled axes? For variable axes could just set total number 1..4.
+		if (!driverSensorIsEnabled(s_axis_idx)) {
+			st = ST_AXIS_DONE;
+			break;
+		}
+
+		// Get direction to go, or we might be there anyways.
+		// Note: we reread the position, just in case. Also allows us to disable axis reverse.
+		const int16_t* presets = driverPresets(preset_idx);
+		const int16_t target_pos = presets[s_axis_idx];
+		const int16_t current_pos = (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_idx];
+		const int16_t delta = target_pos - current_pos;
+		
+		eventPublish(EV_SLEW_TARGET, s_axis_idx, target_pos);
+		eventPublish(EV_SLEW_START, s_axis_idx, current_pos);
+		const int8_t start_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND]);
+		if (start_dir > 0) {
+			axis_set_drive(s_axis_idx, AXIS_DIR_UP);
+			st = ST_SLEWING;
+		}
+		else if (start_dir < 0) {
+			axis_set_drive(s_axis_idx, AXIS_DIR_DOWN);
+			st = ST_SLEWING;
+		}
+		else	// Else no slew necessary...
+			st = ST_AXIS_DONE;
+		break;
+
+	case ST_SLEWING:
+		// Check for position reached. We can't just check for zero as it might overshoot.
+		const int8_t target_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]);
+		if ((axis_get_dir(s_axis_idx) == AXIS_DIR_DOWN) ^ (target_dir <= 0)) {
+			eventPublish(EV_SLEW_STOP, s_axis_idx, current_pos);
+			//if ( !((APP_CMD_RESTORE_POS_1 == REGS[REGS_IDX_CMD_ACTIVE]) && (REGS[REGS_IDX_RUN_ON_TIME_POS1] > 0)) ) 	// Special delay for slew pos 1. 
+				axis_stop_all();
+			timer_start((uint16_t)millis(), &f_slewtimer);		// Start motor period.
+			st = ST_SLEW_DONE;
+		}
+	
+	case ST_SLEW_DONE:
+		if (++preset_idx > 2) {
+			sm_error(OK);
+			st = ST_SLEW_OK;
+		}
+		else
+			st = ST_START;
+		break;
+	}
+}
+*/
 
 // RS232 Remote Command
 //
@@ -1183,6 +1355,17 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 	return EVENT_SM_NO_CHANGE;
 }
 
+static void	update_wakeup_enable() {
+	// Set not awake if always awake not enabled else keep it clear. 
+	// TODO: Is this backwards?
+	if (!(REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_ALWAYS_AWAKE))
+		regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_NOT_AWAKE, true);		
+}
+void appEnableWakeup(bool f) {
+	regsUpdateMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_ALWAYS_AWAKE, !f);
+	update_wakeup_enable();
+}
+
 void appInit() {
 	threadInit(&f_app_ctx.tcb_rs232_cmd);
 	eventInit();
@@ -1190,9 +1373,8 @@ void appInit() {
 	eventSmInit(sm_lcd, (EventSmContextBase*)&f_sm_lcd_ctx, 0);
 	eventSmInit(sm_ir_rec, (EventSmContextBase*)&f_sm_ir_rec_ctx, 1);
 	
-	// Set not awake if always awake not enabled else keep it clear. 
-	if (!(REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_ALWAYS_AWAKE))
-		regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_NOT_AWAKE, true);		
+	// Handle wakeup enable from enable in ENABLES regs. 
+	update_wakeup_enable();
 }
 
 void appService() {
