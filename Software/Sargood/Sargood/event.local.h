@@ -6,13 +6,13 @@
 	COMMAND_START	Command received, code in p8.
 	COMMAND_DONE	Command done, code in p8, status code in p16.
 	COMMAND_STACK	Command tacked on running command.
+	CMD_STATE_CHANGE Handler state machine has new state set.
 	SW_TOUCH_LEFT	Touch switch LEFT
 	SW_TOUCH_RIGHT	Touch switch RIGHT
 	SW_TOUCH_MENU	Touch switch MENU
 	SW_TOUCH_RET	Touch switch RET
 	UPDATE_MENU		Update menu item value on LCD.
 	IR_REC			IR command received, p8=cmd, p16=cmd
-	SENSOR_UPDATE	Sensor value updated: p8=idx, p16=value.
 	REMOTE_CMD		Command from RS232 port, p8=byte2, p16=byte0..1.
 	SLEW_TARGET		Slew target pos; p8: axis idx; p16=target
 	SLEW_START		Slew start pos; p8: axis idx; p16=current
@@ -37,13 +37,13 @@ enum {
     EV_COMMAND_START = 10,              // Command received, code in p8.
     EV_COMMAND_DONE = 11,               // Command done, code in p8, status code in p16.
     EV_COMMAND_STACK = 12,              // Command tacked on running command.
-    EV_SW_TOUCH_LEFT = 13,              // Touch switch LEFT
-    EV_SW_TOUCH_RIGHT = 14,             // Touch switch RIGHT
-    EV_SW_TOUCH_MENU = 15,              // Touch switch MENU
-    EV_SW_TOUCH_RET = 16,               // Touch switch RET
-    EV_UPDATE_MENU = 17,                // Update menu item value on LCD.
-    EV_IR_REC = 18,                     // IR command received, p8=cmd, p16=cmd
-    EV_SENSOR_UPDATE = 19,              // Sensor value updated: p8=idx, p16=value.
+    EV_CMD_STATE_CHANGE = 13,           // Handler state machine has new state set.
+    EV_SW_TOUCH_LEFT = 14,              // Touch switch LEFT
+    EV_SW_TOUCH_RIGHT = 15,             // Touch switch RIGHT
+    EV_SW_TOUCH_MENU = 16,              // Touch switch MENU
+    EV_SW_TOUCH_RET = 17,               // Touch switch RET
+    EV_UPDATE_MENU = 18,                // Update menu item value on LCD.
+    EV_IR_REC = 19,                     // IR command received, p8=cmd, p16=cmd
     EV_REMOTE_CMD = 20,                 // Command from RS232 port, p8=byte2, p16=byte0..1.
     EV_SLEW_TARGET = 21,                // Slew target pos; p8: axis idx; p16=target
     EV_SLEW_START = 22,                 // Slew start pos; p8: axis idx; p16=current
@@ -71,13 +71,13 @@ enum {
  static const char EVENT_NAMES_10[] PROGMEM = "COMMAND_START";                          \
  static const char EVENT_NAMES_11[] PROGMEM = "COMMAND_DONE";                           \
  static const char EVENT_NAMES_12[] PROGMEM = "COMMAND_STACK";                          \
- static const char EVENT_NAMES_13[] PROGMEM = "SW_TOUCH_LEFT";                          \
- static const char EVENT_NAMES_14[] PROGMEM = "SW_TOUCH_RIGHT";                         \
- static const char EVENT_NAMES_15[] PROGMEM = "SW_TOUCH_MENU";                          \
- static const char EVENT_NAMES_16[] PROGMEM = "SW_TOUCH_RET";                           \
- static const char EVENT_NAMES_17[] PROGMEM = "UPDATE_MENU";                            \
- static const char EVENT_NAMES_18[] PROGMEM = "IR_REC";                                 \
- static const char EVENT_NAMES_19[] PROGMEM = "SENSOR_UPDATE";                          \
+ static const char EVENT_NAMES_13[] PROGMEM = "CMD_STATE_CHANGE";                       \
+ static const char EVENT_NAMES_14[] PROGMEM = "SW_TOUCH_LEFT";                          \
+ static const char EVENT_NAMES_15[] PROGMEM = "SW_TOUCH_RIGHT";                         \
+ static const char EVENT_NAMES_16[] PROGMEM = "SW_TOUCH_MENU";                          \
+ static const char EVENT_NAMES_17[] PROGMEM = "SW_TOUCH_RET";                           \
+ static const char EVENT_NAMES_18[] PROGMEM = "UPDATE_MENU";                            \
+ static const char EVENT_NAMES_19[] PROGMEM = "IR_REC";                                 \
  static const char EVENT_NAMES_20[] PROGMEM = "REMOTE_CMD";                             \
  static const char EVENT_NAMES_21[] PROGMEM = "SLEW_TARGET";                            \
  static const char EVENT_NAMES_22[] PROGMEM = "SLEW_START";                             \
@@ -129,13 +129,13 @@ enum {
  static const char EVENT_DESCS_10[] PROGMEM = "Command received, code in p8.";                                                              \
  static const char EVENT_DESCS_11[] PROGMEM = "Command done, code in p8, status code in p16.";                                              \
  static const char EVENT_DESCS_12[] PROGMEM = "Command tacked on running command.";                                                         \
- static const char EVENT_DESCS_13[] PROGMEM = "Touch switch LEFT";                                                                          \
- static const char EVENT_DESCS_14[] PROGMEM = "Touch switch RIGHT";                                                                         \
- static const char EVENT_DESCS_15[] PROGMEM = "Touch switch MENU";                                                                          \
- static const char EVENT_DESCS_16[] PROGMEM = "Touch switch RET";                                                                           \
- static const char EVENT_DESCS_17[] PROGMEM = "Update menu item value on LCD.";                                                             \
- static const char EVENT_DESCS_18[] PROGMEM = "IR command received, p8=cmd, p16=cmd";                                                       \
- static const char EVENT_DESCS_19[] PROGMEM = "Sensor value updated: p8=idx, p16=value.";                                                   \
+ static const char EVENT_DESCS_13[] PROGMEM = "Handler state machine has new state set.";                                                   \
+ static const char EVENT_DESCS_14[] PROGMEM = "Touch switch LEFT";                                                                          \
+ static const char EVENT_DESCS_15[] PROGMEM = "Touch switch RIGHT";                                                                         \
+ static const char EVENT_DESCS_16[] PROGMEM = "Touch switch MENU";                                                                          \
+ static const char EVENT_DESCS_17[] PROGMEM = "Touch switch RET";                                                                           \
+ static const char EVENT_DESCS_18[] PROGMEM = "Update menu item value on LCD.";                                                             \
+ static const char EVENT_DESCS_19[] PROGMEM = "IR command received, p8=cmd, p16=cmd";                                                       \
  static const char EVENT_DESCS_20[] PROGMEM = "Command from RS232 port, p8=byte2, p16=byte0..1.";                                           \
  static const char EVENT_DESCS_21[] PROGMEM = "Slew target pos; p8: axis idx; p16=target";                                                  \
  static const char EVENT_DESCS_22[] PROGMEM = "Slew start pos; p8: axis idx; p16=current";                                                  \

@@ -88,18 +88,19 @@ static uint16_t f_timers[N_APP_TIMER];
 static bool app_timer_is_active(uint8_t idx) { return f_timers[idx] > 0; }
 static uint8_t app_timer_service() {
 	uint8_t timeouts = 0U;
+	uint8_t mask = 1U;
 	fori (N_APP_TIMER) {
-		timeouts <<= 1;
 		if (app_timer_is_active(i)) {
 			f_timers[i] -= 1;
 			if (!app_timer_is_active(i))
-				timeouts |= 1U;
+				timeouts |= mask;
 		}
+		mask <<= 1;
 	}
 	return timeouts;
 }
 static void app_timer_start(uint8_t idx, uint16_t ticks) { f_timers[idx] = ticks; }
-static constexpr uint16_t TICKS_PER_SEC = 10U;
+static constexpr uint16_t APP_TIMER_TICKS_PER_SEC = 10U;
 
 // Generic timers.
 // TODO: Move to library.
@@ -140,11 +141,15 @@ static struct {
 	bool extend_jog;
 } f_app_ctx;
 
+static void set_pending_command(cmd_handler_func h) {
+	f_app_ctx.cmd_handler = h;
+	regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_APP_BUSY, NULL != h);
+}
 // Do the needful to wake the app. If wakeup enabled, the wake state is controlled by an app timer, which controls the WAKE flag.
 //  If not enabled, the flag is forced active.
 static void do_wakeup() {
 	if (!(REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_ALWAYS_AWAKE)) {		// If not always awake...
-		app_timer_start(APP_TIMER_WAKEUP, APP_WAKEUP_TIMEOUT_SECS*TICKS_PER_SEC);
+		app_timer_start(APP_TIMER_WAKEUP, APP_WAKEUP_TIMEOUT_SECS*APP_TIMER_TICKS_PER_SEC);
 		regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_NOT_AWAKE, false);
 	}
 }
@@ -152,7 +157,7 @@ static void do_wakeup() {
 // Logic is first save command starts timer, sets count to 1, but returns fail. Subsequent commands increment count if no timeout, does action when count == 3.
 static bool check_can_save(uint8_t cmd) {
 	if ((!app_timer_is_active(APP_TIMER_SAVE)) || (f_app_ctx.save_cmd != cmd)) {
-		app_timer_start(APP_TIMER_SAVE, APP_SAVE_TIMEOUT_SECS*TICKS_PER_SEC);
+		app_timer_start(APP_TIMER_SAVE, APP_SAVE_TIMEOUT_SECS*APP_TIMER_TICKS_PER_SEC);
 		f_app_ctx.save_preset_attempts = 1;
 		f_app_ctx.save_cmd = cmd;
 		return false;
@@ -172,7 +177,7 @@ bool check_axis_within_limit(uint8_t axis_idx, uint8_t limit_idx) {
 	((int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx] < (limit - (int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]));
 }
 
-static bool is_idle() { return (NULL == f_app_ctx.cmd_handler); }
+static bool is_command_pending() { return (NULL != f_app_ctx.cmd_handler); }
 
 // Command table, encodes whether command can be started and handler.
 typedef uint8_t (*cmd_handler_func)(uint8_t app_cmd);
@@ -183,6 +188,10 @@ typedef struct {
 } CmdHandlerDef;
 
 // Command handlers.
+static void handle_set_state(uint8_t s, uint16_t extra=0) {
+	f_app_ctx.sm_st = s;
+	eventPublish(EV_CMD_STATE_CHANGE, s, extra);
+}
 static uint8_t handle_wakeup(uint8_t cmd) {
 	do_wakeup();
 	return APP_CMD_STATUS_OK;				// Start command as non-pending, returns OK.
@@ -190,8 +199,10 @@ static uint8_t handle_wakeup(uint8_t cmd) {
 static uint8_t handle_stop(uint8_t cmd) {
 	// Stop command does not wake. It kills any pending command. 
 	axis_stop_all();			// Just kill motors anyway.
-	if (!is_idle()) 			// If not idle kill current command.
+	if (is_command_pending()) { 			// If command pending kill it.
+		set_pending_command(NULL);
 		return APP_CMD_STATUS_E_STOP;
+	}
 	return APP_CMD_STATUS_OK;				// Start command as non-pending, returns OK.
 }
 static uint8_t handle_preset_save(uint8_t cmd) {
@@ -267,8 +278,8 @@ static uint8_t handle_jog(uint8_t cmd) {
 			timer_start((uint16_t)millis(), &f_app_ctx.timer);
 			f_app_ctx.extend_jog = false;
 
-			f_app_ctx.sm_st = ST_RUN;
-			return APP_CMD_STATUS_PENDING;
+			handle_set_state(ST_RUN);
+			break;
 			
 		case ST_RUN: {
 			// Restart timer on timeout if we have another request.
@@ -295,12 +306,114 @@ static uint8_t handle_jog(uint8_t cmd) {
 				return APP_CMD_STATUS_MOTION_LIMIT;
 
 			// Waiting...
-			return APP_CMD_STATUS_PENDING;
+			break;
 		}
 
 		default:		// Unknown state...			
 			return APP_CMD_STATUS_ERROR_UNKNOWN;
 	}
+	return APP_CMD_STATUS_PENDING;	
+}
+static constexpr uint16_t MOTOR_RUNDOWN_MS = 500U;
+static uint8_t handle_preset_move(uint8_t cmd) {
+	static uint8_t s_preset_idx;
+	static uint8_t s_axis_idx;
+	//static uint8_t s_axis_order_rev;
+	enum { ST_RESET, ST_AXIS_START, ST_AXIS_SLEWING, ST_AXIS_STOPPING, ST_AXIS_DONE, };
+	
+	do_wakeup();
+	
+	switch (f_app_ctx.sm_st) {
+		case ST_RESET: {
+			// Get which preset.
+			s_preset_idx = cmd - APP_CMD_RESTORE_POS_1;
+			if (s_preset_idx >= 4) 		// Logic error, should never happen.
+				return APP_CMD_STATUS_ERROR_UNKNOWN;
+
+			// TODO: Function for checking if preset valid.
+			fori (CFG_TILT_SENSOR_COUNT) {
+				if (driverSensorIsEnabled(i) && (SBC2022_MODBUS_TILT_FAULT == driverPresets(s_preset_idx)[i]))
+					return APP_CMD_STATUS_PRESET_INVALID;
+			}
+
+			// Clear slew timeout in case it is running.				
+			app_timer_start(APP_TIMER_SLEW, REGS[REGS_IDX_SLEW_TIMEOUT] * APP_TIMER_TICKS_PER_SEC);
+			regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT, false);
+
+			// Decide order to move axes...
+			s_axis_idx = 0U;
+			//s_axis_order_rev = 0;
+
+			handle_set_state(ST_AXIS_START, s_axis_idx);
+		}
+		break;
+
+	case ST_AXIS_START: {
+
+		// TODO: Do we need disabled axes? For variable number of axes could just set total number 1..4.
+		if (!driverSensorIsEnabled(s_axis_idx)) {
+			handle_set_state(ST_AXIS_DONE, s_axis_idx);
+			break;
+		}
+
+		// Get direction to go, or we might be there anyways.
+		// Note: we reread the position, just in case. Also allows us to disable axis reverse.
+		const int16_t* presets = driverPresets(s_preset_idx);
+		const int16_t target_pos = presets[s_axis_idx];
+		const int16_t current_pos = (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_idx];
+		const int16_t delta = target_pos - current_pos;
+		
+		eventPublish(EV_SLEW_TARGET, s_axis_idx, target_pos);
+		eventPublish(EV_SLEW_START, s_axis_idx, current_pos);
+		const int8_t start_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND]);
+		if (start_dir > 0) {
+			axis_set_drive(s_axis_idx, AXIS_DIR_UP);
+			handle_set_state(ST_AXIS_SLEWING, s_axis_idx);
+		}
+		else if (start_dir < 0) {
+			axis_set_drive(s_axis_idx, AXIS_DIR_DOWN);
+			handle_set_state(ST_AXIS_SLEWING, s_axis_idx);
+		}
+		else	// Else no slew necessary...
+			handle_set_state(ST_AXIS_DONE, s_axis_idx);
+	}
+	break;
+
+	case ST_AXIS_SLEWING: {
+		const int16_t* presets = driverPresets(s_preset_idx);
+		const int16_t target_pos = presets[s_axis_idx];
+		const int16_t current_pos = (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_idx];
+		const int16_t delta = target_pos - current_pos;		
+
+		// Check for position reached. We can't just check for zero as it might overshoot.
+		const int8_t target_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]);
+		if ((axis_get_dir(s_axis_idx) == AXIS_DIR_DOWN) ^ (target_dir <= 0)) {
+			eventPublish(EV_SLEW_STOP, s_axis_idx, current_pos);
+			//if ( !((APP_CMD_RESTORE_POS_1 == REGS[REGS_IDX_CMD_ACTIVE]) && (REGS[REGS_IDX_RUN_ON_TIME_POS1] > 0)) ) 	// Special delay for slew pos 1. 
+			axis_stop_all();
+			timer_start((uint16_t)millis(), &f_app_ctx.timer);		// Start motor period for run down.
+			handle_set_state(ST_AXIS_STOPPING, s_axis_idx);
+		}
+	}
+	break;
+
+	case ST_AXIS_STOPPING:
+		if (timer_is_timeout((uint16_t)millis(), &f_app_ctx.timer, MOTOR_RUNDOWN_MS))
+			handle_set_state(ST_AXIS_DONE, s_axis_idx);
+		break;
+
+	case ST_AXIS_DONE:
+		if (++s_axis_idx >= CFG_TILT_SENSOR_COUNT) 
+			return APP_CMD_STATUS_OK;
+		else
+			handle_set_state(ST_AXIS_START, s_axis_idx);
+		break;
+
+	default:		// Unknown state...
+		return APP_CMD_STATUS_ERROR_UNKNOWN;
+	}
+	
+	return APP_CMD_STATUS_PENDING;		
 }
 
 // Some aliases for the flags.
@@ -333,12 +446,10 @@ static const CmdHandlerDef CMD_HANDLERS[] PROGMEM = {
 	{ APP_CMD_LIMIT_SAVE_HEAD_UP,	F_NOWAKE|F_BUSY|F_SENSOR_0,				handle_limits_save, },
 	{ APP_CMD_LIMIT_SAVE_FOOT_DOWN,	F_NOWAKE|F_BUSY|F_SENSOR_1,				handle_limits_save, },
 	{ APP_CMD_LIMIT_SAVE_FOOT_UP,	F_NOWAKE|F_BUSY|F_SENSOR_1,				handle_limits_save, },
-/*		
 	{ APP_CMD_RESTORE_POS_1,		F_NOWAKE|F_BUSY|F_RELAY|F_SENSOR_ALL|F_SLEW_TIMEOUT,	handle_preset_move, },
 	{ APP_CMD_RESTORE_POS_2,		F_NOWAKE|F_BUSY|F_RELAY|F_SENSOR_ALL|F_SLEW_TIMEOUT,	handle_preset_move, },
 	{ APP_CMD_RESTORE_POS_3,		F_NOWAKE|F_BUSY|F_RELAY|F_SENSOR_ALL|F_SLEW_TIMEOUT,	handle_preset_move, },
 	{ APP_CMD_RESTORE_POS_4,		F_NOWAKE|F_BUSY|F_RELAY|F_SENSOR_ALL|F_SLEW_TIMEOUT,	handle_preset_move, },
-*/
 };
 
 static const CmdHandlerDef* search_cmd_handler(uint8_t app_cmd) {
@@ -375,24 +486,10 @@ static uint8_t cmd_start(uint8_t cmd, uint8_t status) {
 	return status;
 }
 
-// Set end status of a PENDING command from worker thread.
-static void cmd_done(uint16_t status) {
-	ASSERT(!is_idle());
-	ASSERT(regsFlags() & REGS_FLAGS_MASK_FAULT_APP_BUSY);
-	ASSERT(APP_CMD_STATUS_PENDING != status);
-	ASSERT(APP_CMD_STATUS_PENDING == REGS[REGS_IDX_CMD_STATUS]);
-	
-	f_app_ctx.cmd_handler= NULL;
-	REGS[REGS_IDX_CMD_STATUS] = status;
-	eventPublish(EV_COMMAND_DONE, REGS[REGS_IDX_CMD_ACTIVE], status);
-	// axis_stop_all();
-	regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_APP_BUSY, false);
-}
-
 uint8_t appCmdRun(uint8_t cmd) {
 	const CmdHandlerDef* cmd_def = search_cmd_handler(cmd);		// Get a def object for this command.
 
-	if (APP_CMD_STATUS_PENDING != REGS[REGS_IDX_CMD_STATUS])		// Record command if not already one running.
+	if (!is_command_pending())		// Record command if not already one running.
 		REGS[REGS_IDX_CMD_ACTIVE] = cmd;
 
 	if (NULL == cmd_def)		// Not found.
@@ -408,7 +505,7 @@ uint8_t appCmdRun(uint8_t cmd) {
 	// Special case commands with no BUSY set is faultmask. They can be restarted is repeated whilst they are still running. Like jog commands.
 	// driverTimingDebug(TIMING_DEBUG_EVENT_APP_WORKER_JOG, true);
 	if (!(f_app_ctx.fault_mask & F_BUSY)) {
-		if ((APP_CMD_STATUS_PENDING == REGS[REGS_IDX_CMD_STATUS]) && (REGS[REGS_IDX_CMD_ACTIVE] == cmd)) { 	// Extend time if the same command is running.
+		if (is_command_pending() && (REGS[REGS_IDX_CMD_ACTIVE] == cmd)) { 	// Extend time if the same command is running.
 			f_app_ctx.extend_jog = true;
 			eventPublish(EV_COMMAND_STACK, cmd);	// For debugging.
 			return APP_CMD_STATUS_PENDING_OK;
@@ -417,16 +514,30 @@ uint8_t appCmdRun(uint8_t cmd) {
 
 	// Run the handler. This will check all sorts of things, maybe do the command, or do some setup for a pending command, and then return a status code. 
 	f_app_ctx.sm_st = 0;
-	f_app_ctx.cmd_handler = reinterpret_cast<cmd_handler_func>(pgm_read_ptr(&cmd_def->cmd_handler));
-	const uint8_t status = f_app_ctx.cmd_handler(cmd);
+	const cmd_handler_func cmd_handler = reinterpret_cast<cmd_handler_func>(pgm_read_ptr(&cmd_def->cmd_handler));
+	const uint8_t status = cmd_handler(cmd);
 
 	// Do some setup for worker.
 	if (APP_CMD_STATUS_PENDING == status) 
-		regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_APP_BUSY, true);
+		set_pending_command(cmd_handler);
 	else
-		f_app_ctx.cmd_handler = NULL;
+		set_pending_command(NULL);
+		
 	return cmd_start(cmd, status);
 }
+
+// Set end status of a PENDING command from worker thread.
+static void cmd_done(uint16_t status) {
+	ASSERT(is_command_pending());
+	ASSERT(regsFlags() & REGS_FLAGS_MASK_FAULT_APP_BUSY);
+	ASSERT(APP_CMD_STATUS_PENDING != status);
+	ASSERT(APP_CMD_STATUS_PENDING == REGS[REGS_IDX_CMD_STATUS]);
+	
+	set_pending_command(NULL);
+	REGS[REGS_IDX_CMD_STATUS] = status;
+	eventPublish(EV_COMMAND_DONE, REGS[REGS_IDX_CMD_ACTIVE], status);
+}
+
 
 static void service_worker() {
 	// Exit early if no new data yet.
@@ -434,7 +545,7 @@ static void service_worker() {
 		return;
 	
 	// If no pending command exit, as there is nothing to do,
-	if (!f_app_ctx.cmd_handler)
+	if (!is_command_pending())
 		return;
 
 	// Check for various fault states and abort command. Note clear busy as that intended to prevent starting the command when busy, and if a command is Pending the app must be busy.
@@ -453,39 +564,8 @@ static void service_worker() {
 }
 /*
 ////////////////////////////////////
-
-
-static uint8_t handle_preset_move(uint8_t cmd) {
-	do_wakeup();
-	return APP_CMD_STATUS_PENDING;						// Start command as pending.
-}
-
-static void service_worker() {
-	// Exit early if no new data yet.
-	if (!driverSensorUpdateAvailable())
-		return;
-		
-	// If no pending command exit, as there is nothing to do,
-	if (APP_CMD_IDLE == REGS[REGS_IDX_CMD_ACTIVE])
-		return;
-
-	// Check for various fault states and abort command. Note clear busy as that intended to prevent starting the command when busy, and if a command is Pending the appmust be busy. 
-	const uint8_t fault_status = check_faults(f_app_ctx.fault_mask & ~F_BUSY);
-	if (APP_CMD_STATUS_OK != fault_status) {
-		cmd_done(fault_status);
-		return;
-	}
-		
 	static uint8_t s_axis_idx;
 
-	switch (REGS[REGS_IDX_CMD_ACTIVE]) {
-		// If somehow a command is tagged as pending, this handles it.
-		default:					
-			cmd_done(APP_CMD_STATUS_ERROR_UNKNOWN);
-			break;
-
-
-		
 		// Slew to preset commands
 		case APP_CMD_RESTORE_POS_1:
 		case APP_CMD_RESTORE_POS_2:
@@ -564,151 +644,7 @@ static void service_worker() {
 	}	// Closes `switch (REGS[REGS_IDX_CMD_ACTIVE]) {'
 }
 
-// Thread to do slew.
-static int8_t thread_slew(void* arg) {
-	(void)arg;
-	static uint16_t then;
-	static uint8_t s_axis_idx;
-	static uint8_t s_axis_order_rev;
 
-	// bool timeout = timer_is_timeout((uint16_t)millis(), &then, RS232_CMD_TIMEOUT_MILLIS);
-
-	THREAD_BEGIN();
-
-	static uint8_t preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_RESTORE_POS_1;
-	if (preset_idx >= 4)		// Logic error, should never happen.
-		THREAD_END(UNKNOWN);
-
-	// TODO: Function for checking if preset valid.
-	fori (CFG_TILT_SENSOR_COUNT) {
-		if (driverSensorIsEnabled(i) && (SBC2022_MODBUS_TILT_FAULT == driverPresets(preset_idx)[i]))
-			THREAD_END(APP_CMD_STATUS_PRESET_INVALID);
-	}
-
-	// Clear slew timeout in case it is running.				
-	app_timer_stop(APP_TIMER_SLEW);
-	regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT, false);
-
-	// Decide order to move axes...
-	s_axis_idx = 0U;
-	s_axis_order_rev = 0;
-
-	// Do axes in chosen order.
-	// TODO: implement reverse order. 
-	while (s_axis_idx < 2) {
-
-		// TODO: Do we need disabled axes? For variable axes could just set total number 1..4.
-		if (driverSensorIsEnabled(s_axis_idx)) {		// Do not do disabled axes.
-			// Get direction to go, or we might be there anyways.
-			// Note: we reread the position, just in case. Also allows us to disable axis reverse.
-			const int16_t* presets = driverPresets(preset_idx);
-			const int16_t target_pos = presets[s_axis_idx];
-			const int16_t current_pos = (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_idx];
-			const int16_t delta = target_pos - current_pos;
-}}}			
-
-typedef void(appSmFunc*)(void);
-appSmFunc f_sm_func;
-static void app_sm_reset() { f_app_sm_st = 0; f_sm_func(); }
-static uint8_t app_sm_run() { f_sm_func(); return 0 == f_app_sm_st; }
-
-// State machine to do slew.
-enum { ST_SLEW_OK, ST_SLEW_INIT, };
-enum { SM_SLEW_EV_DATA, SM_SLEW_EV_RESET, };
-static uint8_t f_sm_slew_st;
-static uint16_t f_slew_timer;
-timer_start((uint16_t)millis(), &f_slew_timer);	
-
-// Reset by setting state to zero and calling.
-static void sm_slew() {
-	static uint8_t preset_idx;
-
-	// Simple delay timer prevents SM from running.
-	if (timer_is_active(&f_slew_timer) && !timer_is_timeout((uint16_t)millis(), &f_slew_timer))
-		return;
-
-	switch(st) {
-	case SM_SLEW_EV_RESET:
-		
-		// Get which preset.
-		preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_RESTORE_POS_1;
-		if (preset_idx >= 4) {		// Logic error, should never happen.
-			sm_error(UNKNOWN);
-			st = ST_SLEW_OK;
-			break;
-		}
-
-		// TODO: Function for checking if preset valid.
-		fori (CFG_TILT_SENSOR_COUNT) {
-			if (driverSensorIsEnabled(i) && (SBC2022_MODBUS_TILT_FAULT == driverPresets(preset_idx)[i]))
-				sm_error(APP_CMD_STATUS_PRESET_INVALID);
-				st = ST_SLEW_OK;
-				break;
-			}
-		}
-
-		// Clear slew timeout in case it is running.				
-		app_timer_stop(APP_TIMER_SLEW);
-		regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT, false);
-
-		// Decide order to move axes...
-		s_axis_idx = 0U;
-		s_axis_order_rev = 0;
-
-		st = ST_START;
-		break;
-
-	case ST_START:
-
-		// TODO: Do we need disabled axes? For variable axes could just set total number 1..4.
-		if (!driverSensorIsEnabled(s_axis_idx)) {
-			st = ST_AXIS_DONE;
-			break;
-		}
-
-		// Get direction to go, or we might be there anyways.
-		// Note: we reread the position, just in case. Also allows us to disable axis reverse.
-		const int16_t* presets = driverPresets(preset_idx);
-		const int16_t target_pos = presets[s_axis_idx];
-		const int16_t current_pos = (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_idx];
-		const int16_t delta = target_pos - current_pos;
-		
-		eventPublish(EV_SLEW_TARGET, s_axis_idx, target_pos);
-		eventPublish(EV_SLEW_START, s_axis_idx, current_pos);
-		const int8_t start_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND]);
-		if (start_dir > 0) {
-			axis_set_drive(s_axis_idx, AXIS_DIR_UP);
-			st = ST_SLEWING;
-		}
-		else if (start_dir < 0) {
-			axis_set_drive(s_axis_idx, AXIS_DIR_DOWN);
-			st = ST_SLEWING;
-		}
-		else	// Else no slew necessary...
-			st = ST_AXIS_DONE;
-		break;
-
-	case ST_SLEWING:
-		// Check for position reached. We can't just check for zero as it might overshoot.
-		const int8_t target_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]);
-		if ((axis_get_dir(s_axis_idx) == AXIS_DIR_DOWN) ^ (target_dir <= 0)) {
-			eventPublish(EV_SLEW_STOP, s_axis_idx, current_pos);
-			//if ( !((APP_CMD_RESTORE_POS_1 == REGS[REGS_IDX_CMD_ACTIVE]) && (REGS[REGS_IDX_RUN_ON_TIME_POS1] > 0)) ) 	// Special delay for slew pos 1. 
-				axis_stop_all();
-			timer_start((uint16_t)millis(), &f_slewtimer);		// Start motor period.
-			st = ST_SLEW_DONE;
-		}
-	
-	case ST_SLEW_DONE:
-		if (++preset_idx > 2) {
-			sm_error(OK);
-			st = ST_SLEW_OK;
-		}
-		else
-			st = ST_START;
-		break;
-	}
-}
 */
 
 // RS232 Remote Command

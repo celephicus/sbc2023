@@ -65,7 +65,7 @@ static bool console_cmds_user(char* cmd) {
 	case /** EVENT **/ 0x8a29: eventPublish(consoleStackPop()); break;
 	case /** EVENT-EX **/ 0x2f99: { const uint16_t p16 = consoleStackPop(); const uint8_t p8 = consoleStackPop(); eventPublish(consoleStackPop(), p8, p16); } break;
 	case /** CTM **/ 0xd17f: eventTraceMaskClear(); break;
-	case /** DTM **/ 0xbcb8: eventTraceMaskSetDefault(); eventTraceMaskSetBit(EV_TIMER, false);  eventTraceMaskSetBit(EV_DEBUG_TIMER_ARM, false); eventTraceMaskSetBit(EV_DEBUG_TIMER_STOP, false); eventTraceMaskSetBit(EV_SENSOR_UPDATE, false); break;
+	case /** DTM **/ 0xbcb8: eventTraceMaskSetDefault(); eventTraceMaskSetBit(EV_TIMER, false);  eventTraceMaskSetBit(EV_DEBUG_TIMER_ARM, false); eventTraceMaskSetBit(EV_DEBUG_TIMER_STOP, false); break;
 	case /** ?TM **/ 0x7a03: fori ((COUNT_EV + 15) / 16) consolePrint(CFMT_X, ((uint16_t)eventGetTraceMask()[i*2+1]<<8) | (uint16_t)eventGetTraceMask()[i*2]); break;
 	case /** ??TM **/ 0x3fbc: {
 		fori (COUNT_EV) {
