@@ -71,6 +71,7 @@ ENABLES [nv fmt=hex] "Non-volatile enable flags.
 - DUMP_REGS [bit=1] "Enable regs dump to console.
 	If set then registers are dumped at a set rate."
 - DUMP_REGS_FAST [bit=2] "Dump regs at 5/s rather than 1/s."
+- ALWAYS_AWAKE [bit=3] "Controller always awake, ignored WAKE command."
 - SENSOR_DISABLE_0 [bit=4] "Disable Sensor 0."
 - SENSOR_DISABLE_1 [bit=5] "Disable Sensor 1."
 - SENSOR_DISABLE_2 [bit=6] "Disable Sensor 2."
@@ -78,7 +79,8 @@ ENABLES [nv fmt=hex] "Non-volatile enable flags.
 - TOUCH_DISABLE [bit=8] "Disable touch buttons."
 - SLAVE_UPDATE_DISABLE [bit=9] "Disable slave MODBUS schedule.
 	Disable the schedule that reads Sensors and writes the Relay. For testing onlyas all slaves will go to fault state."
-- ALWAYS_AWAKE [bit=10] "Controller always awake, ignored WAKE command."
+- SLEW_ORDER_FORCE [bit=10] "Force constant slew order."
+- SLEW_ORDER_F_DIR [bit=11] "Forced slew order fwd - rev."
 - TRACE_FORMAT_BINARY [bit=13] "Dump trace in binary format."
 - TRACE_FORMAT_CONCISE [bit=14] "Dump trace in concise text format."
 - DISABLE_BLINKY_LED [bit=15] "Disable setting Blinky Led from fault states.
