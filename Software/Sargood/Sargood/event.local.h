@@ -5,6 +5,7 @@
 
 	COMMAND_START	Command received, code in p8.
 	COMMAND_DONE	Command done, code in p8, status code in p16.
+	COMMAND_STACK	Command tacked on running command.
 	SW_TOUCH_LEFT	Touch switch LEFT
 	SW_TOUCH_RIGHT	Touch switch RIGHT
 	SW_TOUCH_MENU	Touch switch MENU
@@ -35,20 +36,20 @@ enum {
     EV_DEBUG = 9,                       // Generic debug event.
     EV_COMMAND_START = 10,              // Command received, code in p8.
     EV_COMMAND_DONE = 11,               // Command done, code in p8, status code in p16.
-    EV_SW_TOUCH_LEFT = 12,              // Touch switch LEFT
-    EV_SW_TOUCH_RIGHT = 13,             // Touch switch RIGHT
-    EV_SW_TOUCH_MENU = 14,              // Touch switch MENU
-    EV_SW_TOUCH_RET = 15,               // Touch switch RET
-    EV_UPDATE_MENU = 16,                // Update menu item value on LCD.
-    EV_IR_REC = 17,                     // IR command received, p8=cmd, p16=cmd
-    EV_SENSOR_UPDATE = 18,              // Sensor value updated: p8=idx, p16=value.
-    EV_REMOTE_CMD = 19,                 // Command from RS232 port, p8=byte2, p16=byte0..1.
-    EV_SLEW_TARGET = 20,                // Slew target pos; p8: axis idx; p16=target
-    EV_SLEW_START = 21,                 // Slew start pos; p8: axis idx; p16=current
-    EV_SLEW_STOP = 22,                  // Slew stop pos; p8: axis idx; p16=current
-    EV_SLEW_FINAL = 23,                 // Slew final pos; p8: axis idx; p16=target
-    EV_RELAY_WRITE = 24,                // Relay write; p8: relay
-    EV_COMMAND_QUEUED = 25,             // Command accepted; p8: accepted, p16=cmd
+    EV_COMMAND_STACK = 12,              // Command tacked on running command.
+    EV_SW_TOUCH_LEFT = 13,              // Touch switch LEFT
+    EV_SW_TOUCH_RIGHT = 14,             // Touch switch RIGHT
+    EV_SW_TOUCH_MENU = 15,              // Touch switch MENU
+    EV_SW_TOUCH_RET = 16,               // Touch switch RET
+    EV_UPDATE_MENU = 17,                // Update menu item value on LCD.
+    EV_IR_REC = 18,                     // IR command received, p8=cmd, p16=cmd
+    EV_SENSOR_UPDATE = 19,              // Sensor value updated: p8=idx, p16=value.
+    EV_REMOTE_CMD = 20,                 // Command from RS232 port, p8=byte2, p16=byte0..1.
+    EV_SLEW_TARGET = 21,                // Slew target pos; p8: axis idx; p16=target
+    EV_SLEW_START = 22,                 // Slew start pos; p8: axis idx; p16=current
+    EV_SLEW_STOP = 23,                  // Slew stop pos; p8: axis idx; p16=current
+    EV_SLEW_FINAL = 24,                 // Slew final pos; p8: axis idx; p16=target
+    EV_RELAY_WRITE = 25,                // Relay write; p8: relay
     COUNT_EV = 26,                      // Total number of events defined.
 };
 
@@ -69,20 +70,20 @@ enum {
  static const char EVENT_NAMES_9[] PROGMEM = "DEBUG";                                   \
  static const char EVENT_NAMES_10[] PROGMEM = "COMMAND_START";                          \
  static const char EVENT_NAMES_11[] PROGMEM = "COMMAND_DONE";                           \
- static const char EVENT_NAMES_12[] PROGMEM = "SW_TOUCH_LEFT";                          \
- static const char EVENT_NAMES_13[] PROGMEM = "SW_TOUCH_RIGHT";                         \
- static const char EVENT_NAMES_14[] PROGMEM = "SW_TOUCH_MENU";                          \
- static const char EVENT_NAMES_15[] PROGMEM = "SW_TOUCH_RET";                           \
- static const char EVENT_NAMES_16[] PROGMEM = "UPDATE_MENU";                            \
- static const char EVENT_NAMES_17[] PROGMEM = "IR_REC";                                 \
- static const char EVENT_NAMES_18[] PROGMEM = "SENSOR_UPDATE";                          \
- static const char EVENT_NAMES_19[] PROGMEM = "REMOTE_CMD";                             \
- static const char EVENT_NAMES_20[] PROGMEM = "SLEW_TARGET";                            \
- static const char EVENT_NAMES_21[] PROGMEM = "SLEW_START";                             \
- static const char EVENT_NAMES_22[] PROGMEM = "SLEW_STOP";                              \
- static const char EVENT_NAMES_23[] PROGMEM = "SLEW_FINAL";                             \
- static const char EVENT_NAMES_24[] PROGMEM = "RELAY_WRITE";                            \
- static const char EVENT_NAMES_25[] PROGMEM = "COMMAND_QUEUED";                         \
+ static const char EVENT_NAMES_12[] PROGMEM = "COMMAND_STACK";                          \
+ static const char EVENT_NAMES_13[] PROGMEM = "SW_TOUCH_LEFT";                          \
+ static const char EVENT_NAMES_14[] PROGMEM = "SW_TOUCH_RIGHT";                         \
+ static const char EVENT_NAMES_15[] PROGMEM = "SW_TOUCH_MENU";                          \
+ static const char EVENT_NAMES_16[] PROGMEM = "SW_TOUCH_RET";                           \
+ static const char EVENT_NAMES_17[] PROGMEM = "UPDATE_MENU";                            \
+ static const char EVENT_NAMES_18[] PROGMEM = "IR_REC";                                 \
+ static const char EVENT_NAMES_19[] PROGMEM = "SENSOR_UPDATE";                          \
+ static const char EVENT_NAMES_20[] PROGMEM = "REMOTE_CMD";                             \
+ static const char EVENT_NAMES_21[] PROGMEM = "SLEW_TARGET";                            \
+ static const char EVENT_NAMES_22[] PROGMEM = "SLEW_START";                             \
+ static const char EVENT_NAMES_23[] PROGMEM = "SLEW_STOP";                              \
+ static const char EVENT_NAMES_24[] PROGMEM = "SLEW_FINAL";                             \
+ static const char EVENT_NAMES_25[] PROGMEM = "RELAY_WRITE";                            \
                                                                                         \
  static const char* const EVENT_NAMES[] PROGMEM = {                                     \
    EVENT_NAMES_0,                                                                       \
@@ -127,20 +128,20 @@ enum {
  static const char EVENT_DESCS_9[] PROGMEM = "Generic debug event.";                                                                        \
  static const char EVENT_DESCS_10[] PROGMEM = "Command received, code in p8.";                                                              \
  static const char EVENT_DESCS_11[] PROGMEM = "Command done, code in p8, status code in p16.";                                              \
- static const char EVENT_DESCS_12[] PROGMEM = "Touch switch LEFT";                                                                          \
- static const char EVENT_DESCS_13[] PROGMEM = "Touch switch RIGHT";                                                                         \
- static const char EVENT_DESCS_14[] PROGMEM = "Touch switch MENU";                                                                          \
- static const char EVENT_DESCS_15[] PROGMEM = "Touch switch RET";                                                                           \
- static const char EVENT_DESCS_16[] PROGMEM = "Update menu item value on LCD.";                                                             \
- static const char EVENT_DESCS_17[] PROGMEM = "IR command received, p8=cmd, p16=cmd";                                                       \
- static const char EVENT_DESCS_18[] PROGMEM = "Sensor value updated: p8=idx, p16=value.";                                                   \
- static const char EVENT_DESCS_19[] PROGMEM = "Command from RS232 port, p8=byte2, p16=byte0..1.";                                           \
- static const char EVENT_DESCS_20[] PROGMEM = "Slew target pos; p8: axis idx; p16=target";                                                  \
- static const char EVENT_DESCS_21[] PROGMEM = "Slew start pos; p8: axis idx; p16=current";                                                  \
- static const char EVENT_DESCS_22[] PROGMEM = "Slew stop pos; p8: axis idx; p16=current";                                                   \
- static const char EVENT_DESCS_23[] PROGMEM = "Slew final pos; p8: axis idx; p16=target";                                                   \
- static const char EVENT_DESCS_24[] PROGMEM = "Relay write; p8: relay";                                                                     \
- static const char EVENT_DESCS_25[] PROGMEM = "Command accepted; p8: accepted, p16=cmd";                                                    \
+ static const char EVENT_DESCS_12[] PROGMEM = "Command tacked on running command.";                                                         \
+ static const char EVENT_DESCS_13[] PROGMEM = "Touch switch LEFT";                                                                          \
+ static const char EVENT_DESCS_14[] PROGMEM = "Touch switch RIGHT";                                                                         \
+ static const char EVENT_DESCS_15[] PROGMEM = "Touch switch MENU";                                                                          \
+ static const char EVENT_DESCS_16[] PROGMEM = "Touch switch RET";                                                                           \
+ static const char EVENT_DESCS_17[] PROGMEM = "Update menu item value on LCD.";                                                             \
+ static const char EVENT_DESCS_18[] PROGMEM = "IR command received, p8=cmd, p16=cmd";                                                       \
+ static const char EVENT_DESCS_19[] PROGMEM = "Sensor value updated: p8=idx, p16=value.";                                                   \
+ static const char EVENT_DESCS_20[] PROGMEM = "Command from RS232 port, p8=byte2, p16=byte0..1.";                                           \
+ static const char EVENT_DESCS_21[] PROGMEM = "Slew target pos; p8: axis idx; p16=target";                                                  \
+ static const char EVENT_DESCS_22[] PROGMEM = "Slew start pos; p8: axis idx; p16=current";                                                  \
+ static const char EVENT_DESCS_23[] PROGMEM = "Slew stop pos; p8: axis idx; p16=current";                                                   \
+ static const char EVENT_DESCS_24[] PROGMEM = "Slew final pos; p8: axis idx; p16=target";                                                   \
+ static const char EVENT_DESCS_25[] PROGMEM = "Relay write; p8: relay";                                                                     \
                                                                                                                                             \
  static const char* const EVENT_DESCS[] PROGMEM = {                                                                                         \
    EVENT_DESCS_0,                                                                                                                           \
