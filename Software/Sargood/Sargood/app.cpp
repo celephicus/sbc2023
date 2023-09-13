@@ -319,7 +319,7 @@ static uint8_t handle_preset_move(uint8_t cmd) {
 	static uint8_t s_preset_idx;
 	static uint8_t s_axis_idx;
 	//static uint8_t s_axis_order_rev;
-	enum { ST_RESET, ST_AXIS_START, ST_AXIS_SLEWING, ST_AXIS_STOPPING, ST_AXIS_DONE, };
+	enum { ST_RESET, ST_AXIS_START, ST_AXIS_SLEWING, ST_AXIS_STOPPING, ST_AXIS_RUN_ON, ST_AXIS_DONE, };
 	
 	do_wakeup();
 	
@@ -366,6 +366,7 @@ static uint8_t handle_preset_move(uint8_t cmd) {
 		eventPublish(EV_SLEW_TARGET, s_axis_idx, target_pos);
 		eventPublish(EV_SLEW_START, s_axis_idx, current_pos);
 		const int8_t start_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND]);
+		ASSERT(0 == REGS[REGS_IDX_RELAY_STATE]);	// Assume all motors stopped here. 
 		if (start_dir > 0) {
 			axis_set_drive(s_axis_idx, AXIS_DIR_UP);
 			handle_set_state(ST_AXIS_SLEWING, s_axis_idx);
@@ -387,21 +388,35 @@ static uint8_t handle_preset_move(uint8_t cmd) {
 
 		// Check for position reached. We can't just check for zero as it might overshoot.
 		const int8_t target_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]);
-		if ((axis_get_dir(s_axis_idx) == AXIS_DIR_DOWN) ^ (target_dir <= 0)) {
+		if (0 == target_dir) {
 			eventPublish(EV_SLEW_STOP, s_axis_idx, current_pos);
-			//if ( !((APP_CMD_RESTORE_POS_1 == REGS[REGS_IDX_CMD_ACTIVE]) && (REGS[REGS_IDX_RUN_ON_TIME_POS1] > 0)) ) 	// Special delay for slew pos 1. 
-			axis_stop_all();
-			timer_start((uint16_t)millis(), &f_app_ctx.timer);		// Start motor period for run down.
-			handle_set_state(ST_AXIS_STOPPING, s_axis_idx);
+			timer_start((uint16_t)millis(), &f_app_ctx.timer);	
+			if ( (APP_CMD_RESTORE_POS_1 == cmd) && (REGS[REGS_IDX_RUN_ON_TIME_POS1] > 0) ) 	// Special run on delay for slew pos 1. 
+				handle_set_state(ST_AXIS_RUN_ON, s_axis_idx);
+			else {				// Stop motor, wait to run down. 
+				axis_stop_all();
+				handle_set_state(ST_AXIS_STOPPING, s_axis_idx);
+			}
 		}
 	}
 	break;
 
-	case ST_AXIS_STOPPING:
-		if (timer_is_timeout((uint16_t)millis(), &f_app_ctx.timer, MOTOR_RUNDOWN_MS))
-			handle_set_state(ST_AXIS_DONE, s_axis_idx);
+	case ST_AXIS_RUN_ON:
+		if (timer_is_timeout((uint16_t)millis(), &f_app_ctx.timer, REGS[REGS_IDX_RUN_ON_TIME_POS1])) {
+			timer_start((uint16_t)millis(), &f_app_ctx.timer);
+			axis_stop_all();
+			handle_set_state(ST_AXIS_STOPPING, s_axis_idx);
+		}
 		break;
 
+
+	case ST_AXIS_STOPPING:
+		if (timer_is_timeout((uint16_t)millis(), &f_app_ctx.timer, MOTOR_RUNDOWN_MS)) {
+			eventPublish(EV_SLEW_FINAL, s_axis_idx, REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_idx]);
+			handle_set_state(ST_AXIS_DONE, s_axis_idx);
+		}
+		break;
+		
 	case ST_AXIS_DONE:
 		if (++s_axis_idx >= CFG_TILT_SENSOR_COUNT) 
 			return APP_CMD_STATUS_OK;
@@ -562,90 +577,6 @@ static void service_worker() {
 		return;
 	}
 }
-/*
-////////////////////////////////////
-	static uint8_t s_axis_idx;
-
-		// Slew to preset commands
-		case APP_CMD_RESTORE_POS_1:
-		case APP_CMD_RESTORE_POS_2:
-		case APP_CMD_RESTORE_POS_3:
-		case APP_CMD_RESTORE_POS_4: {
-			const uint8_t preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_RESTORE_POS_1;
-			if (worker_do_reset()) {
-				// TODO: Function for checking if preset valid.
-				fori (CFG_TILT_SENSOR_COUNT) {
-					if (driverSensorIsEnabled(i) && (SBC2022_MODBUS_TILT_FAULT == driverPresets(preset_idx)[i]))
-						return cmd_done(APP_CMD_STATUS_PRESET_INVALID);
-				}
-				
-				app_timer_start(APP_TIMER_SLEW, REGS[REGS_IDX_SLEW_TIMEOUT]*10U);
-				regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT, false);
-				
-				s_axis_idx = 0U;
-				timer_stop(&f_app_ctx.timer);
-			}
-			
-			if (s_axis_idx >= CFG_TILT_SENSOR_COUNT)	// Have we done all axes?
-				return cmd_done(APP_CMD_STATUS_OK);
-			
-			if (timer_is_active(&f_app_ctx.timer)) {				// Time motor run down period...
-				if (axis_get_dir(s_axis_idx) == AXIS_DIR_STOP) {
-					if (!timer_is_timeout((uint16_t)millis(), &f_app_ctx.timer, 500))
-						break;
-					else
-						s_axis_idx += 1;
-				}
-				else {
-					if (!timer_is_timeout((uint16_t)millis(), &f_app_ctx.timer, REGS[REGS_IDX_RUN_ON_TIME_POS1]))
-						break;
-					else {
-						axis_stop_all();
-						timer_start((uint16_t)millis(), &f_app_ctx.timer);		// Start motor run down period.
-						break;
-					}
-				}
-			}
-			
-			if (driverSensorIsEnabled(s_axis_idx)) {		// Do not do disabled axes.
-				// Get direction to go, or we might be there anyways.
-				const int16_t* presets = driverPresets(preset_idx);
-				const int16_t target_pos = presets[s_axis_idx];
-				const int16_t current_pos = (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_idx];
-				const int16_t delta = target_pos - current_pos;
-				
-				if (axis_get_dir(s_axis_idx) == AXIS_DIR_STOP) {			// If not moving, turn on motors.
-					eventPublish(EV_SLEW_TARGET, s_axis_idx, target_pos);
-					eventPublish(EV_SLEW_START, s_axis_idx, current_pos);
-					const int8_t start_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND]);
-					if (start_dir > 0)
-						axis_set_drive(s_axis_idx, AXIS_DIR_UP);
-					else if (start_dir < 0)
-						axis_set_drive(s_axis_idx, AXIS_DIR_DOWN);
-					else	// Else no slew necessary...
-						s_axis_idx += 1;
-				}
-				else {						// If we are moving in one direction, check for position reached. We can't just check for zero as it might overshoot.
-					const int8_t target_dir = utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_STOP_DEADBAND]);
-					if ((axis_get_dir(s_axis_idx) == AXIS_DIR_DOWN) ^ (target_dir <= 0)) {
-						eventPublish(EV_SLEW_STOP, s_axis_idx, current_pos);
-						if ( !((APP_CMD_RESTORE_POS_1 == REGS[REGS_IDX_CMD_ACTIVE]) && (REGS[REGS_IDX_RUN_ON_TIME_POS1] > 0)) ) 	// Special delay for slew pos 1. 
-							axis_stop_all();
-						timer_start((uint16_t)millis(), &f_app_ctx.timer);		// Start motor run down OR run on period.
-					}
-				}
-			}
-				
-//			if (axis_get_dir(s_axis_idx) == AXIS_DIR_STOP) 			// If not moving, end of slew for this axis. 
-//				s_axis_idx += 1;
-		}
-		break;
-			
-	}	// Closes `switch (REGS[REGS_IDX_CMD_ACTIVE]) {'
-}
-
-
-*/
 
 // RS232 Remote Command
 //

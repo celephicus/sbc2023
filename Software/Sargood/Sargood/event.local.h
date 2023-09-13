@@ -17,7 +17,7 @@
 	SLEW_TARGET		Slew target pos; p8: axis idx; p16=target
 	SLEW_START		Slew start pos; p8: axis idx; p16=current
 	SLEW_STOP		Slew stop pos; p8: axis idx; p16=current
-	SLEW_FINAL		Slew final pos; p8: axis idx; p16=target
+	SLEW_FINAL		Slew rest pos; p8: axis idx; p16=current
 	RELAY_WRITE		Relay write; p8: relay
 
    >>> End event definitions, begin generated code. */
@@ -48,7 +48,7 @@ enum {
     EV_SLEW_TARGET = 21,                // Slew target pos; p8: axis idx; p16=target
     EV_SLEW_START = 22,                 // Slew start pos; p8: axis idx; p16=current
     EV_SLEW_STOP = 23,                  // Slew stop pos; p8: axis idx; p16=current
-    EV_SLEW_FINAL = 24,                 // Slew final pos; p8: axis idx; p16=target
+    EV_SLEW_FINAL = 24,                 // Slew rest pos; p8: axis idx; p16=current
     EV_RELAY_WRITE = 25,                // Relay write; p8: relay
     COUNT_EV = 26,                      // Total number of events defined.
 };
@@ -140,7 +140,7 @@ enum {
  static const char EVENT_DESCS_21[] PROGMEM = "Slew target pos; p8: axis idx; p16=target";                                                  \
  static const char EVENT_DESCS_22[] PROGMEM = "Slew start pos; p8: axis idx; p16=current";                                                  \
  static const char EVENT_DESCS_23[] PROGMEM = "Slew stop pos; p8: axis idx; p16=current";                                                   \
- static const char EVENT_DESCS_24[] PROGMEM = "Slew final pos; p8: axis idx; p16=target";                                                   \
+ static const char EVENT_DESCS_24[] PROGMEM = "Slew rest pos; p8: axis idx; p16=current";                                                   \
  static const char EVENT_DESCS_25[] PROGMEM = "Relay write; p8: relay";                                                                     \
                                                                                                                                             \
  static const char* const EVENT_DESCS[] PROGMEM = {                                                                                         \
