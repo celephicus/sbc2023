@@ -4,20 +4,15 @@
 #include "utils.h"
 #include "gpio.h"
 #include "regs.h"
-#include "AsyncLiquidCrystal.h"
 #include "event.h"
 #include "driver.h"
 #include "sbc2022_modbus.h"
-#include "thread.h"
 #include "app.h"
 
 FILENUM(9);
 
 // Sanity check that the app does not need more sensors than are possible to have.
 UTILS_STATIC_ASSERT(CFG_TILT_SENSOR_COUNT <= SBC2022_MODBUS_SLAVE_COUNT_SENSOR);
-
-// Thread lib needs to get a ticker.
-thread_ticks_t threadGetTicks() { return (thread_ticks_t)millis(); }
 
 // Relays are assigned in parallel with move commands like APP_CMD_JOG_HEAD_UP. Only one relay of each set can be active at a time.
 enum {
@@ -592,15 +587,12 @@ static void service_worker() {
 	}
 }
 
+// Added this as disabling wakeup requires a flag fiddl
 static void	update_wakeup_enable() {
 	// Set not awake if always awake not enabled else keep it clear. 
 	// TODO: Is this backwards?
 	if (!(REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_ALWAYS_AWAKE))
 		regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_NOT_AWAKE, true);		
-}
-void appEnableWakeup(bool f) {
-	regsUpdateMask(REGS_IDX_ENABLES, REGS_ENABLES_MASK_ALWAYS_AWAKE, !f);
-	update_wakeup_enable();
 }
 
 void appInit() {
@@ -620,7 +612,9 @@ void appService10hz() {
 			regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_NOT_AWAKE, true);
 	}
 	
-	// TODO: Check this works...
 	if (timeout_mask & _BV(APP_TIMER_SLEW)) 
 		regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT, true);
+
+	// Enable flag might have got changed.
+	update_wakeup_enable();
 }

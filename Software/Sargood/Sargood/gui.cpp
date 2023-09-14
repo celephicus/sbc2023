@@ -7,13 +7,50 @@
 #include "AsyncLiquidCrystal.h"
 #include "event.h"
 #include "driver.h"
-//#include "sbc2022_modbus.h"
 #include "thread.h"
 #include "app.h"
 
-FILENUM(99);
+FILENUM(10);
 
-thread_control_t f_tcb_rs232_cmd;
+// Thread lib needs to get a ticker.
+thread_ticks_t threadGetTicks() { return (thread_ticks_t)millis(); }
+
+// LCD changed to use non-blocking driver which doesn't lock up the processor for 10's of ms. 
+//
+
+AsyncLiquidCrystal f_lcd(GPIO_PIN_LCD_RS, GPIO_PIN_LCD_E, GPIO_PIN_LCD_D4, GPIO_PIN_LCD_D5, GPIO_PIN_LCD_D6, GPIO_PIN_LCD_D7);
+static void lcd_init() {
+	f_lcd.begin(GPIO_LCD_NUM_COLS, GPIO_LCD_NUM_ROWS);
+}
+static void lcd_printf_of(char c, void* arg) {
+	*(uint8_t*)arg += 1;
+	f_lcd.write(c);
+}
+void lcd_printf(uint8_t row, PGM_P fmt, ...) {
+	f_lcd.setCursor(0, row);
+	va_list ap;
+	va_start(ap, fmt);
+	uint8_t cc = 0;
+	myprintf(lcd_printf_of, &cc, fmt, ap);
+	while (cc++ < GPIO_LCD_NUM_COLS)
+		f_lcd.write(' ');
+	va_end(ap);
+}
+static void lcd_service() {
+	f_lcd.processQueue();
+}
+static void lcd_flush() {
+	f_lcd.flush();
+}
+
+// Backlight, call with arg true to turn on with no timeout.
+static void backlight_on(bool cont=false) {
+	driverSetLcdBacklight(255);
+	if (cont)
+		eventSmTimerStop(TIMER_BACKLIGHT);
+	else
+		eventSmTimerStart(TIMER_BACKLIGHT, BACKLIGHT_TIMEOUT_MS/100U);
+}
 
 // RS232 Remote Command
 //
@@ -21,9 +58,9 @@ thread_control_t f_tcb_rs232_cmd;
 static constexpr uint16_t RS232_CMD_TIMEOUT_MILLIS = 100U;
 static constexpr uint8_t  RS232_CMD_CHAR_COUNT = 4;
 
-// My test IR remote uses this address.
 static constexpr uint16_t IR_CODE_ADDRESS = 0x0000;	// Was 0xef00
 
+thread_control_t f_tcb_rs232_cmd;
 static int8_t thread_rs232_cmd(void* arg) {
 	(void)arg;
 	static uint8_t cmd[RS232_CMD_CHAR_COUNT + 1];		// One extra to flag overflow.
@@ -80,16 +117,6 @@ static void rs232_resp(uint8_t cmd, uint8_t rc) {
 }
 
 // SM to handle IR commands.
-typedef struct {
-	EventSmContextBase base;
-	//uint16_t timer_cookie[CFG_TIMER_COUNT_SM_LEDS];
-} SmIrRecContext;
-static SmIrRecContext f_sm_ir_rec_ctx;
-
-// Define states.
-enum {
-	ST_IR_REC_RUN,
-};
 
 // Command table to map IR/RS232 codes to AP_CMD_xxx codes. Must be sorted on command ID.
 // Command table to map IR/RS232 codes to AP_CMD_xxx codes. Must be sorted on command ID.
@@ -149,38 +176,32 @@ uint8_t search_cmd(uint8_t code, const IrCmdDef* cmd_tab, size_t cmd_cnt) {
 	return ir_cmd_def ? pgm_read_byte(&ir_cmd_def->app_cmd) : (uint8_t)APP_CMD_IDLE;
 }
 
-static int8_t sm_ir_rec(EventSmContextBase* context, t_event ev) {
-	SmIrRecContext* my_context = (SmIrRecContext*)context;        // Downcast to derived class.
-	(void)my_context;
-	switch (context->st) {
-		case ST_IR_REC_RUN:
-		switch(event_id(ev)) {
-			case EV_IR_REC: {
-				if (IR_CODE_ADDRESS == event_p16(ev)) {
-					//regsWriteMaskFlags(REGS_FLAGS_MASK_ABORT_REQ, true);
-					const uint8_t app_cmd = search_cmd(event_p8(ev), IR_CMD_DEFS, UTILS_ELEMENT_COUNT(IR_CMD_DEFS));
-					if (APP_CMD_IDLE != app_cmd)
-					appCmdRun(app_cmd);
-				}
+static void service_ir_rs232(t_event ev) {
+	switch(event_id(ev)) {
+		case EV_IR_REC: {
+			if (IR_CODE_ADDRESS == event_p16(ev)) {
+				//regsWriteMaskFlags(REGS_FLAGS_MASK_ABORT_REQ, true);
+				const uint8_t app_cmd = search_cmd(event_p8(ev), IR_CMD_DEFS, UTILS_ELEMENT_COUNT(IR_CMD_DEFS));
+				if (APP_CMD_IDLE != app_cmd)
+				appCmdRun(app_cmd);
 			}
-			break;
-			case EV_REMOTE_CMD: {
-				if (IR_CODE_ADDRESS == event_p16(ev)) {
-					const uint8_t app_cmd = search_cmd(event_p8(ev), REMOTE_CMD_DEFS, UTILS_ELEMENT_COUNT(REMOTE_CMD_DEFS));
-					if (APP_CMD_IDLE != app_cmd) {
-						const bool accepted = appCmdRun(app_cmd);
-						rs232_resp(event_p8(ev), accepted);
-					}
-				}
-			}
-			break;
 		}
 		break;
-	}
 
-	return EVENT_SM_NO_CHANGE;
+		case EV_REMOTE_CMD: {
+			if (IR_CODE_ADDRESS == event_p16(ev)) {
+				const uint8_t app_cmd = search_cmd(event_p8(ev), REMOTE_CMD_DEFS, UTILS_ELEMENT_COUNT(REMOTE_CMD_DEFS));
+				if (APP_CMD_IDLE != app_cmd) {
+					const bool accepted = appCmdRun(app_cmd);
+					rs232_resp(event_p8(ev), accepted);
+				}
+			}
+		}
+			break;
+	}
 }
 
+// Event Trace
 // For binary format we emit ESC ID, then the event from memory, escaping an ESC with ESC 00. So data 123456fe is sent fe01123456fe00
 enum {
 	BINARY_FMT_ID_EVENT = 1,
@@ -298,19 +319,22 @@ static const char* get_cmd_status_desc(uint8_t status) {
 
 // Menu items definition.
 typedef const char* (*menu_formatter)(int16_t);		// Format actual menu item value.
-typedef int16_t (*menu_item_scale)(int16_t);			// Return actual menu item value from zero based "menu units".
+typedef int16_t (*menu_item_scale)(int16_t);		// Return actual menu item value from zero based "menu units".
 typedef int16_t (*menu_item_unscale)(uint8_t);		// Set a value to the menu item.
 typedef uint8_t (*menu_item_max)();
 typedef struct {
 	PGM_P title;
 	uint8_t regs_idx;
 	uint16_t regs_mask;					// Mask of set bits or 0 for all.
-	menu_item_scale scale;
-	menu_item_unscale unscale;
-	menu_item_max max_value;				// Maximum values, note that the range of each item is from zero up and including this value.
-	bool rollaround;
-	menu_formatter formatter;
+	menu_item_scale scale;				// Scale a real value to menu units. Null for no scaling.
+	menu_item_unscale unscale;			// Scale menu units to a real value. Null for no scaling.
+	menu_item_max max_value;			// Maximum values, note that the range of each item is from zero up and including this value.
+	bool rollaround;					// If true rollaround from max to min. 
+	menu_formatter formatter;			// Return item as a formatted string. NULL to format as a number. 
 } MenuItem;
+
+// Buffer for menu format.
+static char f_menu_fmt_buf[15];
 
 // Slew timeout in seconds.
 static constexpr char MENU_ITEM_SLEW_TIMEOUT_TITLE[] PROGMEM = "Motion Timeout";
@@ -321,17 +345,20 @@ static int16_t menu_scale_slew_timeout(int16_t val) { return utilsMscale<int16_t
 static int16_t menu_unscale_slew_timeout(uint8_t v) { return utilsUnmscale<int16_t, uint8_t>((int16_t)v, MENU_ITEM_SLEW_TIMEOUT_MIN, MENU_ITEM_SLEW_TIMEOUT_MAX, MENU_ITEM_SLEW_TIMEOUT_INC); }
 static uint8_t menu_max_slew_timeout() { return utilsMscaleMax<int16_t, uint8_t>(MENU_ITEM_SLEW_TIMEOUT_MIN, MENU_ITEM_SLEW_TIMEOUT_MAX, MENU_ITEM_SLEW_TIMEOUT_INC); }
 
-// Slew deadband in tilt sensor units.
-static const char MENU_ITEM_ANGLE_DEADBAND_TITLE[] PROGMEM = "Position Error";
-static constexpr int16_t MENU_ITEM_ANGLE_DEADBAND_MIN = 5;
-static constexpr int16_t MENU_ITEM_ANGLE_DEADBAND_MAX = 100;
-static constexpr int16_t MENU_ITEM_ANGLE_DEADBAND_INC = 5;
-static int16_t menu_scale_angle_deadband(int16_t val) { return utilsMscale<int16_t, uint8_t>(val, MENU_ITEM_ANGLE_DEADBAND_MIN, MENU_ITEM_ANGLE_DEADBAND_MAX, MENU_ITEM_ANGLE_DEADBAND_INC); }
-static int16_t menu_unscale_angle_deadband(uint8_t v) { return utilsUnmscale<int16_t, uint8_t>((int16_t)v, MENU_ITEM_ANGLE_DEADBAND_MIN, MENU_ITEM_ANGLE_DEADBAND_MAX, MENU_ITEM_ANGLE_DEADBAND_INC); }
-static uint8_t menu_max_angle_deadband() { return utilsMscaleMax<int16_t, uint8_t>( MENU_ITEM_ANGLE_DEADBAND_MIN, MENU_ITEM_ANGLE_DEADBAND_MAX, MENU_ITEM_ANGLE_DEADBAND_INC); }
+// Slew start deadband in tilt sensor units.
+static const char MENU_ITEM_START_POS_DEADBAND_TITLE[] PROGMEM = "Start Pos Band";
+static constexpr int16_t MENU_ITEM_START_POS_DEADBAND_MIN = 2;
+static constexpr int16_t MENU_ITEM_START_POS_DEADBAND_MAX = 100;
+static constexpr int16_t MENU_ITEM_START_POS_DEADBAND_INC = 2;
+static int16_t menu_scale_angle_deadband(int16_t val) { return utilsMscale<int16_t, uint8_t>(val, MENU_ITEM_START_POS_DEADBAND_MIN, MENU_ITEM_START_POS_DEADBAND_MAX, MENU_ITEM_START_POS_DEADBAND_INC); }
+static int16_t menu_unscale_angle_deadband(uint8_t v) { return utilsUnmscale<int16_t, uint8_t>((int16_t)v, MENU_ITEM_START_POS_DEADBAND_MIN, MENU_ITEM_START_POS_DEADBAND_MAX, MENU_ITEM_START_POS_DEADBAND_INC); }
+static uint8_t menu_max_angle_deadband() { return utilsMscaleMax<int16_t, uint8_t>( MENU_ITEM_START_POS_DEADBAND_MIN, MENU_ITEM_START_POS_DEADBAND_MAX, MENU_ITEM_START_POS_DEADBAND_INC); }
+
+// Slew STOP deadband in tilt sensor units.
+static const char MENU_ITEM_STOP_POS_DEADBAND_TITLE[] PROGMEM = "Stop Pos Band";
 
 // Axis jog duration in ms.
-static const char MENU_ITEM_JOG_DURATION_TITLE[] PROGMEM = "Motion Run On";
+static const char MENU_ITEM_JOG_DURATION_TITLE[] PROGMEM = "Motion Duration";
 static constexpr int16_t MENU_ITEM_JOG_DURATION_MIN = 200;
 static constexpr int16_t MENU_ITEM_JOG_DURATION_MAX = 3000;
 static constexpr int16_t MENU_ITEM_JOG_DURATION_INC = 100;
@@ -339,19 +366,49 @@ static int16_t menu_scale_jog_duration(int16_t val) { return utilsMscale<int16_t
 static int16_t menu_unscale_jog_duration(uint8_t v) { return utilsUnmscale<int16_t, uint8_t>((int16_t)v, MENU_ITEM_JOG_DURATION_MIN, MENU_ITEM_JOG_DURATION_MAX, MENU_ITEM_JOG_DURATION_INC); }
 static uint8_t menu_max_jog_duration() { return utilsMscaleMax<int16_t, uint8_t>( MENU_ITEM_JOG_DURATION_MIN, MENU_ITEM_JOG_DURATION_MAX, MENU_ITEM_JOG_DURATION_INC); }
 
+// Slew order setting.
+UTILS_STATIC_ASSERT(REGS_ENABLES_MASK_SLEW_ORDER_FORCE == (REGS_ENABLES_MASK_SLEW_ORDER_F_DIR << 1));    	
+static const char MENU_ITEM_MOTION_ORDER_TITLE[] PROGMEM = "Motion Order";
+static int16_t menu_scale_motion_order(int16_t val) { return (val == 3) ? 2 : val; }
+static int16_t menu_unscale_motion_order(uint8_t v) { return (v == 2) ? 3 : v; }
+static uint8_t menu_max_motion_order() { return 2; }
+static const char* menu_format_motion_order(int16_t v) { static const char* opts[] = { "Auto", "H-F", "?", "F-H" }; return opts[v]; }
+
 // Enable wakeup command.
 static const char MENU_ITEM_WAKEUP_ENABLE_TITLE[] PROGMEM = "Wake Cmd Enable";
-static int16_t menu_scale_yes_no(int16_t val) { return val; }
-static int16_t menu_unscale_yes_no(uint8_t v) { return v; }
 static uint8_t menu_max_yes_no() { return 1; }
 
+// Go flat duration in ms.
+static const char MENU_ITEM_GO_FLAT_TITLE[] PROGMEM = "Motion Duration";
+static constexpr int16_t MENU_ITEM_GO_FLAT_MIN = 0;
+static constexpr int16_t MENU_ITEM_GO_FLAT_MAX = 1000;
+static constexpr int16_t MENU_ITEM_GO_FLAT_INC = 100;
+static int16_t menu_scale_go_flat(int16_t val) { return utilsMscale<int16_t, uint8_t>(val, MENU_ITEM_GO_FLAT_MIN, MENU_ITEM_GO_FLAT_MAX, MENU_ITEM_GO_FLAT_INC); }
+static int16_t menu_unscale_go_flat(uint8_t v) { return utilsUnmscale<int16_t, uint8_t>((int16_t)v, MENU_ITEM_GO_FLAT_MIN, MENU_ITEM_GO_FLAT_MAX, MENU_ITEM_GO_FLAT_INC); }
+static uint8_t menu_max_go_flat() { return utilsMscaleMax<int16_t, uint8_t>( MENU_ITEM_GO_FLAT_MIN, MENU_ITEM_GO_FLAT_MAX, MENU_ITEM_GO_FLAT_INC); }
+static const char* menu_format_go_flat(int16_t v) { 
+	static const char* dis = "disable";
+	if (v) {
+		myprintf_snprintf(f_menu_fmt_buf, sizeof(f_menu_fmt_buf), PSTR("%u.%03u secs"), v/1000, v%1000); 
+		return f_menu_fmt_buf; 
+	}
+	else
+		return dis;
+}
+
 static const char* menu_format_number(int16_t v) { 
-	static char f_menu_fmt_buf[15];
 	myprintf_snprintf(f_menu_fmt_buf, sizeof(f_menu_fmt_buf), PSTR("%u"), v); 
 	return f_menu_fmt_buf; 
 }
-static const char* format_yes_no(int16_t v) { static const char* yn[2] = { "Yes", "No" }; return yn[!v]; }
-//static const char* format_beep_options(int16_t v) { static const char* opts[] = { "Silent", "Card scan", "Always" }; return opts[v]; }
+static const char* menu_format_yes_no(int16_t v) { static const char* ny[2] = { "No", "Yes" }; return ny[v]; }
+static const char* menu_format_secs(int16_t v) { 
+	myprintf_snprintf(f_menu_fmt_buf, sizeof(f_menu_fmt_buf), PSTR("%u secs"), v); 
+	return f_menu_fmt_buf; 
+}
+static const char* menu_format_ms(int16_t v) { 
+	myprintf_snprintf(f_menu_fmt_buf, sizeof(f_menu_fmt_buf), PSTR("%u.%03u secs"), v/1000, v%1000); 
+	return f_menu_fmt_buf; 
+}
 
 static const MenuItem MENU_ITEMS[] PROGMEM = {
 	{
@@ -360,15 +417,23 @@ static const MenuItem MENU_ITEMS[] PROGMEM = {
 		menu_scale_slew_timeout, menu_unscale_slew_timeout,
 		menu_max_slew_timeout,
 		false,
-		NULL,		// Special case, call unscale and print number.
+		menu_format_secs,		
 	},
 	{
-		MENU_ITEM_ANGLE_DEADBAND_TITLE,
+		MENU_ITEM_START_POS_DEADBAND_TITLE,
 		REGS_IDX_SLEW_START_DEADBAND, 0U,
 		menu_scale_angle_deadband, menu_unscale_angle_deadband,
 		menu_max_angle_deadband,
 		false,
-		NULL,		// Special case, call unscale and print number.
+		NULL,		
+	},
+	{
+		MENU_ITEM_STOP_POS_DEADBAND_TITLE,
+		REGS_IDX_SLEW_STOP_DEADBAND, 0U,
+		menu_scale_angle_deadband, menu_unscale_angle_deadband,
+		menu_max_angle_deadband,
+		false,
+		NULL,		
 	},
 	{
 		MENU_ITEM_JOG_DURATION_TITLE,
@@ -376,15 +441,31 @@ static const MenuItem MENU_ITEMS[] PROGMEM = {
 		menu_scale_jog_duration, menu_unscale_jog_duration,
 		menu_max_jog_duration,
 		false,
-		NULL,		// Special case, call unscale and print number.
+		menu_format_ms,		
+	},
+	{
+		MENU_ITEM_MOTION_ORDER_TITLE,
+		REGS_IDX_ENABLES, REGS_ENABLES_MASK_SLEW_ORDER_FORCE | REGS_ENABLES_MASK_SLEW_ORDER_F_DIR,    	
+		menu_scale_motion_order, menu_unscale_motion_order, 
+		menu_max_motion_order,
+		true,
+		menu_format_motion_order,		
 	},
 	{
 		MENU_ITEM_WAKEUP_ENABLE_TITLE,
 		REGS_IDX_ENABLES, REGS_ENABLES_MASK_ALWAYS_AWAKE,
-		menu_scale_yes_no, menu_unscale_yes_no,
+		NULL, NULL,
 		menu_max_yes_no,
 		true,
 		format_yes_no,	
+	},
+	{
+		MENU_ITEM_GO_FLAT_TITLE,
+		REGS_IDX_RUN_ON_TIME_POS1, 0U,
+		menu_scale_go_flat, menu_unscale_go_flat,
+		menu_max_go_flat,
+		false,
+		format_go_flat,	
 	},
 };
 
@@ -395,7 +476,7 @@ bool menuItemIsRollAround(uint8_t idx) { return (bool)pgm_read_byte(&MENU_ITEMS[
 
 int16_t menuItemActualValue(uint8_t midx, uint8_t mval) {
 	const menu_item_unscale unscaler = (menu_item_unscale)pgm_read_ptr(&MENU_ITEMS[midx].unscale);
-	return unscaler(utilsLimitMax<int8_t>(mval, menuItemMaxValue(midx)));
+	return unscaler ? unscaler(utilsLimitMax<int8_t>(mval, menuItemMaxValue(midx))) : mval;
 }
 
 uint8_t menuItemReadValue(uint8_t midx) {
@@ -410,7 +491,7 @@ uint8_t menuItemReadValue(uint8_t midx) {
 	}
 
 	const menu_item_scale scaler = (menu_item_scale)pgm_read_ptr(&MENU_ITEMS[midx].scale);
-	return utilsLimit<int16_t>(scaler(raw_val), 0, (int16_t)menuItemMaxValue(midx));
+	return scaler ? utilsLimit<int16_t>(scaler(raw_val), 0, (int16_t)menuItemMaxValue(midx)) : raw_val;
 }
 bool menuItemWriteValue(uint8_t midx, uint8_t mval) {
 	uint16_t mask = pgm_read_word(&MENU_ITEMS[midx].regs_mask);
@@ -460,42 +541,6 @@ enum {
 enum {
 	ST_INIT, ST_CLEAR_LIMITS, ST_RUN, ST_MENU
 };
-
-// LCD
-//
-AsyncLiquidCrystal f_lcd(GPIO_PIN_LCD_RS, GPIO_PIN_LCD_E, GPIO_PIN_LCD_D4, GPIO_PIN_LCD_D5, GPIO_PIN_LCD_D6, GPIO_PIN_LCD_D7);
-static void lcd_init() {
-	f_lcd.begin(GPIO_LCD_NUM_COLS, GPIO_LCD_NUM_ROWS);
-}
-static void lcd_printf_of(char c, void* arg) {
-	*(uint8_t*)arg += 1;
-	f_lcd.write(c);
-}
-void lcd_printf(uint8_t row, PGM_P fmt, ...) {
-	f_lcd.setCursor(0, row);
-	va_list ap;
-	va_start(ap, fmt);
-	uint8_t cc = 0;
-	myprintf(lcd_printf_of, &cc, fmt, ap);
-	while (cc++ < GPIO_LCD_NUM_COLS)
-		f_lcd.write(' ');
-	va_end(ap);
-}
-static void lcd_service() {
-	f_lcd.processQueue();
-}
-static void lcd_flush() {
-	f_lcd.flush();
-}
-
-// Backlight, call with arg true to turn on with no timeout.
-static void backlight_on(bool cont=false) {
-	driverSetLcdBacklight(255);
-	if (cont)
-		eventSmTimerStop(TIMER_BACKLIGHT);
-	else
-		eventSmTimerStart(TIMER_BACKLIGHT, BACKLIGHT_TIMEOUT_MS/100U);
-}
 
 //	1234567890123456
 //
@@ -665,8 +710,6 @@ void guiInit() {
 	eventInit();
 	lcd_init();
 	eventSmInit(sm_lcd, (EventSmContextBase*)&f_sm_lcd_ctx, 0);
-	eventSmInit(sm_ir_rec, (EventSmContextBase*)&f_sm_ir_rec_ctx, 1);
-	
 }
 
 void guiService() {
@@ -675,7 +718,7 @@ void guiService() {
 	t_event ev;
 	while (EV_NIL != (ev = eventGet())) {	// Read events until there are no more left.
 		eventSmService(sm_lcd, (EventSmContextBase*)&f_sm_lcd_ctx, ev);
-		eventSmService(sm_ir_rec, (EventSmContextBase*)&f_sm_ir_rec_ctx, ev);
+		service_ir_rs232(ev);
 	}
 	service_trace_log();		// Just dump one trace record as it can take time to print and we want to keep responsive.
 	lcd_service();
