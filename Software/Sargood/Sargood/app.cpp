@@ -128,7 +128,7 @@ static bool timer_is_timeout(uint16_t now, uint16_t* then, uint16_t duration) { 
 
 // Each action is implemented by a little state machine. They may run to completion or run a sequence, returning one of APP_CMD_STATUS_xxx
 //  codes. They share a single state variable and a timer. Reset is done by zeroing the state.
-typedef uint8_t (*cmd_handler_func)(uint8_t cmd);
+typedef uint8_t (*cmd_handler_func)(void);
 
 // Keep state in struct for easy viewing in debugger.
 static struct {
@@ -138,7 +138,7 @@ static struct {
 	uint8_t sm_st;				// State var for sm.
 	uint16_t timer;				// Timer for use by SMs.
 	uint8_t save_preset_attempts, save_cmd;
-	bool extend_jog;
+	bool extend_jog;			// Flag to extend jog duration.
 } f_app_ctx;
 
 static void set_pending_command(cmd_handler_func h) {
@@ -180,7 +180,6 @@ bool check_axis_within_limit(uint8_t axis_idx, uint8_t limit_idx) {
 static bool is_command_pending() { return (NULL != f_app_ctx.cmd_handler); }
 
 // Command table, encodes whether command can be started and handler.
-typedef uint8_t (*cmd_handler_func)(uint8_t app_cmd);
 typedef struct {
 	uint8_t			app_cmd;
 	uint16_t		fault_mask;
@@ -192,32 +191,33 @@ static void handle_set_state(uint8_t s, uint16_t extra=0) {
 	f_app_ctx.sm_st = s;
 	eventPublish(EV_CMD_STATE_CHANGE, s, extra);
 }
-static uint8_t handle_wakeup(uint8_t cmd) {
+static uint8_t handle_wakeup() {
 	do_wakeup();
 	return APP_CMD_STATUS_OK;				// Start command as non-pending, returns OK.
 }
-static uint8_t handle_stop(uint8_t cmd) {
+static uint8_t handle_stop() {
 	// Stop command does not wake. It kills any pending command. 
 	axis_stop_all();			// Just kill motors anyway.
 	if (is_command_pending()) { 			// If command pending kill it.
 		set_pending_command(NULL);
+		REGS[REGS_IDX_CMD_ACTIVE] = APP_CMD_IDLE;
 		return APP_CMD_STATUS_E_STOP;
 	}
 	return APP_CMD_STATUS_OK;				// Start command as non-pending, returns OK.
 }
-static uint8_t handle_preset_save(uint8_t cmd) {
-	if (!check_can_save(cmd))
+static uint8_t handle_preset_save() {
+	if (!check_can_save(REGS[REGS_IDX_CMD_ACTIVE]))
 		return APP_CMD_STATUS_SAVE_FAIL;	// Return fail status.
 
-	const uint8_t preset_idx = cmd - APP_CMD_POS_SAVE_1;
+	const uint8_t preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_POS_SAVE_1;
 	fori (CFG_TILT_SENSOR_COUNT) // Read sensor value or force it to invalid is not enabled.
 		driverPresets(preset_idx)[i] = driverSensorIsEnabled(i) ?  REGS[REGS_IDX_TILT_SENSOR_0 + i] : SBC2022_MODBUS_TILT_FAULT;
 	driverNvWrite();
 	return APP_CMD_STATUS_OK;
 }
 
-static uint8_t handle_clear_limits(uint8_t cmd) {
-	if (!check_can_save(cmd))
+static uint8_t handle_clear_limits() {
+	if (!check_can_save(REGS[REGS_IDX_CMD_ACTIVE]))
 		return APP_CMD_STATUS_SAVE_FAIL;	// Return fail status.
 
 	driverAxisLimitsClear();
@@ -225,39 +225,36 @@ static uint8_t handle_clear_limits(uint8_t cmd) {
 	return APP_CMD_STATUS_OK;			
 }
 
-static uint8_t do_save_axis_limit(uint8_t cmd, uint8_t axis_idx, uint8_t limit_idx) {
-	if (!check_can_save(cmd))
-		return APP_CMD_STATUS_SAVE_FAIL;
-
+static uint8_t do_save_axis_limit(uint8_t axis_idx, uint8_t limit_idx) {
 	const int16_t tilt = (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis_idx];
 	driverAxisLimitSet(axis_idx, limit_idx, tilt);
 	driverNvWrite();
 	return APP_CMD_STATUS_OK;
 }
-static uint8_t handle_limits_save(uint8_t cmd) {
-	if (!check_can_save(cmd))
+static uint8_t handle_limits_save() {
+	if (!check_can_save(REGS[REGS_IDX_CMD_ACTIVE]))
 		return APP_CMD_STATUS_SAVE_FAIL;	// Return fail status.
 
 	// Save current position as axis limit.
-	switch (cmd) {
-	case APP_CMD_LIMIT_SAVE_HEAD_DOWN: return do_save_axis_limit(cmd, AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_LOWER);
-	case APP_CMD_LIMIT_SAVE_HEAD_UP: return do_save_axis_limit(cmd, AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_UPPER);
-	case APP_CMD_LIMIT_SAVE_FOOT_DOWN: return do_save_axis_limit(cmd, AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_LOWER);
-	case APP_CMD_LIMIT_SAVE_FOOT_UP: return do_save_axis_limit(cmd, AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_UPPER);
+	switch (REGS[REGS_IDX_CMD_ACTIVE]) {
+	case APP_CMD_LIMIT_SAVE_HEAD_DOWN: return do_save_axis_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_LOWER);
+	case APP_CMD_LIMIT_SAVE_HEAD_UP: return do_save_axis_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_UPPER);
+	case APP_CMD_LIMIT_SAVE_FOOT_DOWN: return do_save_axis_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_LOWER);
+	case APP_CMD_LIMIT_SAVE_FOOT_UP: return do_save_axis_limit(AXIS_FOOT, DRIVER_AXIS_LIMIT_IDX_UPPER);
 	}
 	return APP_CMD_STATUS_ERROR_UNKNOWN;
 }
 
 // Jog
 //
-static uint8_t handle_jog(uint8_t cmd) {
+static uint8_t handle_jog() {
 	enum { ST_RESET, ST_RUN };
 	
 	do_wakeup();
 	
 	switch (f_app_ctx.sm_st) {
 		case ST_RESET: 
-			switch(cmd) {
+			switch(REGS[REGS_IDX_CMD_ACTIVE]) {
 				case APP_CMD_JOG_HEAD_UP:	
 					if (check_axis_within_limit(AXIS_HEAD, DRIVER_AXIS_LIMIT_IDX_UPPER)) axis_set_drive(AXIS_HEAD, AXIS_DIR_UP); else return APP_CMD_STATUS_MOTION_LIMIT; 
 					break;
@@ -337,7 +334,7 @@ static int8_t get_dir_for_slew(uint8_t axis) {
 	return (uint8_t)utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND]);
 }
 
-static uint8_t handle_preset_slew(uint8_t cmd) {
+static uint8_t handle_preset_slew() {
 	static const uint8_t SLEW_ORDER_DEF[][CFG_TILT_SENSOR_COUNT] PROGMEM = { { 0, 1 }, { 1, 0 } };
 
 	do_wakeup();
@@ -346,7 +343,7 @@ static uint8_t handle_preset_slew(uint8_t cmd) {
 	switch (f_app_ctx.sm_st) {
 		case ST_RESET: {
 			// Get which preset.
-			s_slew_ctx.preset_idx = cmd - APP_CMD_RESTORE_POS_1;
+			s_slew_ctx.preset_idx = REGS[REGS_IDX_CMD_ACTIVE] - APP_CMD_RESTORE_POS_1;
 			if (s_slew_ctx.preset_idx >= 4) 		// Logic error, should never happen.
 				return APP_CMD_STATUS_ERROR_UNKNOWN;
 
@@ -424,7 +421,7 @@ static uint8_t handle_preset_slew(uint8_t cmd) {
 		if (0 == target_dir) {
 			eventPublish(EV_SLEW_STOP, s_slew_ctx.axis_current, get_slew_target_pos(s_slew_ctx.axis_current));
 			timer_start((uint16_t)millis(), &f_app_ctx.timer);	
-			if ( (APP_CMD_RESTORE_POS_1 == cmd) && (REGS[REGS_IDX_RUN_ON_TIME_POS1] > 0) ) 	// Special run on delay for slew pos 1. 
+			if ( (APP_CMD_RESTORE_POS_1 == REGS[REGS_IDX_CMD_ACTIVE]) && (REGS[REGS_IDX_RUN_ON_TIME_POS1] > 0) ) 	// Special run on delay for slew pos 1. 
 				handle_set_state(ST_AXIS_RUN_ON, s_slew_ctx.axis_current);
 			else {				// Stop motor, wait to run down. 
 				axis_stop_all();
@@ -527,33 +524,36 @@ static uint8_t check_faults(uint16_t mask) {
 	return APP_CMD_STATUS_OK;
 }
 
-// Notify that a command was run. Must be idle to run a command. Note behaviour is different if command is pending. 
-// TODO: Fix duplicated code with a shared helper function. 
-static uint8_t cmd_start(uint8_t cmd, uint8_t status) {
+
+static void cmd_start(uint8_t cmd, uint8_t status) {
 	REGS[REGS_IDX_CMD_STATUS] = status;		// Set status to registers, so it can be read by the console.
 	eventPublish(EV_COMMAND_START, cmd, status);
 	if (APP_CMD_STATUS_PENDING != status) 
 		eventPublish(EV_COMMAND_DONE, cmd, status);
-	return status;
 }
 
+// Run a command, possibly asynchronously. If a command is NOT currently running, then COMMAND_START & COMMAND_DONE events are sent.
 uint8_t appCmdRun(uint8_t cmd) {
+	REGS[REGS_IDX_CMD_ACTIVE] = cmd; 	// Record command in register for debugging.
 	const CmdHandlerDef* cmd_def = search_cmd_handler(cmd);		// Get a def object for this command.
 
-	if (!is_command_pending())		// Record command if not already one running.
-		REGS[REGS_IDX_CMD_ACTIVE] = cmd;
-
-	if (NULL == cmd_def)		// Not found.
-		return cmd_start(cmd, APP_CMD_STATUS_BAD_CMD);
-
+	if (NULL == cmd_def) {				// Not found.
+		if (!is_command_pending()) 
+			cmd_start(cmd, APP_CMD_STATUS_BAD_CMD);
+		return APP_CMD_STATUS_BAD_CMD;
+	}
+	
 	// Check fault flags for command and return fail status if any are set. 
 	f_app_ctx.fault_mask = pgm_read_word(&cmd_def->fault_mask);
 	const uint8_t fault_status = check_faults(f_app_ctx.fault_mask & ~REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT);	// Ignore slew timeout for pre run check as it might be set from a previous fault.
 
-	if (APP_CMD_STATUS_OK != fault_status)
-		return cmd_start(cmd, fault_status);
-
-	// Special case commands with no BUSY set is faultmask. They can be restarted is repeated whilst they are still running. Like jog commands.
+	if (APP_CMD_STATUS_OK != fault_status) {
+		if (!is_command_pending()) 
+			cmd_start(cmd, fault_status);
+		return fault_status;
+	}
+	
+	// Special case commands with no BUSY set in faultmask. They can be restarted or repeated whilst they are still running. Like jog commands.
 	// driverTimingDebug(TIMING_DEBUG_EVENT_APP_WORKER_JOG, true);
 	if (!(f_app_ctx.fault_mask & F_BUSY)) {
 		if (is_command_pending() && (REGS[REGS_IDX_CMD_ACTIVE] == cmd)) { 	// Extend time if the same command is running.
@@ -565,16 +565,22 @@ uint8_t appCmdRun(uint8_t cmd) {
 
 	// Run the handler. This will check all sorts of things, maybe do the command, or do some setup for a pending command, and then return a status code. 
 	handle_set_state(0);
+	REGS[REGS_IDX_CMD_ACTIVE] = cmd;
 	const cmd_handler_func cmd_handler = reinterpret_cast<cmd_handler_func>(pgm_read_ptr(&cmd_def->cmd_handler));
-	const uint8_t status = cmd_handler(cmd);
+	const uint8_t status = cmd_handler();
 
 	// Do some setup for worker.
-	if (APP_CMD_STATUS_PENDING == status) 
+	if (APP_CMD_STATUS_PENDING == status) {
 		set_pending_command(cmd_handler);
-	else
+		REGS[REGS_IDX_CMD_ACTIVE] = cmd;
+	}
+	else {
 		set_pending_command(NULL);
+		REGS[REGS_IDX_CMD_ACTIVE] = APP_CMD_IDLE;
+	}
 		
-	return cmd_start(cmd, status);
+	cmd_start(cmd, status);
+	return status;
 }
 
 // Set end status of a PENDING command from worker thread.
@@ -582,9 +588,10 @@ static void cmd_done(uint16_t status) {
 	ASSERT(is_command_pending());
 	ASSERT(regsFlags() & REGS_FLAGS_MASK_FAULT_APP_BUSY);
 	ASSERT(APP_CMD_STATUS_PENDING != status);
-	ASSERT(APP_CMD_STATUS_PENDING == REGS[REGS_IDX_CMD_STATUS]);
 	
 	set_pending_command(NULL);
+	REGS[REGS_IDX_CMD_ACTIVE] = APP_CMD_IDLE;
+		
 	REGS[REGS_IDX_CMD_STATUS] = status;
 	eventPublish(EV_COMMAND_DONE, REGS[REGS_IDX_CMD_ACTIVE], status);
 }
@@ -607,7 +614,7 @@ static void service_worker() {
 	}
 	
 	// Run handler function.
-	const uint8_t status = f_app_ctx.cmd_handler(REGS[REGS_IDX_CMD_ACTIVE]);
+	const uint8_t status = f_app_ctx.cmd_handler();
 	if (APP_CMD_STATUS_PENDING != status) {
 		cmd_done(fault_status);
 		return;
