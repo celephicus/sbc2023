@@ -322,23 +322,23 @@ static uint8_t handle_jog(uint8_t cmd) {
 
 static constexpr uint16_t MOTOR_RUNDOWN_MS = 500U;
 
+static struct {
+	uint8_t preset_idx;		// Index to current preset. 
+	uint8_t axis_idx;		// Counts axes and indexes into order array.
+	uint8_t axis_current;	// Axis we are currently using.
+	const uint8_t* axis_current_p;	// Points to current item in axis order array.
+} s_slew_ctx;   
+
+static int16_t get_slew_target_pos() { return driverPresets(s_slew_ctx.preset_idx)[s_slew_ctx.axis_current]; }
+static int16_t get_slew_current_pos() { return (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + s_slew_ctx.axis_current]; }
 static int8_t get_dir_for_slew() {
-	const int16_t* presets = driverPresets(s_preset_idx);
-	const int16_t target_pos = presets[s_axis_current];
-	const int16_t current_pos = (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_current];
-	const int16_t delta = target_pos - current_pos;
-	
+	const int16_t delta = get_slew_target_pos() - get_slew_current_pos();
 	return (uint8_t)utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND]);
 }
 
 static uint8_t handle_preset_slew(uint8_t cmd) {
-	static const uint8_t SLEW_ORDER_FWD[CFG_TILT_SENSOR_COUNT] = { 0, 1 };
-	static const uint8_t SLEW_ORDER_REV[CFG_TILT_SENSOR_COUNT] = { 1, 0 };
-
-	static uint8_t s_preset_idx;
-	static uint8_t s_axis_idx;		// Counts axes and indexes into order array.
-	static uint8_t s_axis_current;	// Axis we are currently using.
-	static const uint8_t* s_axis_current_p;	// Points to current item in axis order array.
+	static const uint8_t SLEW_ORDER_FWD[CFG_TILT_SENSOR_COUNT] PROGMEM = { 0, 1 };
+	static const uint8_t SLEW_ORDER_REV[CFG_TILT_SENSOR_COUNT] PROGMEM = { 1, 0 };
 
 	do_wakeup();
 	
@@ -346,13 +346,13 @@ static uint8_t handle_preset_slew(uint8_t cmd) {
 	switch (f_app_ctx.sm_st) {
 		case ST_RESET: {
 			// Get which preset.
-			s_preset_idx = cmd - APP_CMD_RESTORE_POS_1;
-			if (s_preset_idx >= 4) 		// Logic error, should never happen.
+			s_slew_ctx.preset_idx = cmd - APP_CMD_RESTORE_POS_1;
+			if (s_slew_ctx.preset_idx >= 4) 		// Logic error, should never happen.
 				return APP_CMD_STATUS_ERROR_UNKNOWN;
 
 			// TODO: Function for checking if preset valid.
 			fori (CFG_TILT_SENSOR_COUNT) {
-				if (driverSensorIsEnabled(i) && (SBC2022_MODBUS_TILT_FAULT == driverPresets(s_preset_idx)[i]))
+				if (driverSensorIsEnabled(i) && (SBC2022_MODBUS_TILT_FAULT == driverPresets(s_slew_ctx.preset_idx)[i]))
 					return APP_CMD_STATUS_PRESET_INVALID;
 			}
 
@@ -361,48 +361,48 @@ static uint8_t handle_preset_slew(uint8_t cmd) {
 			regsWriteMaskFlags(REGS_FLAGS_MASK_FAULT_SLEW_TIMEOUT, false);
 
 			// Decide order to move axes...
-			s_axis_idx = 0U;
+			s_slew_ctx.axis_idx = 0U;
 			if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_SLEW_ORDER_FORCE) {	// Order forced to always fwd or rev. 			
 				if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_SLEW_ORDER_F_DIR) 
-					s_axis_current_p = SLEW_ORDER_REV; 
+					s_slew_ctx.axis_current_p = SLEW_ORDER_REV; 
 				else
-					s_axis_current_p = SLEW_ORDER_FWD; 
+					s_slew_ctx.axis_current_p = SLEW_ORDER_FWD; 
 			}
 			else { 	// We choose order depending on slew directions.
-					s_axis_current_p = SLEW_ORDER_FWD; 
+					s_slew_ctx.axis_current_p = SLEW_ORDER_FWD; 
 			}
-			s_axis_current = pgm_read_byte(s_axis_current_p++);
+			s_slew_ctx.axis_current = pgm_read_byte(s_slew_ctx.axis_current_p++);
 
-			handle_set_state(ST_AXIS_START, s_axis_current);
+			handle_set_state(ST_AXIS_START, s_slew_ctx.axis_current);
 		}
 		break;
 
 	case ST_AXIS_START: {
 
 		// TODO: Do we need disabled axes? For variable number of axes could just set total number 1..4.
-		if (!driverSensorIsEnabled(s_axis_current)) {
-			handle_set_state(ST_AXIS_DONE, s_axis_current);
+		if (!driverSensorIsEnabled(s_slew_ctx.axis_current)) {
+			handle_set_state(ST_AXIS_DONE, s_slew_ctx.axis_current);
 			break;
 		}
 
 		// Get direction to go, or we might be there anyways.
 		// Note: we reread the position, just in case. Also allows us to disable axis reverse.
-		eventPublish(EV_SLEW_TARGET, s_axis_current, target_pos);
-		eventPublish(EV_SLEW_START, s_axis_current, current_pos);
+		eventPublish(EV_SLEW_TARGET, s_slew_ctx.axis_current, get_slew_target_pos());
+		eventPublish(EV_SLEW_START, s_slew_ctx.axis_current, get_slew_current_pos());
 		const int8_t start_dir = get_dir_for_slew();
 
 		// Start moving...
 		ASSERT(0 == REGS[REGS_IDX_RELAY_STATE]);	// Assume all motors stopped here. 
 		if (start_dir > 0) {
-			axis_set_drive(s_axis_current, AXIS_DIR_UP);
-			handle_set_state(ST_AXIS_SLEWING, s_axis_current);
+			axis_set_drive(s_slew_ctx.axis_current, AXIS_DIR_UP);
+			handle_set_state(ST_AXIS_SLEWING, s_slew_ctx.axis_current);
 		}
 		else if (start_dir < 0) {
-			axis_set_drive(s_axis_current, AXIS_DIR_DOWN);
-			handle_set_state(ST_AXIS_SLEWING, s_axis_current);
+			axis_set_drive(s_slew_ctx.axis_current, AXIS_DIR_DOWN);
+			handle_set_state(ST_AXIS_SLEWING, s_slew_ctx.axis_current);
 		}
 		else	// Else no slew necessary...
-			handle_set_state(ST_AXIS_DONE, s_axis_current);
+			handle_set_state(ST_AXIS_DONE, s_slew_ctx.axis_current);
 	}
 	break;
 
@@ -410,13 +410,13 @@ static uint8_t handle_preset_slew(uint8_t cmd) {
 		// Check for position reached. We can't just check for zero as it might overshoot.
 		const int8_t target_dir = get_dir_for_slew();
 		if (0 == target_dir) {
-			eventPublish(EV_SLEW_STOP, s_axis_current, current_pos);
+			eventPublish(EV_SLEW_STOP, s_slew_ctx.axis_current, get_slew_target_pos());
 			timer_start((uint16_t)millis(), &f_app_ctx.timer);	
 			if ( (APP_CMD_RESTORE_POS_1 == cmd) && (REGS[REGS_IDX_RUN_ON_TIME_POS1] > 0) ) 	// Special run on delay for slew pos 1. 
-				handle_set_state(ST_AXIS_RUN_ON, s_axis_current);
+				handle_set_state(ST_AXIS_RUN_ON, s_slew_ctx.axis_current);
 			else {				// Stop motor, wait to run down. 
 				axis_stop_all();
-				handle_set_state(ST_AXIS_STOPPING, s_axis_current);
+				handle_set_state(ST_AXIS_STOPPING, s_slew_ctx.axis_current);
 			}
 		}
 	}
@@ -426,25 +426,25 @@ static uint8_t handle_preset_slew(uint8_t cmd) {
 		if (timer_is_timeout((uint16_t)millis(), &f_app_ctx.timer, REGS[REGS_IDX_RUN_ON_TIME_POS1])) {
 			timer_start((uint16_t)millis(), &f_app_ctx.timer);
 			axis_stop_all();
-			handle_set_state(ST_AXIS_STOPPING, s_axis_current);
+			handle_set_state(ST_AXIS_STOPPING, s_slew_ctx.axis_current);
 		}
 		break;
 
 
 	case ST_AXIS_STOPPING:
 		if (timer_is_timeout((uint16_t)millis(), &f_app_ctx.timer, MOTOR_RUNDOWN_MS)) {
-			eventPublish(EV_SLEW_FINAL, s_axis_current, REGS[REGS_IDX_TILT_SENSOR_0 + s_axis_current]);
-			handle_set_state(ST_AXIS_DONE, s_axis_current);
+			eventPublish(EV_SLEW_FINAL, s_slew_ctx.axis_current, REGS[REGS_IDX_TILT_SENSOR_0 + s_slew_ctx.axis_current]);
+			handle_set_state(ST_AXIS_DONE, s_slew_ctx.axis_current);
 		}
 		break;
 		
 	case ST_AXIS_DONE:
-		s_axis_current += 1;
-		if (s_axis_current >= CFG_TILT_SENSOR_COUNT) 
+		s_slew_ctx.axis_idx += 1;
+		if (s_slew_ctx.axis_idx >= CFG_TILT_SENSOR_COUNT) 
 			return APP_CMD_STATUS_OK;
 		else {
-			s_axis_current = pgm_read_byte(s_axis_current_p++);
-			handle_set_state(ST_AXIS_START, s_axis_current);
+			s_slew_ctx.axis_current = pgm_read_byte(s_slew_ctx.axis_current_p++);
+			handle_set_state(ST_AXIS_START, s_slew_ctx.axis_current);
 		}
 		break;
 

@@ -161,13 +161,15 @@ enum {
     	REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS = (int)0x1,
     	REGS_ENABLES_MASK_DUMP_REGS = (int)0x2,
     	REGS_ENABLES_MASK_DUMP_REGS_FAST = (int)0x4,
+    	REGS_ENABLES_MASK_ALWAYS_AWAKE = (int)0x8,
     	REGS_ENABLES_MASK_SENSOR_DISABLE_0 = (int)0x10,
     	REGS_ENABLES_MASK_SENSOR_DISABLE_1 = (int)0x20,
     	REGS_ENABLES_MASK_SENSOR_DISABLE_2 = (int)0x40,
     	REGS_ENABLES_MASK_SENSOR_DISABLE_3 = (int)0x80,
     	REGS_ENABLES_MASK_TOUCH_DISABLE = (int)0x100,
     	REGS_ENABLES_MASK_SLAVE_UPDATE_DISABLE = (int)0x200,
-    	REGS_ENABLES_MASK_ALWAYS_AWAKE = (int)0x400,
+    	REGS_ENABLES_MASK_SLEW_ORDER_FORCE = (int)0x400,
+    	REGS_ENABLES_MASK_SLEW_ORDER_F_DIR = (int)0x800,
     	REGS_ENABLES_MASK_TRACE_FORMAT_BINARY = (int)0x2000,
     	REGS_ENABLES_MASK_TRACE_FORMAT_CONCISE = (int)0x4000,
     	REGS_ENABLES_MASK_DISABLE_BLINKY_LED = (int)0x8000,
@@ -309,13 +311,15 @@ enum {
     "\n DUMP_MODBUS_EVENTS: 0 (Dump MODBUS event value.)"                               \
     "\n DUMP_REGS: 1 (Enable regs dump to console.)"                                    \
     "\n DUMP_REGS_FAST: 2 (Dump regs at 5/s rather than 1/s.)"                          \
+    "\n ALWAYS_AWAKE: 3 (Controller always awake, ignored WAKE command.)"               \
     "\n SENSOR_DISABLE_0: 4 (Disable Sensor 0.)"                                        \
     "\n SENSOR_DISABLE_1: 5 (Disable Sensor 1.)"                                        \
     "\n SENSOR_DISABLE_2: 6 (Disable Sensor 2.)"                                        \
     "\n SENSOR_DISABLE_3: 7 (Disable Sensor 3.)"                                        \
     "\n TOUCH_DISABLE: 8 (Disable touch buttons.)"                                      \
     "\n SLAVE_UPDATE_DISABLE: 9 (Disable slave MODBUS schedule.)"                       \
-    "\n ALWAYS_AWAKE: 10 (Controller always awake, ignored WAKE command.)"              \
+    "\n SLEW_ORDER_FORCE: 10 (Force constant slew order.)"                              \
+    "\n SLEW_ORDER_F_DIR: 11 (Forced slew order fwd - rev.)"                            \
     "\n TRACE_FORMAT_BINARY: 13 (Dump trace in binary format.)"                         \
     "\n TRACE_FORMAT_CONCISE: 14 (Dump trace in concise text format.)"                  \
     "\n DISABLE_BLINKY_LED: 15 (Disable setting Blinky Led from fault states.)"         \
