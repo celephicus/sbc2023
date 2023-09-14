@@ -331,6 +331,7 @@ static struct {
 
 static int16_t get_slew_target_pos(uint8_t axis) { return driverPresets(s_slew_ctx.preset_idx)[axis]; }
 static int16_t get_slew_current_pos(uint8_t axis) { return (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis]; }
+enum { SLEW_DIR_STOP = 0, SLEW_DIR_UP = 1, SLEW_DIR_DOWN = -1 };
 static int8_t get_dir_for_slew(uint8_t axis) {
 	const int16_t delta = get_slew_target_pos(axis) - get_slew_current_pos(axis);
 	return (uint8_t)utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND]);
@@ -368,9 +369,17 @@ static uint8_t handle_preset_slew(uint8_t cmd) {
 					slew_order = 1;
 				}
 				else { 	// We choose order depending on slew directions.
+					/* 	Head   Foot  First section to move  
+						Up      Up      Foot   
+						Up      Down    Head   
+						Down    Up      Head   
+						Down    Down    Head	
+					*/
 					const int8_t head_dir = get_dir_for_slew(AXIS_HEAD);
 					const int8_t foot_dir = get_dir_for_slew(AXIS_FOOT);
 					eventPublish(EV_DEBUG, head_dir, foot_dir);
+					if ((SLEW_DIR_UP == head_dir) && (SLEW_DIR_UP == foot_dir))
+						slew_order = 1;
 				}
 				eventPublish(EV_DEBUG_SLEW_ORDER, slew_order);
 				s_slew_ctx.axis_current_p = SLEW_ORDER_DEF[slew_order];
