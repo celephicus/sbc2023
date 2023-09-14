@@ -146,11 +146,11 @@ static uint8_t write_holding_register(uint16_t address, uint16_t value) {
 
 // MODBUS handlers for slave or master.
 #if (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SENSOR) || (CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_RELAY)
-static Buffer response(MAX_MODBUS_FRAME_SIZE);
+static BufferDynamic response(MAX_MODBUS_FRAME_SIZE);
 
 static void do_handle_modbus_cb(uint8_t evt) {
 	if (MODBUS_CB_EVT_S_REQ_RX == evt) {			// Slaves only respond if we get a request. This will have our slave ID.
-		const Buffer& frame = modbusRxFrame();
+		const BufferDynamic& frame = modbusRxFrame();
 		switch(frame[MODBUS_FRAME_IDX_FUNCTION]) {
 			case MODBUS_FC_WRITE_SINGLE_REGISTER: {	// REQ: [ID FC=6 addr:16 value:16] -- RESP: [ID FC=6 addr:16 value:16]
 				if (8 == frame.len()) {
@@ -421,8 +421,7 @@ void modbus_cb(uint8_t evt) {
 	/* Dump MODBUS events, logic is we only dump events if:
 	  * dump events enabled in ENABLES reg. This allows us to keep a mask of events set and turn off dump without losing it.
 	  * the event mask is set in the _DUMP_EVENT_MASK reg. This is a bitmask that follows MODBUS_CB_EVT_xxx.
-	*/
-	/*
+
 	MODBUS_CB_EVT_MS_ERR_INVALID_CRC,			// MASTER/SLAVE, request/response CRC incorrect.
 	MODBUS_CB_EVT_MS_ERR_OVERFLOW,				// MASTER/SLAVE, request/response overflowed internal buffer.
 	MODBUS_CB_EVT_MS_ERR_INVALID_LEN,			// MASTER/SLAVE, request/response length too small.
@@ -435,19 +434,20 @@ void modbus_cb(uint8_t evt) {
 	MODBUS_CB_EVT_M_REQ_TX,						// MASTER, request SENT.
 	MODBUS_CB_EVT_M_RESP_RX,					// MASTER, valid response received.
 	*/
+	const bool is_master = (0 == modbusGetSlaveId());
 	if (
-	  (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS) &&		// Master enable.
-	  (REGS[REGS_IDX_MODBUS_DUMP_EVENT_MASK] & _BV(evt))						// event matches mask.
-	  /* && (
-	    (!master) ||															// Either NOT master or...
-	    (0 == REGS[REGS_IDX_MODBUS_DUMP_SLAVE_ID]) ||							// Slave ID to dump is set to zero, so all, or...
-		(req_slave_id == REGS[REGS_IDX_MODBUS_DUMP_SLAVE_ID])					// Slave ID in request matches.
-	  ) */
+	  (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS) &&					// Master enable.
+	  (REGS[REGS_IDX_MODBUS_DUMP_EVENT_MASK] & _BV(evt)) &&									// event matches mask.
+	  (
+	    !is_master ||																		// Either NOT master or...
+	    (0 == REGS[REGS_IDX_MODBUS_DUMP_SLAVE_ID]) ||										// Slave ID to dump is set to zero, so all, or...
+		(modbusRxFrame()[MODBUS_FRAME_IDX_SLAVE_ID] == REGS[REGS_IDX_MODBUS_DUMP_SLAVE_ID])	// Slave ID in request matches.
+	  )
 	) {
-		uint32_t timestamp = millis();
+		const uint32_t timestamp = millis();
 		consolePrint(CFMT_STR_P, (console_cell_t)PSTR("M:"));
 		consolePrint(CFMT_U_D|CFMT_M_NO_LEAD, (console_cell_t)&timestamp);
-		if (modbusGetSlaveId() == 0) {								// For master print request ID as well.
+		if (is_master) {								// For master print request ID as well.
 			consolePrint(CFMT_C|CFMT_M_NO_SEP, '(');
 			consolePrint(CFMT_D|CFMT_M_NO_SEP, modbusTxFrame()[MODBUS_FRAME_IDX_SLAVE_ID]);
 			consolePrint(CFMT_C, ')');
@@ -605,7 +605,7 @@ static void setup_devices() {
 // TODO: make more robust, maybe if b & c differ in sign do correction.
 static float tilt(float a, float b, float c) {
 	float mean = sqrt(b*b + c*c);
-	if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TILT_QUAD_CORRECT) {
+	if (!(REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_TILT_NO_QUAD_CORRECT)) {
 		if (b < 0.0)
 			mean = -mean;
 	}

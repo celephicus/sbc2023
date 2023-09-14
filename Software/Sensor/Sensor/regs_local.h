@@ -43,7 +43,7 @@ ENABLES [nv fmt=hex] "Non-volatile enable flags.
 - DUMP_REGS [bit=1] "Enable regs dump to console.
 	If set then registers are dumped at a set rate."
 - DUMP_REGS_FAST [bit=2] "Dump regs at 5/s rather than 1/s."
-- TILT_QUAD_CORRECT [bit=4 default=1] "Correct for tilt angles over 90Deg."
+- TILT_NO_QUAD_CORRECT [bit=4] "Do not correct for tilt angles outside +/-90Deg."
 - DISABLE_BLINKY_LED [bit=15] "Disable setting Blinky Led from fault states.
 	Used for testing the blinky LED, if set then the system will not set the LED pattern, allowing it to be set by the console
 	for testing the driver."
@@ -93,7 +93,7 @@ enum {
 #define REGS_START_NV_IDX REGS_IDX_ENABLES
 
 // Define default values for the NV segment.
-#define REGS_NV_DEFAULT_VALS 16, 0, 0, 573, 20, 400, 0, 1, 4, 5
+#define REGS_NV_DEFAULT_VALS 0, 0, 0, 573, 20, 400, 0, 1, 4, 5
 
 // Define how to format the reg when printing.
 #define REGS_FORMAT_DEF CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_D, CFMT_U, CFMT_D, CFMT_D, CFMT_U, CFMT_U, CFMT_D, CFMT_D, CFMT_D, CFMT_X, CFMT_X, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U, CFMT_U
@@ -113,7 +113,7 @@ enum {
     	REGS_ENABLES_MASK_DUMP_MODBUS_EVENTS = (int)0x1,
     	REGS_ENABLES_MASK_DUMP_REGS = (int)0x2,
     	REGS_ENABLES_MASK_DUMP_REGS_FAST = (int)0x4,
-    	REGS_ENABLES_MASK_TILT_QUAD_CORRECT = (int)0x10,
+    	REGS_ENABLES_MASK_TILT_NO_QUAD_CORRECT = (int)0x10,
     	REGS_ENABLES_MASK_DISABLE_BLINKY_LED = (int)0x8000,
 };
 
@@ -235,7 +235,7 @@ enum {
     "\n DUMP_MODBUS_EVENTS: 0 (Dump MODBUS event value.)"                               \
     "\n DUMP_REGS: 1 (Enable regs dump to console.)"                                    \
     "\n DUMP_REGS_FAST: 2 (Dump regs at 5/s rather than 1/s.)"                          \
-    "\n TILT_QUAD_CORRECT: 4 (Correct for tilt angles over 90Deg.)"                     \
+    "\n TILT_NO_QUAD_CORRECT: 4 (Do not correct for tilt angles outside +/-90Deg.)"     \
     "\n DISABLE_BLINKY_LED: 15 (Disable setting Blinky Led from fault states.)"         \
 
 // ]]] Declarations end

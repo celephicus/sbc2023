@@ -23,7 +23,6 @@ static void print_banner() { consolePrint(CFMT_STR_P, (console_cell_t)PSTR(CFG_B
 static bool console_cmds_user(char* cmd) {
   switch (console_hash(cmd)) {
 	case /** ?VER **/ 0xc33b: print_banner(); break;
-	case /** F **/ 0xb5e3:  { static int32_t f_acc; const uint8_t k = static_cast<uint8_t>(consoleStackPop()); consolePrint(CFMT_D, utilsFilter(&f_acc, static_cast<int16_t>(consoleStackPop()), k, false)); } break;
 
 	// Command processor.
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
@@ -162,7 +161,7 @@ static bool console_cmds_user(char* cmd) {
         const uint8_t pin = (uint8_t)consoleStackPop();
         pinMode(pin, (uint8_t)consoleStackPop());
       } break;
-    case /** ?T **/ 0x688e: consolePrint(CFMT_U, (console_ucell_t)millis()); break;
+    case /** ?T **/ 0x688e: { const uint32_t t = millis(); consolePrint(CFMT_U_D, (console_cell_t)&t); } break;
 
     default: return false;
   }
