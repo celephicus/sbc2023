@@ -329,10 +329,10 @@ static struct {
 	const uint8_t* axis_current_p;	// Points to current item in axis order array.
 } s_slew_ctx;   
 
-static int16_t get_slew_target_pos() { return driverPresets(s_slew_ctx.preset_idx)[s_slew_ctx.axis_current]; }
-static int16_t get_slew_current_pos() { return (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + s_slew_ctx.axis_current]; }
-static int8_t get_dir_for_slew() {
-	const int16_t delta = get_slew_target_pos() - get_slew_current_pos();
+static int16_t get_slew_target_pos(uint8_t axis) { return driverPresets(s_slew_ctx.preset_idx)[axis]; }
+static int16_t get_slew_current_pos(uint8_t axis) { return (int16_t)REGS[REGS_IDX_TILT_SENSOR_0 + axis]; }
+static int8_t get_dir_for_slew(uint8_t axis) {
+	const int16_t delta = get_slew_target_pos(axis) - get_slew_current_pos(axis);
 	return (uint8_t)utilsWindow(delta, -(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND], +(int16_t)REGS[REGS_IDX_SLEW_START_DEADBAND]);
 }
 
@@ -369,7 +369,10 @@ static uint8_t handle_preset_slew(uint8_t cmd) {
 					s_slew_ctx.axis_current_p = SLEW_ORDER_FWD; 
 			}
 			else { 	// We choose order depending on slew directions.
-					s_slew_ctx.axis_current_p = SLEW_ORDER_FWD; 
+				const int8_t head_dir = get_dir_for_slew(AXIS_HEAD);
+				const int8_t foot_dir = get_dir_for_slew(AXIS_FOOT);
+				eventPublish(EV_DEBUG, head_dir, foot_dir);
+				s_slew_ctx.axis_current_p = SLEW_ORDER_FWD; 
 			}
 			s_slew_ctx.axis_current = pgm_read_byte(s_slew_ctx.axis_current_p++);
 
@@ -386,10 +389,9 @@ static uint8_t handle_preset_slew(uint8_t cmd) {
 		}
 
 		// Get direction to go, or we might be there anyways.
-		// Note: we reread the position, just in case. Also allows us to disable axis reverse.
-		eventPublish(EV_SLEW_TARGET, s_slew_ctx.axis_current, get_slew_target_pos());
-		eventPublish(EV_SLEW_START, s_slew_ctx.axis_current, get_slew_current_pos());
-		const int8_t start_dir = get_dir_for_slew();
+		eventPublish(EV_SLEW_TARGET, s_slew_ctx.axis_current, get_slew_target_pos(s_slew_ctx.axis_current));
+		eventPublish(EV_SLEW_START, s_slew_ctx.axis_current, get_slew_current_pos(s_slew_ctx.axis_current));
+		const int8_t start_dir = get_dir_for_slew(s_slew_ctx.axis_current);
 
 		// Start moving...
 		ASSERT(0 == REGS[REGS_IDX_RELAY_STATE]);	// Assume all motors stopped here. 
@@ -408,9 +410,9 @@ static uint8_t handle_preset_slew(uint8_t cmd) {
 
 	case ST_AXIS_SLEWING: {
 		// Check for position reached. We can't just check for zero as it might overshoot.
-		const int8_t target_dir = get_dir_for_slew();
+		const int8_t target_dir = get_dir_for_slew(s_slew_ctx.axis_current);
 		if (0 == target_dir) {
-			eventPublish(EV_SLEW_STOP, s_slew_ctx.axis_current, get_slew_target_pos());
+			eventPublish(EV_SLEW_STOP, s_slew_ctx.axis_current, get_slew_target_pos(s_slew_ctx.axis_current));
 			timer_start((uint16_t)millis(), &f_app_ctx.timer);	
 			if ( (APP_CMD_RESTORE_POS_1 == cmd) && (REGS[REGS_IDX_RUN_ON_TIME_POS1] > 0) ) 	// Special run on delay for slew pos 1. 
 				handle_set_state(ST_AXIS_RUN_ON, s_slew_ctx.axis_current);
