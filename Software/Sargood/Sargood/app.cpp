@@ -337,8 +337,7 @@ static int8_t get_dir_for_slew(uint8_t axis) {
 }
 
 static uint8_t handle_preset_slew(uint8_t cmd) {
-	static const uint8_t SLEW_ORDER_FWD[CFG_TILT_SENSOR_COUNT] PROGMEM = { 0, 1 };
-	static const uint8_t SLEW_ORDER_REV[CFG_TILT_SENSOR_COUNT] PROGMEM = { 1, 0 };
+	static const uint8_t SLEW_ORDER_DEF[][CFG_TILT_SENSOR_COUNT] PROGMEM = { { 0, 1 }, { 1, 0 } };
 
 	do_wakeup();
 	
@@ -362,20 +361,22 @@ static uint8_t handle_preset_slew(uint8_t cmd) {
 
 			// Decide order to move axes...
 			s_slew_ctx.axis_idx = 0U;
-			if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_SLEW_ORDER_FORCE) {	// Order forced to always fwd or rev. 			
-				if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_SLEW_ORDER_F_DIR) 
-					s_slew_ctx.axis_current_p = SLEW_ORDER_REV; 
-				else
-					s_slew_ctx.axis_current_p = SLEW_ORDER_FWD; 
+			{
+				uint8_t slew_order = 0;		// Default is first item, 0, 1. 
+				if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_SLEW_ORDER_FORCE) {	// Order forced to always fwd or rev. 			
+					if (REGS[REGS_IDX_ENABLES] & REGS_ENABLES_MASK_SLEW_ORDER_F_DIR) 
+					slew_order = 1;
+				}
+				else { 	// We choose order depending on slew directions.
+					const int8_t head_dir = get_dir_for_slew(AXIS_HEAD);
+					const int8_t foot_dir = get_dir_for_slew(AXIS_FOOT);
+					eventPublish(EV_DEBUG, head_dir, foot_dir);
+				}
+				eventPublish(EV_DEBUG_SLEW_ORDER, slew_order);
+				s_slew_ctx.axis_current_p = SLEW_ORDER_DEF[slew_order];
+				s_slew_ctx.axis_current = pgm_read_byte(s_slew_ctx.axis_current_p++);
 			}
-			else { 	// We choose order depending on slew directions.
-				const int8_t head_dir = get_dir_for_slew(AXIS_HEAD);
-				const int8_t foot_dir = get_dir_for_slew(AXIS_FOOT);
-				eventPublish(EV_DEBUG, head_dir, foot_dir);
-				s_slew_ctx.axis_current_p = SLEW_ORDER_FWD; 
-			}
-			s_slew_ctx.axis_current = pgm_read_byte(s_slew_ctx.axis_current_p++);
-
+			
 			handle_set_state(ST_AXIS_START, s_slew_ctx.axis_current);
 		}
 		break;

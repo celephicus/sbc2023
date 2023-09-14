@@ -19,6 +19,7 @@
 	SLEW_STOP		Slew stop pos; p8: axis idx; p16=current
 	SLEW_FINAL		Slew rest pos; p8: axis idx; p16=current
 	RELAY_WRITE		Relay write; p8: relay
+	DEBUG_SLEW_ORDER Chosen slew order, p8=index.
 
    >>> End event definitions, begin generated code. */
 
@@ -50,7 +51,8 @@ enum {
     EV_SLEW_STOP = 23,                  // Slew stop pos; p8: axis idx; p16=current
     EV_SLEW_FINAL = 24,                 // Slew rest pos; p8: axis idx; p16=current
     EV_RELAY_WRITE = 25,                // Relay write; p8: relay
-    COUNT_EV = 26,                      // Total number of events defined.
+    EV_DEBUG_SLEW_ORDER = 26,           // Chosen slew order, p8=index.
+    COUNT_EV = 27,                      // Total number of events defined.
 };
 
 // Size of trace mask in bytes.
@@ -84,6 +86,7 @@ enum {
  static const char EVENT_NAMES_23[] PROGMEM = "SLEW_STOP";                              \
  static const char EVENT_NAMES_24[] PROGMEM = "SLEW_FINAL";                             \
  static const char EVENT_NAMES_25[] PROGMEM = "RELAY_WRITE";                            \
+ static const char EVENT_NAMES_26[] PROGMEM = "DEBUG_SLEW_ORDER";                       \
                                                                                         \
  static const char* const EVENT_NAMES[] PROGMEM = {                                     \
    EVENT_NAMES_0,                                                                       \
@@ -112,6 +115,7 @@ enum {
    EVENT_NAMES_23,                                                                      \
    EVENT_NAMES_24,                                                                      \
    EVENT_NAMES_25,                                                                      \
+   EVENT_NAMES_26,                                                                      \
  }
 
 // Event Descriptions.
@@ -142,6 +146,7 @@ enum {
  static const char EVENT_DESCS_23[] PROGMEM = "Slew stop pos; p8: axis idx; p16=current";                                                   \
  static const char EVENT_DESCS_24[] PROGMEM = "Slew rest pos; p8: axis idx; p16=current";                                                   \
  static const char EVENT_DESCS_25[] PROGMEM = "Relay write; p8: relay";                                                                     \
+ static const char EVENT_DESCS_26[] PROGMEM = "Chosen slew order, p8=index.";                                                               \
                                                                                                                                             \
  static const char* const EVENT_DESCS[] PROGMEM = {                                                                                         \
    EVENT_DESCS_0,                                                                                                                           \
@@ -170,6 +175,7 @@ enum {
    EVENT_DESCS_23,                                                                                                                          \
    EVENT_DESCS_24,                                                                                                                          \
    EVENT_DESCS_25,                                                                                                                          \
+   EVENT_DESCS_26,                                                                                                                          \
  }
 
 // ]]] End generated code.
