@@ -293,6 +293,12 @@ build.cmd
     <Compile Include="gpio.h">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="gui.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="gui.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="project_config.h">
       <SubType>compile</SubType>
       <Link>project_config.h</Link>

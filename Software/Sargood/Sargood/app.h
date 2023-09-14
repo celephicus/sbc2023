@@ -32,6 +32,10 @@ static constexpr uint16_t APP_WAKEUP_TIMEOUT_SECS = 60U;
 // Save commands APP_CMD_POS_SAVE_x APP_CMD_LIMIT_CLEAR_ALL APP_CMD_LIMIT_SAVE_xx must be repeated 3 times within this period to be accepted.
 static constexpr uint16_t APP_SAVE_TIMEOUT_SECS = 5U;
 
+// FAULT mask for FAULT_FLAGS reg for all used sensors.
+static constexpr uint16_t APP_FLAGS_MASK_SENSORS_ALL = REGS_FLAGS_MASK_FAULT_SENSOR_0 | REGS_FLAGS_MASK_FAULT_SENSOR_1;
+
+
 // Set of commands. Those less than 100 can be queued, else they can only be run if the system is idle.
 enum {
 	// No-op, also flags command processor as idle.

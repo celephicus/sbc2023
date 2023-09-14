@@ -41,14 +41,39 @@ U utilsMscale(T val, T min, T max, T inc) {
 // Mscale a value.
 template <typename T, typename U>
 T utilsUnmscale(U val, T min, T max, T inc) { return val * inc + min; }
+	
+// Generic timers.
+template <typename T>
+static bool utilsTimerIsActive(const T* then) {	// Check if timer is running, might be useful to check if a timer is still running.
+	return (*then != (T)0U);
+}
+template <typename T>
+static void utilsTimerStart(T now, T* then) { 	// Start timer, note extends period by 1 if necessary to make timer flag as active.
+	*then = now;
+	if (!utilsTimerIsActive(then))
+		*then -= 1;
+}
+template <typename T>
+static void utilsTimerStop(T* then) { 	// Stop timer, it is now inactive and timer_is_timeout() will never return true;
+	*then = (T)0U;
+}
+template <typename T>
+static bool utilsTimerIsTimeout(T now, T* then, T duration) { // Check for timeout and return true if so, then timer will be inactive.
+	if (utilsTimerIsActive(then) &&	(now - *then > duration)) {
+		utilsTimerStop(then);
+		return true;
+	}
+	return false;
+}
 
+/*
 // I can't believe how often I stuff up using millis() to time a period. So as usual, here's a function to do timeouts.
 template <typename T>
 void utilsStartTimer(T &then) { then = (T)millis(); }
 
 template <typename T>
 bool utilsIsTimerDone(T &then, T timeout) { return ((T)millis() - then) > timeout; }
-
+*/
 // Endianness conversion functions.
 #define utilsU16_bswap(x_) (__builtin_bswap16(x_))
 #define utilsU32_bswap(x_) (__builtin_bswap32(x_))
