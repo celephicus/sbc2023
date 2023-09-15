@@ -9,6 +9,7 @@
 #include "driver.h"
 #include "thread.h"
 #include "app.h"
+#include "myprintf.h"
 
 FILENUM(10);
 
@@ -41,15 +42,6 @@ static void lcd_service() {
 }
 static void lcd_flush() {
 	f_lcd.flush();
-}
-
-// Backlight, call with arg true to turn on with no timeout.
-static void backlight_on(bool cont=false) {
-	driverSetLcdBacklight(255);
-	if (cont)
-		eventSmTimerStop(TIMER_BACKLIGHT);
-	else
-		eventSmTimerStart(TIMER_BACKLIGHT, BACKLIGHT_TIMEOUT_MS/100U);
 }
 
 // RS232 Remote Command
@@ -300,8 +292,6 @@ static const char* get_cmd_status_desc(uint8_t status) {
 // Menu items for display
 //
 
-#include "myprintf.h"
-
 /* Menu items operate internally off a scaled value from zero up to AND including a maximum value. This can be converted between an actual value.
 	All menu items operate on a single regs value, possibly only a single bit.
 
@@ -337,7 +327,7 @@ typedef struct {
 static char f_menu_fmt_buf[15];
 
 // Slew timeout in seconds.
-static constexpr char MENU_ITEM_SLEW_TIMEOUT_TITLE[] PROGMEM = "Motion Timeout";
+static constexpr char MENU_ITEM_SLEW_TIMEOUT_TITLE[] PROGMEM = "Motor Timeout";
 static constexpr int16_t MENU_ITEM_SLEW_TIMEOUT_MIN = 10;
 static constexpr int16_t MENU_ITEM_SLEW_TIMEOUT_MAX = 60;
 static constexpr int16_t MENU_ITEM_SLEW_TIMEOUT_INC = 5;
@@ -358,7 +348,7 @@ static uint8_t menu_max_angle_deadband() { return utilsMscaleMax<int16_t, uint8_
 static const char MENU_ITEM_STOP_POS_DEADBAND_TITLE[] PROGMEM = "Stop Pos Band";
 
 // Axis jog duration in ms.
-static const char MENU_ITEM_JOG_DURATION_TITLE[] PROGMEM = "Motion Duration";
+static const char MENU_ITEM_JOG_DURATION_TITLE[] PROGMEM = "Step Duration";
 static constexpr int16_t MENU_ITEM_JOG_DURATION_MIN = 200;
 static constexpr int16_t MENU_ITEM_JOG_DURATION_MAX = 3000;
 static constexpr int16_t MENU_ITEM_JOG_DURATION_INC = 100;
@@ -367,19 +357,22 @@ static int16_t menu_unscale_jog_duration(uint8_t v) { return utilsUnmscale<int16
 static uint8_t menu_max_jog_duration() { return utilsMscaleMax<int16_t, uint8_t>( MENU_ITEM_JOG_DURATION_MIN, MENU_ITEM_JOG_DURATION_MAX, MENU_ITEM_JOG_DURATION_INC); }
 
 // Slew order setting.
-UTILS_STATIC_ASSERT(REGS_ENABLES_MASK_SLEW_ORDER_FORCE == (REGS_ENABLES_MASK_SLEW_ORDER_F_DIR << 1));    	
-static const char MENU_ITEM_MOTION_ORDER_TITLE[] PROGMEM = "Motion Order";
+UTILS_STATIC_ASSERT(REGS_ENABLES_MASK_SLEW_ORDER_FORCE == (REGS_ENABLES_MASK_SLEW_ORDER_F_DIR >> 1));    	// Enable in low order bit, action in next bit up. 
+//                                                          1234567890123456
+static const char MENU_ITEM_MOTION_ORDER_TITLE[] PROGMEM = "Head/Leg Order";
 static int16_t menu_scale_motion_order(int16_t val) { return (val == 3) ? 2 : val; }
 static int16_t menu_unscale_motion_order(uint8_t v) { return (v == 2) ? 3 : v; }
 static uint8_t menu_max_motion_order() { return 2; }
-static const char* menu_format_motion_order(int16_t v) { static const char* opts[] = { "Auto", "H-F", "?", "F-H" }; return opts[v]; }
+static const char* menu_format_motion_order(int16_t v) { static const char* opts[] = { "Auto", "H->F", "?", "F->H" }; return opts[v]; }
 
 // Enable wakeup command.
-static const char MENU_ITEM_WAKEUP_ENABLE_TITLE[] PROGMEM = "Wake Cmd Enable";
+//                                                           1234567890123456
+static const char MENU_ITEM_WAKEUP_ENABLE_TITLE[] PROGMEM = "Sleep Enable";
 static uint8_t menu_max_yes_no() { return 1; }
 
 // Go flat duration in ms.
-static const char MENU_ITEM_GO_FLAT_TITLE[] PROGMEM = "Motion Duration";
+//                                                     1234567890123456
+static const char MENU_ITEM_GO_FLAT_TITLE[] PROGMEM = "Pos 1 Extend";
 static constexpr int16_t MENU_ITEM_GO_FLAT_MIN = 0;
 static constexpr int16_t MENU_ITEM_GO_FLAT_MAX = 1000;
 static constexpr int16_t MENU_ITEM_GO_FLAT_INC = 100;
@@ -389,7 +382,7 @@ static uint8_t menu_max_go_flat() { return utilsMscaleMax<int16_t, uint8_t>( MEN
 static const char* menu_format_go_flat(int16_t v) { 
 	static const char* dis = "disable";
 	if (v) {
-		myprintf_snprintf(f_menu_fmt_buf, sizeof(f_menu_fmt_buf), PSTR("%u.%03u secs"), v/1000, v%1000); 
+		myprintf_snprintf(f_menu_fmt_buf, sizeof(f_menu_fmt_buf), PSTR("%u.%02u secs"), v/1000, v%1000/10); 
 		return f_menu_fmt_buf; 
 	}
 	else
@@ -406,7 +399,7 @@ static const char* menu_format_secs(int16_t v) {
 	return f_menu_fmt_buf; 
 }
 static const char* menu_format_ms(int16_t v) { 
-	myprintf_snprintf(f_menu_fmt_buf, sizeof(f_menu_fmt_buf), PSTR("%u.%03u secs"), v/1000, v%1000); 
+	myprintf_snprintf(f_menu_fmt_buf, sizeof(f_menu_fmt_buf), PSTR("%u.%02u secs"), v/1000, v%1000/10); 
 	return f_menu_fmt_buf; 
 }
 
@@ -457,7 +450,7 @@ static const MenuItem MENU_ITEMS[] PROGMEM = {
 		NULL, NULL,
 		menu_max_yes_no,
 		true,
-		format_yes_no,	
+		menu_format_yes_no,	
 	},
 	{
 		MENU_ITEM_GO_FLAT_TITLE,
@@ -465,7 +458,7 @@ static const MenuItem MENU_ITEMS[] PROGMEM = {
 		menu_scale_go_flat, menu_unscale_go_flat,
 		menu_max_go_flat,
 		false,
-		format_go_flat,	
+		menu_format_go_flat,	
 	},
 };
 
@@ -497,7 +490,7 @@ bool menuItemWriteValue(uint8_t midx, uint8_t mval) {
 	uint16_t mask = pgm_read_word(&MENU_ITEMS[midx].regs_mask);
 	uint16_t actual_val = (uint16_t)menuItemActualValue(midx, mval);
 	if (mask) {
-		for (uint16_t t_mask = mask; (t_mask&1); t_mask >>= 1)
+		for (uint16_t t_mask = mask; !(t_mask&1); t_mask >>= 1)
 			actual_val <<= 1;
 	}
 	else
@@ -520,6 +513,7 @@ typedef struct {
 	//uint16_t timer_cookie[CFG_TIMER_COUNT_SM_LEDS];
 	uint8_t menu_item_idx;
 	uint8_t menu_item_value;
+	uint8_t msg_idx;
 } SmLcdContext;
 static SmLcdContext f_sm_lcd_ctx;
 
@@ -529,6 +523,8 @@ static constexpr uint16_t DISPLAY_BANNER_DURATION_MS =			2U*1000U;
 static constexpr uint16_t UPDATE_INFO_PERIOD_MS =				500U;
 static constexpr uint16_t MENU_TIMEOUT_MS =						10U*1000U;
 static constexpr uint16_t BACKLIGHT_TIMEOUT_MS = 				4U*1000U;
+
+static const char BANNER_MSG[] PROGMEM = "  TSA MBC 2022";
 
 // Timers
 enum {
@@ -542,19 +538,56 @@ enum {
 	ST_INIT, ST_CLEAR_LIMITS, ST_RUN, ST_MENU
 };
 
-//	1234567890123456
-//
-//	H-12345 F-12345
+// Backlight, call with arg true to turn on with no timeout.
+static void backlight_on(bool cont=false) {
+	driverSetLcdBacklight(255);
+	if (cont)
+		eventSmTimerStop(TIMER_BACKLIGHT);
+	else
+		eventSmTimerStart(TIMER_BACKLIGHT, BACKLIGHT_TIMEOUT_MS/100U);
+}
+
+static const char MSG_ERR_RELAY[] PROGMEM =			"Err: Relay";
+static const char MSG_ERR_SENSOR_HEAD[] PROGMEM =	"Err: Head Sensor";
+static const char MSG_ERR_SENSOR_FOOT[] PROGMEM =	"Err: Foot Sensor";
+static const char MSG_ERR_DC_LOW[] PROGMEM =		"Err: Power";
+static const struct {
+	uint16_t mask;
+	const char* msg;
+} ERROR_MESSAGES[] PROGMEM = {
+	{ REGS_FLAGS_MASK_FAULT_RELAY, MSG_ERR_RELAY },
+	{ REGS_FLAGS_MASK_FAULT_SENSOR_0, MSG_ERR_SENSOR_HEAD },
+	{ REGS_FLAGS_MASK_FAULT_SENSOR_1, MSG_ERR_SENSOR_FOOT },
+	{ REGS_FLAGS_MASK_DC_LOW,			MSG_ERR_DC_LOW },
+};
+static constexpr uint16_t ERROR_FLAGS_ALL = REGS_FLAGS_MASK_FAULT_RELAY | REGS_FLAGS_MASK_FAULT_SENSOR_0 | REGS_FLAGS_MASK_FAULT_SENSOR_1;
+
+const char* get_error_message() {
+	static uint16_t s_flags;
+	
+	if (!s_flags) 
+		s_flags = regsFlags() & ERROR_FLAGS_ALL;
+	else if (s_flags) {
+		fori(UTILS_ELEMENT_COUNT(ERROR_MESSAGES)) {
+			const uint16_t mask = pgm_read_word(&ERROR_MESSAGES[i].mask);
+			if (mask & s_flags) {
+				s_flags &= ~mask;
+				return reinterpret_cast<const char*>(pgm_read_word(&ERROR_MESSAGES[i].msg));
+			}
+		}
+	}
+	return NULL;	
+}
+
 static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 	SmLcdContext* my_context = (SmLcdContext*)context;        // Downcast to derived class.
-	(void)my_context;
 
 	switch (context->st) {
 		case ST_INIT:
 		switch(event_id(ev)) {
 			case EV_SM_ENTRY:
 			backlight_on(true);		// Turn on till we tell it to start timing.
-			lcd_printf(0, PSTR("  TSA MBC 2022"));
+			lcd_printf(0, BANNER_MSG);
 			lcd_flush();
 			lcd_printf(1, PSTR("V" CFG_VER_STR " build " CFG_BUILD_NUMBER_STR));
 			eventSmTimerStart(TIMER_MSG, DISPLAY_BANNER_DURATION_MS/100U);
@@ -596,6 +629,7 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 
 			case EV_SM_SELF:
 			backlight_on();		// Start timing.
+			my_context->msg_idx = 0;  // Show banner message first. 
 			eventSmTimerStart(TIMER_UPDATE_INFO, 1);	// Get update event next tick, will then restart timer & repeat.
 			break;
 
@@ -616,17 +650,22 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 			break;
 
 			case EV_TIMER:
-			if (event_p8(ev) == TIMER_MSG)
+			if (event_p8(ev) == TIMER_MSG)	// Takes care of redrawing the banner/status message after a command status. 
 				eventSmPostSelf(context);
 			else if (event_p8(ev) == TIMER_UPDATE_INFO) {
 				// Turn on backlight if any devices are faulty.
 				if (regsFlags() & (APP_FLAGS_MASK_SENSORS_ALL | REGS_FLAGS_MASK_FAULT_RELAY))
 					backlight_on();			
 				
-				// Display status on LCD. Not sure what we need here.
-				// TODO: Fix this...
-				lcd_printf(0, PSTR("R %S"), (regsFlags() & REGS_FLAGS_MASK_FAULT_RELAY) ? PSTR("FAIL") : PSTR("OK"));
-				lcd_printf(1, PSTR("H%+-6d T%+-6d"), REGS[REGS_IDX_TILT_SENSOR_0], REGS[REGS_IDX_TILT_SENSOR_1]);
+				// Display status on top line of LCD.
+				const char * const msg = get_error_message();
+				if (msg)
+					lcd_printf(0, msg);
+				else
+					lcd_printf(0, BANNER_MSG);
+				
+				// Display sensors on lower line.
+				lcd_printf(1, PSTR("H%+-6d  T%+-6d"), REGS[REGS_IDX_TILT_SENSOR_0], REGS[REGS_IDX_TILT_SENSOR_1]);
 				
 				eventSmTimerStart(TIMER_UPDATE_INFO, UPDATE_INFO_PERIOD_MS/100U);
 			}
@@ -644,7 +683,7 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 		case ST_MENU:
 		switch(event_id(ev)) {
 			case EV_SM_ENTRY:
-			backlight_on(true);		// Turn on till we twll it to start timing.
+			backlight_on(true);		// Turn on till we tell it to start timing.
 			my_context->menu_item_idx = 0;
 			eventSmTimerStart(TIMER_MSG, MENU_TIMEOUT_MS/100U);
 			eventSmPostSelf(context);
@@ -652,14 +691,13 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 
 			case EV_SM_EXIT:
 			backlight_on();
-			// TODO: Only update value if has changed.
 			menuItemWriteValue(my_context->menu_item_idx, my_context->menu_item_value);
 			driverNvWrite();
 			break;
 
 			case EV_SM_SELF:
 			my_context->menu_item_value = menuItemReadValue(my_context->menu_item_idx);
-			lcd_printf(0, PSTR("%S"), menuItemTitle(my_context->menu_item_idx));
+			lcd_printf(0, PSTR("%u %S"), my_context->menu_item_idx+1, menuItemTitle(my_context->menu_item_idx));
 			eventPublish(EV_UPDATE_MENU);
 			break;
 
@@ -678,7 +716,7 @@ static int8_t sm_lcd(EventSmContextBase* context, t_event ev) {
 
 			case EV_SW_TOUCH_LEFT: // Fall through...
 			case EV_SW_TOUCH_RIGHT:
-			if (event_p8(ev) == EV_P8_SW_CLICK) {
+			if ((event_p8(ev) == EV_P8_SW_CLICK) || (event_p8(ev) == EV_P8_SW_HOLD) || (event_p8(ev) == EV_P8_SW_REPEAT)) { // Catch hold & repeat as well. 
 				if (utilsBumpU8(&my_context->menu_item_value, (event_id(ev) == EV_SW_TOUCH_LEFT) ? -1 : +1, 0U, menuItemMaxValue(my_context->menu_item_idx), menuItemIsRollAround(my_context->menu_item_idx)))
 					eventPublish(EV_UPDATE_MENU);
 			}

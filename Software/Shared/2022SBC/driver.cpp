@@ -791,7 +791,7 @@ void driverSetLcdBacklight(uint8_t b) {
 #if CFG_DRIVER_BUILD == CFG_DRIVER_BUILD_SARGOOD
 
 // Action delay for touch switches.
-static uint8_t switches_action_delay_touch() { return 2; }
+static uint8_t switches_action_delay_touch() { return 1; }
 static const sw_scan_def_t SWITCHES_DEFS[] PROGMEM = {
 	{ GPIO_PIN_TS_LEFT, false, switches_action_delay_touch, REGS_FLAGS_MASK_SW_TOUCH_LEFT, EV_SW_TOUCH_LEFT },
 	{ GPIO_PIN_TS_RIGHT, false, switches_action_delay_touch, REGS_FLAGS_MASK_SW_TOUCH_RIGHT, EV_SW_TOUCH_RIGHT },

@@ -7,6 +7,7 @@
 #include "event.h"
 #include "driver.h"
 #include "sbc2022_modbus.h"
+#include "gui.h"
 #include "app.h"
 
 FILENUM(9);
@@ -598,10 +599,12 @@ static void	update_wakeup_enable() {
 void appInit() {
 	// Handle wakeup enable from enable in ENABLES regs. 
 	update_wakeup_enable();
+	guiInit();
 }
 
 void appService() {
 	service_worker();
+	guiService();
 }
 
 void appService10hz() {
@@ -617,4 +620,6 @@ void appService10hz() {
 
 	// Enable flag might have got changed.
 	update_wakeup_enable();
+	
+	guiService10hz();
 }

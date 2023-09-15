@@ -11,7 +11,7 @@ FILENUM(210);  // All source files in common have file numbers starting at 200.
 
 void swScanReset(const sw_scan_def_t* defs, sw_scan_context_t* contexts, uint8_t count) {
 	(void)defs;
-	memset(contexts, 0, count * sizeof(*contexts));
+	memset(contexts, 0, count * sizeof(sw_scan_context_t));
 }
 
 /*
@@ -75,18 +75,30 @@ void swScanSample(const sw_scan_def_t* defs, sw_scan_context_t* contexts, uint8_
 					eventPublish(sw_evt, EV_P8_SW_CLICK);  						// Publish initial click event.
 					flags |= mask;  											// Set state to driver register. 
 					contexts[i].hold = 0;  										// Zero hold timer to start counting up. 
+					contexts[i].repeat_timer = 0U;								// Zero repeat timer. 
 				}
 				else
 					contexts[i].action -= 1;
 			}
-		
-			// Check hold timer...
-			else if (contexts[i].hold < SW_SCAN_TIMER_MAX) {
-				if (SW_HOLD_TIME == contexts[i].hold)
-					eventPublish(sw_evt, EV_P8_SW_HOLD); 
-				else if (SW_LONG_HOLD_TIME == contexts[i].hold)
-					eventPublish(sw_evt, EV_P8_SW_LONG_HOLD); 
-				contexts[i].hold += 1;
+
+			// Sw held down.		
+			else {
+				// Check hold timer...
+				if (contexts[i].hold < SW_SCAN_TIMER_MAX) {
+					if (SW_HOLD_TIME == contexts[i].hold) {
+						eventPublish(sw_evt, EV_P8_SW_HOLD); 
+						contexts[i].repeat_timer = SW_REPEAT_DELAY;
+					}
+					else if (SW_LONG_HOLD_TIME == contexts[i].hold)
+						eventPublish(sw_evt, EV_P8_SW_LONG_HOLD); 
+					contexts[i].hold += 1;
+				}
+				
+				// Do auto-repeat.
+				if ((contexts[i].repeat_timer > 0) && (0 == --contexts[i].repeat_timer)) {
+					eventPublish(sw_evt, EV_P8_SW_REPEAT); 
+					contexts[i].repeat_timer = SW_REPEAT_DELAY;
+				}
 			}
 		}
 	}

@@ -13,6 +13,7 @@ enum {
 	EV_P8_SW_CLICK = EV_P8_SW_ACTIVE,			// Switches are clicked.
 
 	EV_P8_SW_HOLD,								// Switch held for a while.
+	EV_P8_SW_REPEAT,							// Switch held after hold time repeats.
 	EV_P8_SW_LONG_HOLD,							// Switch held for a **long** while.
 	EV_P8_SW_STARTUP,							// Only if active at startup, might be followed by a hold or long-hold.
 };

@@ -3,10 +3,9 @@
 
 #include <stdint.h>
 
-enum {
-	SW_HOLD_TIME = 10,
-	SW_LONG_HOLD_TIME = 30,
-};
+static constexpr uint8_t SW_HOLD_TIME = 10;
+static constexpr uint8_t SW_LONG_HOLD_TIME = 30;
+static constexpr uint8_t SW_REPEAT_DELAY = 2;
 
 // Definition for a single switch. 
 typedef uint8_t (*sw_scan_action_delay_func_t)(void);  // Function to return how many ticks that the button must be active for to flag as pressed. 
@@ -21,6 +20,7 @@ typedef struct {
 // Holds context for scan. 
 typedef struct {
 	uint8_t action;        				// Action timer, counts down, might be loaded with anything, all 8 bits allowed.
+	uint8_t repeat_timer;
 	uint8_t hold:7;       				// Hold timer, counts up, limited to 7 bits. 
     uint8_t pstate:1;      				// Flag holds previous state of switch at last scan. 
 } sw_scan_context_t;
